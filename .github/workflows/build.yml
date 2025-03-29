@@ -56,7 +56,15 @@ jobs:
           CGO_ENABLED: 0
         run: |
           ldflags="-w -s -X '${GITHUB_REPO}/runtime.Version=${VERSION}' -X '${GITHUB_REPO}/runtime.GitCommit=${GIT_COMMIT}'"
-          go build -trimpath -ldflags="${ldflags}" -o ${APP_NAME} .
+          
+          # For GitHub releases, use the selfupdate naming convention
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            OUTPUT_NAME="${APP_NAME}_${GOOS}_${GOARCH}"
+          else
+            OUTPUT_NAME="${APP_NAME}"
+          fi
+          
+          go build -trimpath -ldflags="${ldflags}" -o ${OUTPUT_NAME} .
 
       - name: Upload Artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -75,4 +83,4 @@ jobs:
           name: Release ${{ steps.determine_version.outputs.version }}
           draft: false
           prerelease: false
-          files: ${{ env.APP_NAME }}
+          files: ${{ env.APP_NAME }}_linux_amd64
