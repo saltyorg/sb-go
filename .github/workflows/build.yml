@@ -10,13 +10,17 @@ on:
 permissions:
   contents: write
 
+env:
+  GO_VERSION: '1.24.1'
+  APP_NAME: 'sb'
+  GITHUB_REPO: 'github.com/saltyorg/sb-go'
+
 jobs:
   build_and_release:
     name: Build and Release
     runs-on: ubuntu-latest
     outputs:
-      is_tag: ${{ startsWith(github.ref, 'refs/tags/') }}
-      version: ${{ github.ref_name }}
+      version: ${{ steps.determine_version.outputs.version }}
       git_commit: ${{ steps.get_git_commit.outputs.short_sha }}
 
     steps:
@@ -28,7 +32,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.1'
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Get Git Commit SHA
         id: get_git_commit
@@ -44,22 +48,25 @@ jobs:
           fi
 
       - name: Build
+        env:
+          VERSION: ${{ steps.determine_version.outputs.version }}
+          GIT_COMMIT: ${{ steps.get_git_commit.outputs.short_sha }}
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
         run: |
-          version="${{ steps.determine_version.outputs.version }}"
-          git_commit="${{ steps.get_git_commit.outputs.short_sha }}"
-          ldflags="-w -s -X 'github.com/saltyorg/sb-go/runtime.Version=${version}' -X 'github.com/saltyorg/sb-go/runtime.GitCommit=${git_commit}'"
-          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="${ldflags}" -o sb .
+          ldflags="-w -s -X '${GITHUB_REPO}/runtime.Version=${VERSION}' -X '${GITHUB_REPO}/runtime.GitCommit=${GIT_COMMIT}'"
+          go build -trimpath -ldflags="${ldflags}" -o ${APP_NAME} .
 
       - name: Upload Artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/upload-artifact@v4
         with:
-          name: sb
-          path: sb
+          name: ${{ env.APP_NAME }}
+          path: ${{ env.APP_NAME }}
 
       - name: Create GitHub Release
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        id: create_release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -68,4 +75,4 @@ jobs:
           name: Release ${{ steps.determine_version.outputs.version }}
           draft: false
           prerelease: false
-          files: sb
+          files: ${{ env.APP_NAME }}
