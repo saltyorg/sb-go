@@ -19,9 +19,9 @@ import (
 
 // Define lipgloss styles for colored terminal output.
 var (
-	redStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))  // Red (ANSI color code 9)
-	yellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // Yellow (ANSI color code 11)
-	greenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green (ANSI color code 10)
+	redStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("160"))
+	yellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
+	greenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("40"))
 )
 
 // JobResponse represents the JSON response containing a job identifier.

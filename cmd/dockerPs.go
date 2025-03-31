@@ -81,7 +81,7 @@ only listing ports bound to the host.`,
 
 			coloredStatus := statusStyle.Render(statusText)
 
-			// Only add to list if it has ports or we want to show all containers
+			// Only add to list if it has ports, or we want to show all containers
 			if len(deduplicatedInternalPorts) > 0 || len(externalPorts) > 0 {
 				containers = append(containers, containerInfo{
 					name:          containerName,
