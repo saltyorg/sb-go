@@ -32,11 +32,15 @@ func GetUptime() string {
 	if uptimeInfo != "Not available" {
 		// Remove "up " prefix from uptime
 		uptimeInfo = strings.TrimPrefix(uptimeInfo, "up ")
+
+		// Color the entire uptime string
+		coloredUptimeInfo := ValueStyle.Render(uptimeInfo)
+		return coloredUptimeInfo
 	}
-	return uptimeInfo
+	return "Not available"
 }
 
-// GetCpuAverages returns the system load averages with styled output
+// GetCpuAverages returns the system load averages
 func GetCpuAverages() string {
 	// Try to read from /proc/loadavg first
 	content, err := os.ReadFile("/proc/loadavg")
@@ -72,264 +76,6 @@ func GetCpuAverages() string {
 	return DefaultStyle.Render("Not available")
 }
 
-// GetMemoryUsage returns the system memory usage with a visual bar
-func GetMemoryUsage() []string {
-	// Constants for memory usage bar
-	const (
-		maxUsageThreshold = 90 // Percentage at which memory usage is considered high
-		barWidth          = 50 // Width of the usage bar in characters
-	)
-
-	// Try to read from /proc/meminfo first
-	content, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
-		return []string{DefaultStyle.Render("Not available")}
-	}
-
-	// Parse the meminfo content
-	memInfo := make(map[string]uint64)
-	lines := strings.Split(string(content), "\n")
-
-	re := regexp.MustCompile(`^(\S+):\s+(\d+)`)
-	for _, line := range lines {
-		matches := re.FindStringSubmatch(line)
-		if len(matches) == 3 {
-			key := matches[1]
-			valueStr := matches[2]
-			value, err := strconv.ParseUint(valueStr, 10, 64)
-			if err == nil {
-				memInfo[key] = value
-			}
-		}
-	}
-
-	// Check if we have the required fields
-	if memTotal, ok := memInfo["MemTotal"]; ok {
-		var memAvailable uint64
-		if avail, ok := memInfo["MemAvailable"]; ok {
-			// MemAvailable is more accurate for modern kernels
-			memAvailable = avail
-		} else if free, ok := memInfo["MemFree"]; ok {
-			// Fallback to MemFree for older kernels
-			memAvailable = free
-		} else {
-			return []string{DefaultStyle.Render("Not available")}
-		}
-
-		memUsed := memTotal - memAvailable
-
-		// Calculate usage percentage
-		usagePercent := int((float64(memUsed) / float64(memTotal)) * 100)
-
-		// Always format total memory in GB
-		totalGB := float64(memTotal) / 1024.0 / 1024.0
-		totalFormatted := fmt.Sprintf("%3.0fG", totalGB) // Right-aligned, 3 digit integer + G
-
-		// Calculate the bar
-		usedWidth := (usagePercent * barWidth) / 100
-		unusedWidth := barWidth - usedWidth
-
-		// Choose color based on usage threshold
-		var usedBarStyle lipgloss.Style
-		if usagePercent >= maxUsageThreshold {
-			usedBarStyle = RedStyle
-		} else {
-			usedBarStyle = GreenStyle
-		}
-
-		// Create the usage bar
-		usedBar := strings.Repeat("=", usedWidth)
-		unusedBar := strings.Repeat("=", unusedWidth)
-
-		// Style the bars
-		styledUsedBar := usedBarStyle.Render(usedBar)
-		styledUnusedBar := DimStyle.Render(unusedBar)
-
-		// Create the complete bar
-		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
-
-		// Format the info line - use empty string for mountPoint to match disk usage format
-		infoLine := fmt.Sprintf("%-31s%3d%% used out of %3s", "", usagePercent, totalFormatted)
-		infoLine = DefaultStyle.Render(infoLine) // Apply default style
-
-		return []string{infoLine, completeBar}
-	}
-
-	// Fallback to free command if parsing /proc/meminfo failed
-	freeOutput := ExecCommand("free", "-m") // Get output in MB
-	if freeOutput != "Not available" {
-		lines := strings.Split(freeOutput, "\n")
-		if len(lines) >= 2 {
-			fields := strings.Fields(lines[1])
-			if len(fields) >= 4 {
-				if total, err := strconv.ParseUint(fields[1], 10, 64); err == nil {
-					if used, err := strconv.ParseUint(fields[2], 10, 64); err == nil {
-						// Calculate usage percentage
-						usagePercent := int((float64(used) / float64(total)) * 100)
-
-						// Always format total memory in GB
-						totalGB := float64(total) / 1024.0
-						totalFormatted := fmt.Sprintf("%3.0fG", totalGB) // Right-aligned, 3 digit integer + G
-
-						// Calculate the bar
-						usedWidth := (usagePercent * barWidth) / 100
-						unusedWidth := barWidth - usedWidth
-
-						// Choose color based on usage threshold
-						var usedBarStyle lipgloss.Style
-						if usagePercent >= maxUsageThreshold {
-							usedBarStyle = RedStyle
-						} else {
-							usedBarStyle = GreenStyle
-						}
-
-						// Create the usage bar
-						usedBar := strings.Repeat("=", usedWidth)
-						unusedBar := strings.Repeat("=", unusedWidth)
-
-						// Style the bars
-						styledUsedBar := usedBarStyle.Render(usedBar)
-						styledUnusedBar := DimStyle.Render(unusedBar)
-
-						// Create the complete bar
-						completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
-
-						// Format the info line - use empty string for mountPoint to match disk usage format
-						infoLine := fmt.Sprintf("%-31s%3d%% used out of %3s", "", usagePercent, totalFormatted)
-						infoLine = DefaultStyle.Render(infoLine) // Apply default style
-
-						return []string{infoLine, completeBar}
-					}
-				}
-			}
-		}
-	}
-
-	return []string{DefaultStyle.Render("Not available")}
-}
-
-// GetDiskUsage returns the disk usage for all real partitions with visual bars
-func GetDiskUsage() []string {
-	// Constants for disk usage bar
-	const (
-		maxUsageThreshold = 90 // Percentage at which disk usage is considered high
-		barWidth          = 50 // Width of the usage bar in characters
-	)
-
-	// Style definitions using lipgloss
-	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("40")).Bold(true) // ANSI 16 green
-	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("160")).Bold(true)  // ANSI 16 red
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	// Run df command to get disk usage with the proper exclusions
-	dfOutput := ExecCommand("df", "-H", "-x", "tmpfs", "-x", "overlay", "-x", "fuse.mergerfs", "-x", "fuse.rclone",
-		"--output=target,pcent,size")
-	if dfOutput == "Not available" {
-		return []string{"Not available"}
-	}
-
-	// Process df output
-	lines := strings.Split(dfOutput, "\n")
-	if len(lines) <= 1 { // If there's only one line (the header), then no valid partitions
-		return []string{"No valid disk partitions found"}
-	}
-
-	// Skip the header line
-	lines = lines[1:]
-	var results []string
-	var partitions []struct {
-		mountPoint   string
-		usagePercent int
-		size         string
-		formattedBar string
-	}
-
-	// Process each partition
-	for _, line := range lines {
-		fields := strings.Fields(line)
-		if len(fields) < 3 {
-			continue
-		}
-
-		// Skip specific mount points
-		mountPoint := fields[0]
-		if strings.HasPrefix(mountPoint, "/dev") ||
-			strings.HasPrefix(mountPoint, "/sys") ||
-			strings.HasPrefix(mountPoint, "/proc") ||
-			strings.HasPrefix(mountPoint, "/run") {
-			continue
-		}
-
-		// Get percentage (remove the '%' character)
-		usagePercentStr := strings.TrimSuffix(fields[1], "%")
-		usagePercent, err := strconv.Atoi(usagePercentStr)
-		if err != nil {
-			continue
-		}
-
-		// Get size
-		size := fields[2]
-
-		// Calculate the bar
-		usedWidth := (usagePercent * barWidth) / 100
-		unusedWidth := barWidth - usedWidth
-
-		// Choose color based on usage threshold
-		var usedBarStyle lipgloss.Style
-		if usagePercent >= maxUsageThreshold {
-			usedBarStyle = redStyle
-		} else {
-			usedBarStyle = greenStyle
-		}
-
-		// Create the usage bar
-		usedBar := strings.Repeat("=", usedWidth)
-		unusedBar := strings.Repeat("=", unusedWidth)
-
-		// Style the bars
-		styledUsedBar := usedBarStyle.Render(usedBar)
-		styledUnusedBar := dimStyle.Render(unusedBar)
-
-		// Create the complete bar
-		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
-
-		// Add to partitions slice
-		partitions = append(partitions, struct {
-			mountPoint   string
-			usagePercent int
-			size         string
-			formattedBar string
-		}{
-			mountPoint:   mountPoint,
-			usagePercent: usagePercent,
-			size:         size,
-			formattedBar: completeBar,
-		})
-	}
-
-	if len(partitions) == 0 {
-		return []string{"No valid disk partitions found"}
-	}
-
-	// Format the results
-	for i, p := range partitions {
-		// For the first partition, format the info line
-		if i == 0 {
-			// Will be combined with the key in the display function
-			infoLine := fmt.Sprintf("%-31s%3d%% used out of %4s", p.mountPoint, p.usagePercent, p.size)
-			results = append(results, infoLine)
-		} else {
-			// For subsequent partitions, add proper spacing for alignment
-			infoLine := fmt.Sprintf("%-31s%3d%% used out of %4s", p.mountPoint, p.usagePercent, p.size)
-			results = append(results, infoLine)
-		}
-		// Add the bar line
-		results = append(results, p.formattedBar)
-	}
-
-	return results
-}
-
 // GetLastLogin returns the last login information
 func GetLastLogin() string {
 	// Try last command to get the most recent login
@@ -341,6 +87,8 @@ func GetLastLogin() string {
 		fields := strings.Fields(lastOutput)
 		if len(fields) >= 5 {
 			user := fields[0]
+			// Color the username
+			coloredUser := ValueStyle.Render(user)
 
 			// Extract from IP
 			fromIP := fields[2]
@@ -357,6 +105,9 @@ func GetLastLogin() string {
 				fromIP = "local"
 			}
 
+			// Color the IP address
+			coloredIP := ValueStyle.Render(fromIP)
+
 			// Extract date and time if we have enough fields
 			if len(fields) >= timeIndex+4 {
 				day = fields[timeIndex]
@@ -364,10 +115,14 @@ func GetLastLogin() string {
 				date = fields[timeIndex+2]
 				time = fields[timeIndex+3]
 
+				// Color the date/time components
+				dateTimeStr := fmt.Sprintf("%s %s %s %s", day, month, date, time)
+				coloredDateTime := ValueStyle.Render(dateTimeStr)
+
 				// For entries that are still logged in
 				if stillLoggedIn {
-					return fmt.Sprintf("%s at %s %s %s %s (still logged in) from %s",
-						user, day, month, date, time, fromIP)
+					return fmt.Sprintf("%s at %s (still logged in) from %s",
+						coloredUser, coloredDateTime, coloredIP)
 				}
 
 				// For entries that have logged out, find the logout time and duration
@@ -381,6 +136,8 @@ func GetLastLogin() string {
 
 				if dashIndex != -1 && dashIndex+1 < len(fields) {
 					logoutTime = fields[dashIndex+1]
+					// Color the logout time
+					coloredLogoutTime := ValueStyle.Render(logoutTime)
 
 					// Find the duration which is in parentheses
 					for i, field := range fields {
@@ -398,13 +155,13 @@ func GetLastLogin() string {
 						}
 					}
 
-					return fmt.Sprintf("%s at %s %s %s %s until %s (%s) from %s",
-						user, day, month, date, time, logoutTime, duration, fromIP)
+					return fmt.Sprintf("%s at %s until %s (%s) from %s",
+						coloredUser, coloredDateTime, coloredLogoutTime, duration, coloredIP)
 				}
 
 				// If we couldn't parse the logout info but have login info
-				return fmt.Sprintf("%s at %s %s %s %s from %s",
-					user, day, month, date, time, fromIP)
+				return fmt.Sprintf("%s at %s from %s",
+					coloredUser, coloredDateTime, coloredIP)
 			}
 		}
 	}
@@ -417,8 +174,14 @@ func GetLastLogin() string {
 			fields := strings.Fields(lines[1])
 			if len(fields) >= 4 {
 				user := fields[0]
+				// Color the username
+				coloredUser := ValueStyle.Render(user)
+
 				loginInfo := strings.Join(fields[3:], " ")
-				return fmt.Sprintf("%s %s", user, loginInfo)
+				// Color the login info (date/time/IP)
+				coloredLoginInfo := ValueStyle.Render(loginInfo)
+
+				return fmt.Sprintf("%s %s", coloredUser, coloredLoginInfo)
 			}
 		}
 	}
@@ -431,11 +194,17 @@ func GetLastLogin() string {
 			fields := strings.Fields(lines[0])
 			if len(fields) >= 5 {
 				user := fields[0]
+				// Color the username
+				coloredUser := ValueStyle.Render(user)
+
 				month := fields[2]
 				day := fields[3]
 				time := fields[4]
+				// Color the date/time components
+				dateTimeStr := fmt.Sprintf("%s %s %s", month, day, time)
+				coloredDateTime := ValueStyle.Render(dateTimeStr)
 
-				return fmt.Sprintf("%s at %s %s %s (still logged in)", user, month, day, time)
+				return fmt.Sprintf("%s at %s (still logged in)", coloredUser, coloredDateTime)
 			}
 		}
 	}
@@ -454,10 +223,13 @@ func GetUserSessions() string {
 	lines := strings.Split(whoOutput, "\n")
 	count := len(lines)
 
+	// Color the session count
+	coloredCount := ValueStyle.Render(fmt.Sprintf("%d", count))
+
 	if count == 1 {
-		return "1 active session"
+		return fmt.Sprintf("%s active session", coloredCount)
 	} else {
-		return fmt.Sprintf("%d active sessions", count)
+		return fmt.Sprintf("%s active sessions", coloredCount)
 	}
 }
 
@@ -475,7 +247,9 @@ func GetProcessCount() string {
 				}
 			}
 		}
-		return fmt.Sprintf("%d running processes", count)
+		// Color the process count
+		coloredCount := ValueStyle.Render(fmt.Sprintf("%d", count))
+		return fmt.Sprintf("%s running processes", coloredCount)
 	}
 
 	// Method 2: Use ps command (fallback)
@@ -487,7 +261,9 @@ func GetProcessCount() string {
 		if count <= 0 {
 			count = 0
 		}
-		return fmt.Sprintf("%d running processes", count)
+		// Color the process count
+		coloredCount := ValueStyle.Render(fmt.Sprintf("%d", count))
+		return fmt.Sprintf("%s running processes", coloredCount)
 	}
 
 	return "Not available"
@@ -510,7 +286,26 @@ func GetAptStatus() string {
 			if strings.Contains(trimmed, "updates can be applied immediately") &&
 				!strings.Contains(trimmed, "ESM") &&
 				!strings.Contains(trimmed, "esm") {
-				// Extract just the main update count message, removing any instruction text
+
+				// Color the number of updates
+				re := regexp.MustCompile(`(\d+)`)
+				matches := re.FindStringSubmatch(trimmed)
+				if len(matches) > 1 {
+					// Get the number and color it
+					number := matches[1]
+					coloredNumber := ValueStyle.Render(number)
+
+					// Replace the number in the original text
+					coloredLine := re.ReplaceAllString(trimmed, coloredNumber)
+
+					// Extract just the main update count message, removing any instruction text
+					if idx := strings.Index(coloredLine, "."); idx != -1 {
+						return coloredLine[:idx+1] // Include the period
+					}
+					return coloredLine
+				}
+
+				// If we can't extract the number, return the original text
 				if idx := strings.Index(trimmed, "."); idx != -1 {
 					return trimmed[:idx+1] // Include the period
 				}
@@ -537,6 +332,19 @@ func GetAptStatus() string {
 			if strings.Contains(trimmed, "packages can be updated") &&
 				!strings.Contains(trimmed, "ESM") &&
 				!strings.Contains(trimmed, "esm") {
+
+				// Color the number of updates
+				re := regexp.MustCompile(`(\d+)`)
+				matches := re.FindStringSubmatch(trimmed)
+				if len(matches) > 1 {
+					// Get the number and color it
+					number := matches[1]
+					coloredNumber := ValueStyle.Render(number)
+
+					// Replace the number in the original text
+					return re.ReplaceAllString(trimmed, coloredNumber)
+				}
+
 				return trimmed
 			}
 		}
@@ -548,6 +356,19 @@ func GetAptStatus() string {
 				!strings.Contains(trimmed, "ESM") &&
 				!strings.Contains(trimmed, "esm") &&
 				(strings.Contains(trimmed, "update") || strings.Contains(trimmed, "package")) {
+
+				// Color the number of updates if present
+				re := regexp.MustCompile(`(\d+)`)
+				matches := re.FindStringSubmatch(trimmed)
+				if len(matches) > 1 {
+					// Get the number and color it
+					number := matches[1]
+					coloredNumber := ValueStyle.Render(number)
+
+					// Replace the number in the original text
+					return re.ReplaceAllString(trimmed, coloredNumber)
+				}
+
 				return trimmed
 			}
 		}
@@ -566,7 +387,9 @@ func GetAptStatus() string {
 			}
 
 			if updateCount > 0 {
-				return fmt.Sprintf("%d updates can be applied immediately", updateCount)
+				// Color the update count
+				coloredCount := ValueStyle.Render(fmt.Sprintf("%d", updateCount))
+				return fmt.Sprintf("%s updates can be applied immediately", coloredCount)
 			}
 		}
 	}
@@ -576,6 +399,7 @@ func GetAptStatus() string {
 }
 
 // GetRebootRequired checks if a system reboot is required
+// Returns empty string if no reboot is required, which will hide the field entirely
 func GetRebootRequired() string {
 	// Method 1: Go native implementation
 	// Check if the reboot-required file exists
@@ -599,25 +423,31 @@ func GetRebootRequired() string {
 
 			if len(validPkgs) > 0 {
 				if len(validPkgs) == 1 {
-					return fmt.Sprintf("Reboot required (package: %s)", validPkgs[0])
+					// Use yellow for the entire message when reboot is required
+					return YellowStyle.Render(fmt.Sprintf("Reboot required (package: %s)", validPkgs[0]))
 				} else {
-					return fmt.Sprintf("Reboot required (%d packages)", len(validPkgs))
+					// Use yellow for the entire message with package count
+					return YellowStyle.Render(fmt.Sprintf("Reboot required (%d packages)", len(validPkgs)))
 				}
 			}
 		}
 
 		// If we couldn't get package details, just return that a reboot is required
-		return "Reboot required"
+		return YellowStyle.Render("Reboot required")
 	}
 
 	// Method 2: Fallback to the update-motd script
 	output := ExecCommand("/usr/lib/update-notifier/update-motd-reboot-required")
-	if output != "Not available" && output != "" {
+	if output != "Not available" && output != "" && !strings.Contains(output, "No reboot") {
+		// If the output contains "reboot required", color it yellow
+		if strings.Contains(strings.ToLower(output), "reboot required") {
+			return YellowStyle.Render(strings.TrimSpace(output))
+		}
 		return strings.TrimSpace(output)
 	}
 
-	// If no reboot is required or we can't determine
-	return "No reboot required"
+	// Return empty string if no reboot is required
+	return ""
 }
 
 // GetCpuInfo returns information about the CPU model and core count
@@ -729,14 +559,8 @@ func GetCpuInfo() string {
 	return DefaultStyle.Render("Not available")
 }
 
-// GetMemoryInfo returns the system memory usage with a visual bar
+// GetMemoryInfo returns the system memory usage in a simple text format
 func GetMemoryInfo() string {
-	// Constants for memory usage bar
-	const (
-		maxUsageThreshold = 90 // Percentage at which memory usage is considered high
-		barWidth          = 50 // Width of the usage bar in characters
-	)
-
 	// Try to read from /proc/meminfo first
 	content, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
@@ -762,60 +586,49 @@ func GetMemoryInfo() string {
 
 	// Check if we have the required fields
 	if memTotal, ok := memInfo["MemTotal"]; ok {
-		var memAvailable uint64
+		var memAvailable, memFree, memCached uint64
+		memUsed := memTotal // Start with total, then subtract
+
+		if free, ok := memInfo["MemFree"]; ok {
+			memFree = free
+			memUsed -= free
+		}
+
+		if cached, ok := memInfo["Cached"]; ok {
+			memCached = cached
+		}
+
+		if buffers, ok := memInfo["Buffers"]; ok {
+			memCached += buffers
+		}
+
 		if avail, ok := memInfo["MemAvailable"]; ok {
-			// MemAvailable is more accurate for modern kernels
 			memAvailable = avail
-		} else if free, ok := memInfo["MemFree"]; ok {
-			// Fallback to MemFree for older kernels
-			memAvailable = free
 		} else {
-			return DefaultStyle.Render("Not available")
+			// Fallback calculation if MemAvailable is not present
+			memAvailable = memFree + memCached
 		}
 
-		memUsed := memTotal - memAvailable
-
-		// Calculate usage percentage
-		usagePercent := int((float64(memUsed) / float64(memTotal)) * 100)
-
-		// Format total memory in GB
+		// Convert all values to GB for consistent formatting
 		totalGB := float64(memTotal) / 1024.0 / 1024.0
-		totalFormatted := fmt.Sprintf("%dG", int(totalGB))
+		usedGB := float64(memTotal-memAvailable) / 1024.0 / 1024.0
+		freeGB := float64(memFree) / 1024.0 / 1024.0
+		cachedGB := float64(memCached) / 1024.0 / 1024.0
+		availableGB := float64(memAvailable) / 1024.0 / 1024.0
 
-		// Calculate the bar
-		usedWidth := (usagePercent * barWidth) / 100
-		unusedWidth := barWidth - usedWidth
-
-		// Choose color based on usage threshold
-		var usedBarStyle lipgloss.Style
-		if usagePercent >= maxUsageThreshold {
-			usedBarStyle = RedStyle
-		} else {
-			usedBarStyle = GreenStyle
-		}
-
-		// Create the usage bar
-		usedBar := strings.Repeat("=", usedWidth)
-		unusedBar := strings.Repeat("=", unusedWidth)
-
-		// Style the bars
-		styledUsedBar := usedBarStyle.Render(usedBar)
-		styledUnusedBar := DimStyle.Render(unusedBar)
-
-		// Create the complete bar
-		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
-
-		// Format the info line
-		infoLine := fmt.Sprintf("%-30s%3d%% used out of %4s", "", usagePercent, totalFormatted)
-
-		// Return the formatted memory info string
-		return DefaultStyle.Render(infoLine) + "\n" + completeBar
+		// Format as a simple text string
+		return fmt.Sprintf("%s used, %s free, %s cached, %s available, %s total",
+			ValueStyle.Render(fmt.Sprintf("%.1fG", usedGB)),
+			ValueStyle.Render(fmt.Sprintf("%.1fG", freeGB)),
+			ValueStyle.Render(fmt.Sprintf("%.1fG", cachedGB)),
+			ValueStyle.Render(fmt.Sprintf("%.1fG", availableGB)),
+			ValueStyle.Render(fmt.Sprintf("%.1fG", totalGB)))
 	}
 
 	return DefaultStyle.Render("Not available")
 }
 
-// GetDockerInfo returns information about Docker containers with their status
+// GetDockerInfo returns information about Docker containers
 func GetDockerInfo() string {
 	var output strings.Builder
 
@@ -920,11 +733,20 @@ func GetDockerInfo() string {
 
 	// Create a simple summary line - always show total and running
 	if len(problemContainers) > 0 {
-		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%d containers (%d running, %d need attention)",
-			totalCount, runningCount, len(problemContainers))))
+		// Color the counts - yellow for totalCount when there are issues
+		coloredTotalCount := YellowStyle.Render(fmt.Sprintf("%d", totalCount))
+		coloredRunningCount := ValueStyle.Render(fmt.Sprintf("%d", runningCount))
+		coloredProblemCount := YellowStyle.Render(fmt.Sprintf("%d", len(problemContainers)))
+
+		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%s containers (%s running, %s need attention)",
+			coloredTotalCount, coloredRunningCount, coloredProblemCount)))
 	} else {
-		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%d containers (%d running)",
-			totalCount, runningCount)))
+		// Color the counts - normal ValueStyle when all is good
+		coloredTotalCount := ValueStyle.Render(fmt.Sprintf("%d", totalCount))
+		coloredRunningCount := ValueStyle.Render(fmt.Sprintf("%d", runningCount))
+
+		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%s containers (%s running)",
+			coloredTotalCount, coloredRunningCount)))
 	}
 
 	// If there are problematic containers, add them to the output
@@ -962,12 +784,16 @@ func GetDiskInfo() string {
 
 	// Skip the header line
 	lines = lines[1:]
-	var partitions []struct {
+
+	type partitionInfo struct {
 		mountPoint   string
 		usagePercent int
 		size         string
 		formattedBar string
+		percentStyle lipgloss.Style // Store the style directly with each partition
 	}
+
+	var partitions []partitionInfo
 
 	// Process each partition
 	for _, line := range lines {
@@ -1001,10 +827,14 @@ func GetDiskInfo() string {
 
 		// Choose color based on usage threshold
 		var usedBarStyle lipgloss.Style
+		var percentStyle lipgloss.Style
+
 		if usagePercent >= maxUsageThreshold {
 			usedBarStyle = RedStyle
+			percentStyle = RedStyle
 		} else {
 			usedBarStyle = GreenStyle
+			percentStyle = ValueStyle
 		}
 
 		// Create the usage bar
@@ -1019,16 +849,12 @@ func GetDiskInfo() string {
 		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
 
 		// Add to partitions slice
-		partitions = append(partitions, struct {
-			mountPoint   string
-			usagePercent int
-			size         string
-			formattedBar string
-		}{
+		partitions = append(partitions, partitionInfo{
 			mountPoint:   mountPoint,
 			usagePercent: usagePercent,
 			size:         size,
 			formattedBar: completeBar,
+			percentStyle: percentStyle,
 		})
 	}
 
@@ -1038,15 +864,23 @@ func GetDiskInfo() string {
 
 	// Format the results
 	for i, p := range partitions {
+		// Format the percentage and size first while preserving alignment
+		percentStr := fmt.Sprintf("%3d%%", p.usagePercent)
+		sizeStr := fmt.Sprintf("%4s", p.size)
+
+		// Then color them
+		coloredPercent := p.percentStyle.Render(percentStr)
+		coloredSize := ValueStyle.Render(sizeStr)
+
 		// For the first partition, add it directly to the output
 		if i == 0 {
 			// Format using original format with wide fixed spacing and mountpoint
-			infoLine := fmt.Sprintf("%-30s%3d%% used out of %4s", p.mountPoint, p.usagePercent, p.size)
+			infoLine := fmt.Sprintf("%-30s%s used out of %s", p.mountPoint, coloredPercent, coloredSize)
 			output.WriteString(DefaultStyle.Render(infoLine))
 			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
 		} else {
 			// For subsequent partitions, add line breaks before
-			infoLine := fmt.Sprintf("%-30s%3d%% used out of %4s", p.mountPoint, p.usagePercent, p.size)
+			infoLine := fmt.Sprintf("%-30s%s used out of %s", p.mountPoint, coloredPercent, coloredSize)
 			output.WriteString(fmt.Sprintf("\n%s", DefaultStyle.Render(infoLine)))
 			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
 		}

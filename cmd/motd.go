@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/motd" // Adjust the import path as needed
+	"github.com/saltyorg/sb-go/motd"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +24,7 @@ var (
 	showAptStatus      bool
 	showRebootRequired bool
 	showDocker         bool
-	showCPU            bool // New flag for CPU information
+	showCPU            bool
 	showAll            bool
 	bannerTitle        string
 	bannerType         string
@@ -53,7 +53,7 @@ last login, user sessions, process information, and system update status based o
 			showAptStatus = true
 			showRebootRequired = true
 			showDocker = true
-			showCPU = true // Enable CPU info when --all is specified
+			showCPU = true
 		}
 
 		// Check if at least one flag is enabled
@@ -136,26 +136,20 @@ func displayMotd() {
 	}
 
 	// Set up info sources with appropriate timeouts and display order
-	// Added empty lines at requested positions for better visual grouping
 	sources := []motd.InfoSource{
 		{Key: "Distribution:", Provider: motd.GetDistributionWithContext, Timeout: 2 * time.Second, Order: 1},
 		{Key: "Kernel:", Provider: motd.GetKernelWithContext, Timeout: 1 * time.Second, Order: 2},
-		{Key: "  ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 3},
-		{Key: "Uptime:", Provider: motd.GetUptimeWithContext, Timeout: 1 * time.Second, Order: 4},
-		{Key: "Load Averages:", Provider: motd.GetCpuAveragesWithContext, Timeout: 1 * time.Second, Order: 5},
-		{Key: "Processes:", Provider: motd.GetProcessCountWithContext, Timeout: 2 * time.Second, Order: 6},
-		{Key: "   ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 7},
-		{Key: "CPU:", Provider: motd.GetCpuInfoWithContext, Timeout: 2 * time.Second, Order: 8},
-		{Key: "Memory Usage:", Provider: motd.GetMemoryInfoWithContext, Timeout: 2 * time.Second, Order: 9},
-		{Key: "    ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 10},
-		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Timeout: 5 * time.Second, Order: 11},
-		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Timeout: 2 * time.Second, Order: 12},
-		{Key: "     ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 13},
-		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 14},
-		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 15},
-		{Key: "      ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 16},
-		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 17},
-		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 18},
+		{Key: "Uptime:", Provider: motd.GetUptimeWithContext, Timeout: 1 * time.Second, Order: 3},
+		{Key: "Load Averages:", Provider: motd.GetCpuAveragesWithContext, Timeout: 1 * time.Second, Order: 4},
+		{Key: "Processes:", Provider: motd.GetProcessCountWithContext, Timeout: 2 * time.Second, Order: 5},
+		{Key: "CPU:", Provider: motd.GetCpuInfoWithContext, Timeout: 2 * time.Second, Order: 6},
+		{Key: "Memory Usage:", Provider: motd.GetMemoryInfoWithContext, Timeout: 2 * time.Second, Order: 7},
+		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Timeout: 5 * time.Second, Order: 8},
+		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Timeout: 2 * time.Second, Order: 9},
+		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 10},
+		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 11},
+		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 12},
+		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 13},
 	}
 
 	// Filter sources based on enabled flags
@@ -163,31 +157,20 @@ func displayMotd() {
 	flags := map[string]bool{
 		"Distribution:":   showDistribution,
 		"Kernel:":         showKernel,
-		"  ":              true,
 		"Uptime:":         showUptime,
 		"Load Averages:":  showCpuAverages,
 		"Processes:":      showProcesses,
-		"   ":             true,
 		"CPU:":            showCPU,
 		"Memory Usage:":   showMemory,
-		"    ":            true,
 		"Package Status:": showAptStatus,
 		"Reboot Status:":  showRebootRequired,
-		"     ":           true,
 		"User Sessions:":  showSessions,
 		"Last login:":     showLastLogin,
-		"      ":          true,
 		"Disk Usage:":     showDisk,
 		"Docker:":         showDocker,
 	}
 
-	// Determine when to show empty lines - only between visible sections
-	flags["  "] = flags["Kernel:"] && flags["Uptime:"]
-	flags["   "] = flags["Processes:"] && flags["CPU:"]
-	flags["    "] = flags["Memory Usage:"] && flags["Package Status:"]
-	flags["     "] = flags["Reboot Status:"] && flags["User Sessions:"]
-	flags["      "] = flags["Last login:"] && flags["Disk Usage:"]
-
+	// Simply use all enabled sources
 	for _, source := range sources {
 		if enabled, exists := flags[source.Key]; exists && enabled {
 			activeSources = append(activeSources, source)
@@ -197,14 +180,17 @@ func displayMotd() {
 	// Get system information in parallel
 	results := motd.GetSystemInfo(activeSources)
 
+	// Filter out any results with empty values
+	var filteredResults []motd.Result
+	for _, result := range results {
+		if result.Value != "" {
+			filteredResults = append(filteredResults, result)
+		}
+	}
+
 	// Calculate spacing for display
 	maxKeyLen := 0
-	for _, result := range results {
-		// Skip empty line keys when calculating max length
-		if result.Key == "  " || result.Key == "   " || result.Key == "    " ||
-			result.Key == "     " || result.Key == "      " {
-			continue
-		}
+	for _, result := range filteredResults {
 		if len(result.Key) > maxKeyLen {
 			maxKeyLen = len(result.Key)
 		}
@@ -214,17 +200,7 @@ func displayMotd() {
 	spacing := maxKeyLen + 2
 
 	// Display results with consistently styled keys
-	for _, result := range results {
-		// Check if this is an empty line key
-		isEmptyLine := result.Key == "  " || result.Key == "   " || result.Key == "    " ||
-			result.Key == "     " || result.Key == "      "
-
-		// For empty lines, just print a blank line
-		if isEmptyLine {
-			fmt.Println()
-			continue
-		}
-
+	for _, result := range filteredResults {
 		// Apply key style and add proper spacing
 		styledKey := motd.KeyStyle.Render(result.Key)
 		paddingLength := spacing - len(result.Key)
@@ -244,6 +220,8 @@ func displayMotd() {
 			}
 		}
 	}
+
+	fmt.Println()
 }
 
 func init() {
