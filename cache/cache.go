@@ -86,7 +86,7 @@ func (c *Cache) CheckCache(repoPath string, tags []string) (bool, []string) {
 
 // load reads the cache data from the file specified in the Cache struct.
 // If the file does not exist, the cache remains empty (no error is returned).
-// On success, it unmarshals the JSON data into the cache's internal map.
+// On success, it will unmarshal the JSON data into the cache's internal map.
 func (c *Cache) load() error {
 	if _, err := os.Stat(c.file); os.IsNotExist(err) {
 		return nil // File doesn't exist; start with an empty cache.

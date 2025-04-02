@@ -9,10 +9,11 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/saltyorg/sb-go/styles"
 )
 
 // GlobalSpinnerStyle holds the default style for the spinner itself.
-var GlobalSpinnerStyle = getStyle("magenta")
+var GlobalSpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorMagenta))
 
 type TaskFunc func() error
 
@@ -30,9 +31,9 @@ type SpinnerOptions struct {
 func RunTaskWithSpinner(message string, taskFunc TaskFunc) error {
 	opts := SpinnerOptions{
 		TaskName:        message,
-		Color:           "yellow",
-		StopColor:       "green",
-		StopFailColor:   "red",
+		Color:           styles.ColorYellow,
+		StopColor:       styles.ColorMediumGreen,
+		StopFailColor:   styles.ColorDarkRed,
 		StopMessage:     message,
 		StopFailMessage: message,
 	}
@@ -46,13 +47,13 @@ func RunTaskWithSpinnerCustom(opts SpinnerOptions, taskFunc TaskFunc) error {
 	}
 
 	if opts.Color == "" {
-		opts.Color = "white"
+		opts.Color = styles.ColorWhite
 	}
 	if opts.StopColor == "" {
-		opts.StopColor = "green"
+		opts.StopColor = styles.ColorMediumGreen
 	}
 	if opts.StopFailColor == "" {
-		opts.StopFailColor = "red"
+		opts.StopFailColor = styles.ColorDarkRed
 	}
 	if opts.StopMessage == "" {
 		opts.StopMessage = opts.TaskName
@@ -84,9 +85,9 @@ func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
 func RunInfoSpinner(message string) error {
 	opts := SpinnerOptions{
 		TaskName:        message,
-		Color:           "blue",
-		StopColor:       "blue",
-		StopFailColor:   "blue",
+		Color:           styles.ColorLightBlue,
+		StopColor:       styles.ColorLightBlue,
+		StopFailColor:   styles.ColorLightBlue,
 		StopMessage:     message,
 		StopFailMessage: message,
 	}
@@ -97,9 +98,9 @@ func RunInfoSpinner(message string) error {
 func RunWarningSpinner(message string) error {
 	opts := SpinnerOptions{
 		TaskName:        message,
-		Color:           "yellow",
-		StopColor:       "yellow",
-		StopFailColor:   "yellow",
+		Color:           styles.ColorYellow,
+		StopColor:       styles.ColorYellow,
+		StopFailColor:   styles.ColorYellow,
 		StopMessage:     message,
 		StopFailMessage: message,
 	}
@@ -192,43 +193,5 @@ func (m spinnerModel) View() string {
 // Helper function to map color names to styles (still needed for stop/fail colors).
 func getStyle(colorName string) lipgloss.Style {
 	style := lipgloss.NewStyle()
-
-	switch colorName {
-	case "black":
-		style = style.Foreground(lipgloss.Color("0"))
-	case "red":
-		style = style.Foreground(lipgloss.Color("1"))
-	case "green":
-		style = style.Foreground(lipgloss.Color("2"))
-	case "yellow":
-		style = style.Foreground(lipgloss.Color("3"))
-	case "blue":
-		style = style.Foreground(lipgloss.Color("4"))
-	case "magenta":
-		style = style.Foreground(lipgloss.Color("5"))
-	case "cyan":
-		style = style.Foreground(lipgloss.Color("6"))
-	case "white":
-		style = style.Foreground(lipgloss.Color("7"))
-	case "brightblack", "gray", "grey":
-		style = style.Foreground(lipgloss.Color("8"))
-	case "brightred":
-		style = style.Foreground(lipgloss.Color("9"))
-	case "brightgreen":
-		style = style.Foreground(lipgloss.Color("10"))
-	case "brightyellow":
-		style = style.Foreground(lipgloss.Color("11"))
-	case "brightblue":
-		style = style.Foreground(lipgloss.Color("12"))
-	case "brightmagenta":
-		style = style.Foreground(lipgloss.Color("13"))
-	case "brightcyan":
-		style = style.Foreground(lipgloss.Color("14"))
-	case "brightwhite":
-		style = style.Foreground(lipgloss.Color("15"))
-	default:
-		style = style.Foreground(lipgloss.Color("7"))
-	}
-
-	return style
+	return style.Foreground(lipgloss.Color(colorName))
 }

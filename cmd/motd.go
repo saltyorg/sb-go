@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/saltyorg/sb-go/motd" // Adjust the import path as needed
 	"github.com/spf13/cobra"
 )
@@ -25,7 +23,8 @@ var (
 	showProcesses      bool
 	showAptStatus      bool
 	showRebootRequired bool
-	showDocker         bool // New Docker containers flag
+	showDocker         bool
+	showCPU            bool // New flag for CPU information
 	showAll            bool
 	bannerTitle        string
 	bannerType         string
@@ -54,12 +53,13 @@ last login, user sessions, process information, and system update status based o
 			showAptStatus = true
 			showRebootRequired = true
 			showDocker = true
+			showCPU = true // Enable CPU info when --all is specified
 		}
 
 		// Check if at least one flag is enabled
 		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
 			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses &&
-			!showAptStatus && !showRebootRequired && !showDocker {
+			!showAptStatus && !showRebootRequired && !showDocker && !showCPU {
 			fmt.Println("Error: No information selected to display.")
 			fmt.Println("Please use at least one of the following flags:")
 			fmt.Println("  --distro     Show distribution information")
@@ -74,6 +74,7 @@ last login, user sessions, process information, and system update status based o
 			fmt.Println("  --apt        Show apt package status")
 			fmt.Println("  --reboot     Show if reboot is required")
 			fmt.Println("  --docker     Show Docker container information")
+			fmt.Println("  --cpu-info   Show CPU model and core count")
 			fmt.Println("  --all        Show all information")
 			os.Exit(1)
 		}
@@ -128,9 +129,6 @@ last login, user sessions, process information, and system update status based o
 }
 
 func displayMotd() {
-	// Set white color style for keys
-	whiteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("39")) // ANSI bright white
-
 	// Display banner if title is provided
 	if bannerTitle != "" {
 		banner := motd.GenerateBanner(bannerTitle, bannerFont, bannerType)
@@ -138,16 +136,26 @@ func displayMotd() {
 	}
 
 	// Set up info sources with appropriate timeouts and display order
+	// Added empty lines at requested positions for better visual grouping
 	sources := []motd.InfoSource{
 		{Key: "Distribution:", Provider: motd.GetDistributionWithContext, Timeout: 2 * time.Second, Order: 1},
 		{Key: "Kernel:", Provider: motd.GetKernelWithContext, Timeout: 1 * time.Second, Order: 2},
-		{Key: "Uptime:", Provider: motd.GetUptimeWithContext, Timeout: 1 * time.Second, Order: 3},
-		{Key: "Load Averages:", Provider: motd.GetCpuAveragesWithContext, Timeout: 1 * time.Second, Order: 4},
-		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 6},
-		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 7},
-		{Key: "Processes:", Provider: motd.GetProcessCountWithContext, Timeout: 2 * time.Second, Order: 8},
-		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Timeout: 5 * time.Second, Order: 9},
-		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Timeout: 2 * time.Second, Order: 10},
+		{Key: "  ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 3},
+		{Key: "Uptime:", Provider: motd.GetUptimeWithContext, Timeout: 1 * time.Second, Order: 4},
+		{Key: "Load Averages:", Provider: motd.GetCpuAveragesWithContext, Timeout: 1 * time.Second, Order: 5},
+		{Key: "Processes:", Provider: motd.GetProcessCountWithContext, Timeout: 2 * time.Second, Order: 6},
+		{Key: "   ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 7},
+		{Key: "CPU:", Provider: motd.GetCpuInfoWithContext, Timeout: 2 * time.Second, Order: 8},
+		{Key: "Memory Usage:", Provider: motd.GetMemoryInfoWithContext, Timeout: 2 * time.Second, Order: 9},
+		{Key: "    ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 10},
+		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Timeout: 5 * time.Second, Order: 11},
+		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Timeout: 2 * time.Second, Order: 12},
+		{Key: "     ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 13},
+		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 14},
+		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 15},
+		{Key: "      ", Provider: motd.GetEmptyLineWithContext, Timeout: 1 * time.Millisecond, Order: 16},
+		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 17},
+		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 18},
 	}
 
 	// Filter sources based on enabled flags
@@ -155,14 +163,30 @@ func displayMotd() {
 	flags := map[string]bool{
 		"Distribution:":   showDistribution,
 		"Kernel:":         showKernel,
+		"  ":              true,
 		"Uptime:":         showUptime,
 		"Load Averages:":  showCpuAverages,
-		"Last login:":     showLastLogin,
-		"User Sessions:":  showSessions,
 		"Processes:":      showProcesses,
+		"   ":             true,
+		"CPU:":            showCPU,
+		"Memory Usage:":   showMemory,
+		"    ":            true,
 		"Package Status:": showAptStatus,
 		"Reboot Status:":  showRebootRequired,
+		"     ":           true,
+		"User Sessions:":  showSessions,
+		"Last login:":     showLastLogin,
+		"      ":          true,
+		"Disk Usage:":     showDisk,
+		"Docker:":         showDocker,
 	}
+
+	// Determine when to show empty lines - only between visible sections
+	flags["  "] = flags["Kernel:"] && flags["Uptime:"]
+	flags["   "] = flags["Processes:"] && flags["CPU:"]
+	flags["    "] = flags["Memory Usage:"] && flags["Package Status:"]
+	flags["     "] = flags["Reboot Status:"] && flags["User Sessions:"]
+	flags["      "] = flags["Last login:"] && flags["Disk Usage:"]
 
 	for _, source := range sources {
 		if enabled, exists := flags[source.Key]; exists && enabled {
@@ -176,20 +200,14 @@ func displayMotd() {
 	// Calculate spacing for display
 	maxKeyLen := 0
 	for _, result := range results {
+		// Skip empty line keys when calculating max length
+		if result.Key == "  " || result.Key == "   " || result.Key == "    " ||
+			result.Key == "     " || result.Key == "      " {
+			continue
+		}
 		if len(result.Key) > maxKeyLen {
 			maxKeyLen = len(result.Key)
 		}
-	}
-
-	// Check for maxKeyLen to ensure consistent spacing
-	if showDocker && len("Docker:") > maxKeyLen {
-		maxKeyLen = len("Docker:")
-	}
-	if showMemory && len("Memory Usage:") > maxKeyLen {
-		maxKeyLen = len("Memory Usage:")
-	}
-	if showDisk && len("Disk Usage:") > maxKeyLen {
-		maxKeyLen = len("Disk Usage:")
 	}
 
 	// Add additional spacing (2 spaces)
@@ -197,127 +215,33 @@ func displayMotd() {
 
 	// Display results with consistently styled keys
 	for _, result := range results {
-		// Style the key in white and add proper spacing
-		styledKey := whiteStyle.Render(result.Key)
+		// Check if this is an empty line key
+		isEmptyLine := result.Key == "  " || result.Key == "   " || result.Key == "    " ||
+			result.Key == "     " || result.Key == "      "
+
+		// For empty lines, just print a blank line
+		if isEmptyLine {
+			fmt.Println()
+			continue
+		}
+
+		// Apply key style and add proper spacing
+		styledKey := motd.KeyStyle.Render(result.Key)
 		paddingLength := spacing - len(result.Key)
 		padding := strings.Repeat(" ", paddingLength)
 
-		fmt.Printf("%s%s%s\n", styledKey, padding, result.Value)
-	}
+		// Split the value by line breaks to support multi-line values
+		lines := strings.Split(result.Value, "\n")
 
-	// Handle Docker containers display (multiline)
-	if showDocker {
-		// Set up a separate source for Docker info
-		dockerSource := motd.InfoSource{
-			Key:      "Docker:",
-			Provider: motd.GetDockerInfoWithContext,
-			Timeout:  5 * time.Second,
-			Order:    0,
-		}
+		// Print the first line with the key
+		fmt.Printf("%s%s%s\n", styledKey, padding, lines[0])
 
-		// Get Docker info
-		multilineResult := motd.GetMultilineSystemInfo(dockerSource)
-
-		if len(multilineResult.Values) > 0 {
-			// First line is the summary
-			if len(multilineResult.Values) == 1 {
-				// Single line result (likely an error or "no containers")
-				styledKey := whiteStyle.Render(multilineResult.Key)
-				paddingLength := spacing - len(multilineResult.Key)
-				padding := strings.Repeat(" ", paddingLength)
-				fmt.Printf("%s%s%s\n", styledKey, padding, multilineResult.Values[0])
-			} else {
-				// Multi-line result
-				// Print the first line (summary) with the styled label
-				styledKey := whiteStyle.Render(multilineResult.Key)
-				paddingLength := spacing - len(multilineResult.Key)
-				padding := strings.Repeat(" ", paddingLength)
-				fmt.Printf("%s%s%s\n", styledKey, padding, multilineResult.Values[0])
-
-				// Print container details with consistent indentation
-				containerPadding := strings.Repeat(" ", spacing)
-				for i := 1; i < len(multilineResult.Values); i++ {
-					fmt.Printf("%s%s\n", containerPadding, multilineResult.Values[i])
-				}
+		// Print any remaining lines with consistent padding
+		if len(lines) > 1 {
+			for i := 1; i < len(lines); i++ {
+				padding := strings.Repeat(" ", spacing)
+				fmt.Printf("%s%s\n", padding, lines[i])
 			}
-		} else {
-			styledKey := whiteStyle.Render("Docker:")
-			paddingLength := spacing - len("Docker:")
-			padding := strings.Repeat(" ", paddingLength)
-			fmt.Printf("%s%s%s\n", styledKey, padding, "No container information available")
-		}
-	}
-
-	// Handle memory usage with bar (special case)
-	if showMemory {
-		// Get memory info with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-
-		memoryUsage := motd.GetMemoryInfoParallel(ctx)
-
-		if len(memoryUsage) == 1 && memoryUsage[0] == "Not available" {
-			styledKey := whiteStyle.Render("Memory Usage:")
-			paddingLength := spacing - len("Memory Usage:")
-			padding := strings.Repeat(" ", paddingLength)
-			fmt.Printf("%s%s%s\n", styledKey, padding, "Not available")
-		} else if len(memoryUsage) >= 2 {
-			// First line contains the memory stats - print with the styled "Memory Usage:" key
-			styledKey := whiteStyle.Render("Memory Usage:")
-			paddingLength := spacing - len("Memory Usage:")
-			padding := strings.Repeat(" ", paddingLength)
-			fmt.Printf("%s%s%s\n", styledKey, padding, memoryUsage[0])
-
-			// Print the bar with proper spacing
-			fmt.Printf("%s%s\n", strings.Repeat(" ", spacing), memoryUsage[1])
-		} else {
-			styledKey := whiteStyle.Render("Memory Usage:")
-			paddingLength := spacing - len("Memory Usage:")
-			padding := strings.Repeat(" ", paddingLength)
-			fmt.Printf("%s%s%s\n", styledKey, padding, "Memory information unavailable")
-		}
-	}
-
-	// Handle disk usage separately (special case)
-	if showDisk {
-		// Get disk info with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-
-		diskUsage := motd.GetDiskInfoParallel(ctx)
-
-		if len(diskUsage) == 1 && diskUsage[0] == "Not available" {
-			styledKey := whiteStyle.Render("Disk Usage:")
-			paddingLength := spacing - len("Disk Usage:")
-			padding := strings.Repeat(" ", paddingLength)
-			fmt.Printf("%s%s%s\n", styledKey, padding, "Not available")
-		} else if len(diskUsage) > 0 {
-			// First line contains the first partition info - print with the styled "Disk Usage:" key
-			styledKey := whiteStyle.Render("Disk Usage:")
-			paddingLength := spacing - len("Disk Usage:")
-			padding := strings.Repeat(" ", paddingLength)
-			fmt.Printf("%s%s%s\n", styledKey, padding, diskUsage[0])
-
-			// Print the bar for the first partition
-			if len(diskUsage) > 1 {
-				fmt.Printf("%s%s\n", strings.Repeat(" ", spacing), diskUsage[1])
-			}
-
-			// Print the rest of the partitions (2 lines per partition)
-			for i := 2; i < len(diskUsage); i += 2 {
-				// Print partition info line with proper spacing
-				fmt.Printf("%s%s\n", strings.Repeat(" ", spacing), diskUsage[i])
-
-				// Print bar line if available
-				if i+1 < len(diskUsage) {
-					fmt.Printf("%s%s\n", strings.Repeat(" ", spacing), diskUsage[i+1])
-				}
-			}
-		} else {
-			styledKey := whiteStyle.Render("Disk Usage:")
-			paddingLength := spacing - len("Disk Usage:")
-			padding := strings.Repeat(" ", paddingLength)
-			fmt.Printf("%s%s%s\n", styledKey, padding, "No disk information available")
 		}
 	}
 }
@@ -338,6 +262,7 @@ func init() {
 	motdCmd.Flags().BoolVar(&showAptStatus, "apt", false, "Show apt package status")
 	motdCmd.Flags().BoolVar(&showRebootRequired, "reboot", false, "Show if reboot is required")
 	motdCmd.Flags().BoolVar(&showDocker, "docker", false, "Show Docker container information")
+	motdCmd.Flags().BoolVar(&showCPU, "cpu-info", false, "Show CPU model and core count information")
 
 	// Add a flag to show all information
 	motdCmd.Flags().BoolVar(&showAll, "all", false, "Show all information")

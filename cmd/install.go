@@ -401,7 +401,7 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosit
 		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' key found for %s\n", repoPath)
 	}
 
-	// Check if cachedTagsInterface is a slice of interfaces (which is how JSON arrays are typically unmarshaled)
+	// Check if cachedTagsInterface is a slice of interfaces (which is how JSON arrays are typically unmarshalled)
 	cachedTagsSlice, ok := cachedTagsInterface.([]interface{})
 	if ok {
 		if len(cachedTagsSlice) == 0 {

@@ -131,6 +131,8 @@ func UpdatePackageLists(silent bool) func() error {
 // Depending on the codename (e.g., matching "jammy" or "noble"), it adds a predefined list of repository entries
 // to the main sources file ("/etc/apt/sources.list") using the helper function addRepo.
 // If the release codename is unsupported or any step fails, an error is returned.
+//
+//goland:noinspection HttpUrlsUsage
 func AddAptRepositories() error {
 	// Get the Ubuntu release codename.
 	cmd := exec.Command("lsb_release", "-sc")

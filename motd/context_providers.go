@@ -148,9 +148,41 @@ func GetRebootRequiredWithContext(ctx context.Context) string {
 	}
 }
 
+// GetCpuInfoWithContext provides CPU info with context/timeout support
+func GetCpuInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetCpuInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return DefaultStyle.Render("CPU info timed out")
+	}
+}
+
+// GetMemoryInfoWithContext provides memory usage info with context/timeout support
+func GetMemoryInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetMemoryInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return DefaultStyle.Render("Memory information timed out")
+	}
+}
+
 // GetDockerInfoWithContext provides Docker container info with context/timeout support
-func GetDockerInfoWithContext(ctx context.Context) []string {
-	ch := make(chan []string, 1)
+func GetDockerInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
 
 	go func() {
 		ch <- GetDockerInfo()
@@ -160,6 +192,27 @@ func GetDockerInfoWithContext(ctx context.Context) []string {
 	case result := <-ch:
 		return result
 	case <-ctx.Done():
-		return []string{"Docker info timed out"}
+		return DefaultStyle.Render("Docker info timed out")
 	}
+}
+
+// GetDiskInfoWithContext provides disk usage info with context/timeout support
+func GetDiskInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetDiskInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return DefaultStyle.Render("Disk information timed out")
+	}
+}
+
+// GetEmptyLineWithContext provides empty line with context/timeout support
+func GetEmptyLineWithContext() string {
+	return GetEmptyLine()
 }

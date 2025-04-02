@@ -38,19 +38,15 @@ func GetUptime() string {
 
 // GetCpuAverages returns the system load averages with styled output
 func GetCpuAverages() string {
-	// Define the default style and the style for the values
-	defaultStyle := lipgloss.NewStyle()
-	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("40"))
-
 	// Try to read from /proc/loadavg first
 	content, err := os.ReadFile("/proc/loadavg")
 	if err == nil {
 		fields := strings.Fields(string(content))
 		if len(fields) >= 3 {
 			return fmt.Sprintf("%s: %s | %s: %s | %s: %s",
-				defaultStyle.Render("1 min"), valueStyle.Render(fields[0]),
-				defaultStyle.Render("5 mins"), valueStyle.Render(fields[1]),
-				defaultStyle.Render("15 mins"), valueStyle.Render(fields[2]),
+				DefaultStyle.Render("1 min"), GreenStyle.Render(fields[0]),
+				DefaultStyle.Render("5 min"), GreenStyle.Render(fields[1]),
+				DefaultStyle.Render("15 min"), GreenStyle.Render(fields[2]),
 			)
 		}
 	}
@@ -65,15 +61,15 @@ func GetCpuAverages() string {
 			loads := strings.Split(loadPart, ", ")
 			if len(loads) >= 3 {
 				return fmt.Sprintf("%s: %s | %s: %s | %s: %s",
-					defaultStyle.Render("1 min"), valueStyle.Render(strings.TrimSpace(loads[0])),
-					defaultStyle.Render("5 mins"), valueStyle.Render(strings.TrimSpace(loads[1])),
-					defaultStyle.Render("15 mins"), valueStyle.Render(strings.TrimSpace(loads[2])),
+					DefaultStyle.Render("1 min"), GreenStyle.Render(strings.TrimSpace(loads[0])),
+					DefaultStyle.Render("5 min"), GreenStyle.Render(strings.TrimSpace(loads[1])),
+					DefaultStyle.Render("15 min"), GreenStyle.Render(strings.TrimSpace(loads[2])),
 				)
 			}
 		}
 	}
 
-	return defaultStyle.Render("Not available")
+	return DefaultStyle.Render("Not available")
 }
 
 // GetMemoryUsage returns the system memory usage with a visual bar
@@ -84,15 +80,10 @@ func GetMemoryUsage() []string {
 		barWidth          = 50 // Width of the usage bar in characters
 	)
 
-	// Style definitions using lipgloss
-	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("40")).Bold(true) // ANSI 16 green
-	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("160")).Bold(true)  // ANSI 16 red
-	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
 	// Try to read from /proc/meminfo first
 	content, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
-		return []string{"Not available"}
+		return []string{DefaultStyle.Render("Not available")}
 	}
 
 	// Parse the meminfo content
@@ -122,7 +113,7 @@ func GetMemoryUsage() []string {
 			// Fallback to MemFree for older kernels
 			memAvailable = free
 		} else {
-			return []string{"Not available"}
+			return []string{DefaultStyle.Render("Not available")}
 		}
 
 		memUsed := memTotal - memAvailable
@@ -141,9 +132,9 @@ func GetMemoryUsage() []string {
 		// Choose color based on usage threshold
 		var usedBarStyle lipgloss.Style
 		if usagePercent >= maxUsageThreshold {
-			usedBarStyle = redStyle
+			usedBarStyle = RedStyle
 		} else {
-			usedBarStyle = greenStyle
+			usedBarStyle = GreenStyle
 		}
 
 		// Create the usage bar
@@ -152,14 +143,14 @@ func GetMemoryUsage() []string {
 
 		// Style the bars
 		styledUsedBar := usedBarStyle.Render(usedBar)
-		styledUnusedBar := dimStyle.Render(unusedBar)
+		styledUnusedBar := DimStyle.Render(unusedBar)
 
 		// Create the complete bar
 		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
 
 		// Format the info line - use empty string for mountPoint to match disk usage format
-		// Exactly matching the format in GetDiskUsage
 		infoLine := fmt.Sprintf("%-31s%3d%% used out of %3s", "", usagePercent, totalFormatted)
+		infoLine = DefaultStyle.Render(infoLine) // Apply default style
 
 		return []string{infoLine, completeBar}
 	}
@@ -187,9 +178,9 @@ func GetMemoryUsage() []string {
 						// Choose color based on usage threshold
 						var usedBarStyle lipgloss.Style
 						if usagePercent >= maxUsageThreshold {
-							usedBarStyle = redStyle
+							usedBarStyle = RedStyle
 						} else {
-							usedBarStyle = greenStyle
+							usedBarStyle = GreenStyle
 						}
 
 						// Create the usage bar
@@ -198,14 +189,14 @@ func GetMemoryUsage() []string {
 
 						// Style the bars
 						styledUsedBar := usedBarStyle.Render(usedBar)
-						styledUnusedBar := dimStyle.Render(unusedBar)
+						styledUnusedBar := DimStyle.Render(unusedBar)
 
 						// Create the complete bar
 						completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
 
 						// Format the info line - use empty string for mountPoint to match disk usage format
-						// Exactly matching the format in GetDiskUsage
 						infoLine := fmt.Sprintf("%-31s%3d%% used out of %3s", "", usagePercent, totalFormatted)
+						infoLine = DefaultStyle.Render(infoLine) // Apply default style
 
 						return []string{infoLine, completeBar}
 					}
@@ -214,7 +205,7 @@ func GetMemoryUsage() []string {
 		}
 	}
 
-	return []string{"Not available"}
+	return []string{DefaultStyle.Render("Not available")}
 }
 
 // GetDiskUsage returns the disk usage for all real partitions with visual bars
@@ -397,7 +388,7 @@ func GetLastLogin() string {
 							// Start building duration from this field
 							duration = strings.TrimPrefix(field, "(")
 
-							// May need to join with the next field if it's a multi-part duration
+							// May need to join with the next field if it's a multipart duration
 							if !strings.HasSuffix(duration, ")") && i+1 < len(fields) {
 								duration += " " + strings.TrimSuffix(fields[i+1], ")")
 							} else {
@@ -629,28 +620,225 @@ func GetRebootRequired() string {
 	return "No reboot required"
 }
 
+// GetCpuInfo returns information about the CPU model and core count
+func GetCpuInfo() string {
+	// Try to read from /proc/cpuinfo
+	content, err := os.ReadFile("/proc/cpuinfo")
+	if err != nil {
+		return DefaultStyle.Render("Not available")
+	}
+
+	// Parse the cpuinfo content
+	cpuInfo := string(content)
+	lines := strings.Split(cpuInfo, "\n")
+
+	modelName := ""
+	cpuCores := 0
+	physicalIds := make(map[string]bool)
+
+	for _, line := range lines {
+		// Extract CPU model name
+		if strings.HasPrefix(line, "model name") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) >= 2 {
+				modelName = strings.TrimSpace(parts[1])
+			}
+		}
+
+		// Count physical cores by looking at "processor" entries
+		if strings.HasPrefix(line, "processor") {
+			cpuCores++
+		}
+
+		// Track physical IDs to count actual CPUs
+		if strings.HasPrefix(line, "physical id") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) >= 2 {
+				physicalId := strings.TrimSpace(parts[1])
+				physicalIds[physicalId] = true
+			}
+		}
+	}
+
+	// Calculate number of physical CPUs
+	numPhysicalCPUs := len(physicalIds)
+	if numPhysicalCPUs == 0 {
+		numPhysicalCPUs = 1 // Default to 1 if we can't determine
+	}
+
+	// Calculate threads per core (logical cores / physical cores)
+	threadsPerCore := cpuCores
+	if numPhysicalCPUs > 0 && cpuCores > 0 {
+		threadsPerCore = cpuCores / numPhysicalCPUs
+	}
+
+	// Format the result
+	if modelName != "" {
+		// Use colored values for the numbers
+		cpuCoresStr := ValueStyle.Render(fmt.Sprintf("%d", cpuCores))
+		if numPhysicalCPUs > 1 || threadsPerCore > 1 {
+			// Show more detailed info if we have multiple physical CPUs or threads
+			return fmt.Sprintf("%s (%s cores, %s CPUs)",
+				DefaultStyle.Render(modelName),
+				cpuCoresStr,
+				ValueStyle.Render(fmt.Sprintf("%d", numPhysicalCPUs)))
+		} else {
+			// Simple output for single CPU
+			return fmt.Sprintf("%s (%s cores)",
+				DefaultStyle.Render(modelName),
+				cpuCoresStr)
+		}
+	}
+
+	// Fallback if we couldn't parse model name but have core count
+	if cpuCores > 0 {
+		return fmt.Sprintf("%s cores", ValueStyle.Render(fmt.Sprintf("%d", cpuCores)))
+	}
+
+	// Fallback to lscpu if we couldn't parse /proc/cpuinfo
+	lscpuOutput := ExecCommand("lscpu")
+	if lscpuOutput != "Not available" {
+		lines := strings.Split(lscpuOutput, "\n")
+		modelLine := ""
+		coresLine := ""
+
+		for _, line := range lines {
+			if strings.HasPrefix(line, "Model name:") {
+				modelLine = line
+			}
+			if strings.HasPrefix(line, "CPU(s):") {
+				coresLine = line
+			}
+		}
+
+		if modelLine != "" && coresLine != "" {
+			modelParts := strings.SplitN(modelLine, ":", 2)
+			coresParts := strings.SplitN(coresLine, ":", 2)
+
+			if len(modelParts) >= 2 && len(coresParts) >= 2 {
+				model := strings.TrimSpace(modelParts[1])
+				cores := strings.TrimSpace(coresParts[1])
+
+				return fmt.Sprintf("%s (%s cores)",
+					DefaultStyle.Render(model),
+					ValueStyle.Render(cores))
+			}
+		}
+	}
+
+	return DefaultStyle.Render("Not available")
+}
+
+// GetMemoryInfo returns the system memory usage with a visual bar
+func GetMemoryInfo() string {
+	// Constants for memory usage bar
+	const (
+		maxUsageThreshold = 90 // Percentage at which memory usage is considered high
+		barWidth          = 50 // Width of the usage bar in characters
+	)
+
+	// Try to read from /proc/meminfo first
+	content, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return DefaultStyle.Render("Not available")
+	}
+
+	// Parse the meminfo content
+	memInfo := make(map[string]uint64)
+	lines := strings.Split(string(content), "\n")
+
+	re := regexp.MustCompile(`^(\S+):\s+(\d+)`)
+	for _, line := range lines {
+		matches := re.FindStringSubmatch(line)
+		if len(matches) == 3 {
+			key := matches[1]
+			valueStr := matches[2]
+			value, err := strconv.ParseUint(valueStr, 10, 64)
+			if err == nil {
+				memInfo[key] = value
+			}
+		}
+	}
+
+	// Check if we have the required fields
+	if memTotal, ok := memInfo["MemTotal"]; ok {
+		var memAvailable uint64
+		if avail, ok := memInfo["MemAvailable"]; ok {
+			// MemAvailable is more accurate for modern kernels
+			memAvailable = avail
+		} else if free, ok := memInfo["MemFree"]; ok {
+			// Fallback to MemFree for older kernels
+			memAvailable = free
+		} else {
+			return DefaultStyle.Render("Not available")
+		}
+
+		memUsed := memTotal - memAvailable
+
+		// Calculate usage percentage
+		usagePercent := int((float64(memUsed) / float64(memTotal)) * 100)
+
+		// Format total memory in GB
+		totalGB := float64(memTotal) / 1024.0 / 1024.0
+		totalFormatted := fmt.Sprintf("%dG", int(totalGB))
+
+		// Calculate the bar
+		usedWidth := (usagePercent * barWidth) / 100
+		unusedWidth := barWidth - usedWidth
+
+		// Choose color based on usage threshold
+		var usedBarStyle lipgloss.Style
+		if usagePercent >= maxUsageThreshold {
+			usedBarStyle = RedStyle
+		} else {
+			usedBarStyle = GreenStyle
+		}
+
+		// Create the usage bar
+		usedBar := strings.Repeat("=", usedWidth)
+		unusedBar := strings.Repeat("=", unusedWidth)
+
+		// Style the bars
+		styledUsedBar := usedBarStyle.Render(usedBar)
+		styledUnusedBar := DimStyle.Render(unusedBar)
+
+		// Create the complete bar
+		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
+
+		// Format the info line
+		infoLine := fmt.Sprintf("%-30s%3d%% used out of %4s", "", usagePercent, totalFormatted)
+
+		// Return the formatted memory info string
+		return DefaultStyle.Render(infoLine) + "\n" + completeBar
+	}
+
+	return DefaultStyle.Render("Not available")
+}
+
 // GetDockerInfo returns information about Docker containers with their status
-func GetDockerInfo() []string {
+func GetDockerInfo() string {
+	var output strings.Builder
+
 	// Check if Docker service is running
 	statusOutput := ExecCommand("systemctl", "is-active", "docker")
 	if statusOutput != "active" {
 		// Check if Docker is installed but not running
 		installedCheck := ExecCommand("which", "docker")
 		if installedCheck != "Not available" {
-			return []string{"Docker is installed but not running"}
+			return DefaultStyle.Render("Docker is installed but not running")
 		}
-		return []string{"Docker is not installed or not detected"}
+		return DefaultStyle.Render("Docker is not installed or not detected")
 	}
 
-	// Get container list with detailed format - using the original command
+	// Get container list with detailed format
 	containerOutput := ExecCommand("docker", "ps", "-a", "--format", "{{.Names}}|{{.Status}}|{{.State}}")
 	if containerOutput == "Not available" || containerOutput == "" {
-		return []string{"Docker is running but no containers found"}
+		return DefaultStyle.Render("Docker is running but no containers found")
 	}
 
 	containerLines := strings.Split(containerOutput, "\n")
 	if len(containerLines) == 0 || (len(containerLines) == 1 && containerLines[0] == "") {
-		return []string{"Docker is running but no containers found"}
+		return DefaultStyle.Render("Docker is running but no containers found")
 	}
 
 	// Process container statuses
@@ -724,25 +912,150 @@ func GetDockerInfo() []string {
 
 		// Only add problematic containers to the result
 		if isProblematic {
-			problemContainers = append(problemContainers, fmt.Sprintf("%s: %s", name, status))
+			// Use DefaultStyle for the container name and the specific status style
+			formattedLine := fmt.Sprintf("%s: %s", DefaultStyle.Render(name), RedStyle.Render(status))
+			problemContainers = append(problemContainers, formattedLine)
 		}
 	}
 
 	// Create a simple summary line - always show total and running
-	var summary string
 	if len(problemContainers) > 0 {
-		summary = fmt.Sprintf("Docker: %d containers (%d running, %d need attention)",
-			totalCount, runningCount, len(problemContainers))
+		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%d containers (%d running, %d need attention)",
+			totalCount, runningCount, len(problemContainers))))
 	} else {
-		summary = fmt.Sprintf("Docker: %d containers (%d running)",
-			totalCount, runningCount)
+		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%d containers (%d running)",
+			totalCount, runningCount)))
 	}
 
-	// If there are no problem containers, just return the summary
-	if len(problemContainers) == 0 {
-		return []string{summary}
+	// If there are problematic containers, add them to the output
+	if len(problemContainers) > 0 {
+		for _, container := range problemContainers {
+			output.WriteString(fmt.Sprintf("\n%s", container))
+		}
 	}
 
-	// Otherwise return the summary followed by problem containers
-	return append([]string{summary}, problemContainers...)
+	return output.String()
+}
+
+// GetDiskInfo returns the disk usage for all real partitions with visual bars
+func GetDiskInfo() string {
+	var output strings.Builder
+
+	// Constants for disk usage bar
+	const (
+		maxUsageThreshold = 90 // Percentage at which disk usage is considered high
+		barWidth          = 50 // Width of the usage bar in characters
+	)
+
+	// Run df command to get disk usage with the proper exclusions
+	dfOutput := ExecCommand("df", "-H", "-x", "tmpfs", "-x", "overlay", "-x", "fuse.mergerfs", "-x", "fuse.rclone",
+		"--output=target,pcent,size")
+	if dfOutput == "Not available" {
+		return DefaultStyle.Render("Not available")
+	}
+
+	// Process df output
+	lines := strings.Split(dfOutput, "\n")
+	if len(lines) <= 1 { // If there's only one line (the header), then no valid partitions
+		return DefaultStyle.Render("No valid disk partitions found")
+	}
+
+	// Skip the header line
+	lines = lines[1:]
+	var partitions []struct {
+		mountPoint   string
+		usagePercent int
+		size         string
+		formattedBar string
+	}
+
+	// Process each partition
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+
+		// Skip specific mount points
+		mountPoint := fields[0]
+		if strings.HasPrefix(mountPoint, "/dev") ||
+			strings.HasPrefix(mountPoint, "/sys") ||
+			strings.HasPrefix(mountPoint, "/proc") ||
+			strings.HasPrefix(mountPoint, "/run") {
+			continue
+		}
+
+		// Get percentage (remove the '%' character)
+		usagePercentStr := strings.TrimSuffix(fields[1], "%")
+		usagePercent, err := strconv.Atoi(usagePercentStr)
+		if err != nil {
+			continue
+		}
+
+		// Get size
+		size := fields[2]
+
+		// Calculate the bar
+		usedWidth := (usagePercent * barWidth) / 100
+		unusedWidth := barWidth - usedWidth
+
+		// Choose color based on usage threshold
+		var usedBarStyle lipgloss.Style
+		if usagePercent >= maxUsageThreshold {
+			usedBarStyle = RedStyle
+		} else {
+			usedBarStyle = GreenStyle
+		}
+
+		// Create the usage bar
+		usedBar := strings.Repeat("=", usedWidth)
+		unusedBar := strings.Repeat("=", unusedWidth)
+
+		// Style the bars
+		styledUsedBar := usedBarStyle.Render(usedBar)
+		styledUnusedBar := DimStyle.Render(unusedBar)
+
+		// Create the complete bar
+		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
+
+		// Add to partitions slice
+		partitions = append(partitions, struct {
+			mountPoint   string
+			usagePercent int
+			size         string
+			formattedBar string
+		}{
+			mountPoint:   mountPoint,
+			usagePercent: usagePercent,
+			size:         size,
+			formattedBar: completeBar,
+		})
+	}
+
+	if len(partitions) == 0 {
+		return DefaultStyle.Render("No valid disk partitions found")
+	}
+
+	// Format the results
+	for i, p := range partitions {
+		// For the first partition, add it directly to the output
+		if i == 0 {
+			// Format using original format with wide fixed spacing and mountpoint
+			infoLine := fmt.Sprintf("%-30s%3d%% used out of %4s", p.mountPoint, p.usagePercent, p.size)
+			output.WriteString(DefaultStyle.Render(infoLine))
+			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
+		} else {
+			// For subsequent partitions, add line breaks before
+			infoLine := fmt.Sprintf("%-30s%3d%% used out of %4s", p.mountPoint, p.usagePercent, p.size)
+			output.WriteString(fmt.Sprintf("\n%s", DefaultStyle.Render(infoLine)))
+			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
+		}
+	}
+
+	return output.String()
+}
+
+// GetEmptyLine returns an empty line
+func GetEmptyLine() string {
+	return " " // Using a space rather than completely empty string for better visibility
 }
