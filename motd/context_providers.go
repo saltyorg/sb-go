@@ -213,6 +213,6 @@ func GetDiskInfoWithContext(ctx context.Context) string {
 }
 
 // GetEmptyLineWithContext provides empty line with context/timeout support
-func GetEmptyLineWithContext() string {
+func GetEmptyLineWithContext(ctx context.Context) string {
 	return GetEmptyLine()
 }
