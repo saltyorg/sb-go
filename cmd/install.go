@@ -71,8 +71,8 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 	needsCacheUpdate := false
 	if !ignoreCache {
 		// Check if either cache is missing or has an empty 'tags' list
-		saltboxCacheValid := cacheExistsAndIsValid(constants.SaltboxRepoPath, cacheInstance)
-		sandboxCacheValid := cacheExistsAndIsValid(constants.SandboxRepoPath, cacheInstance)
+		saltboxCacheValid := cacheExistsAndIsValid(constants.SaltboxRepoPath, cacheInstance, verbosity)
+		sandboxCacheValid := cacheExistsAndIsValid(constants.SandboxRepoPath, cacheInstance, verbosity)
 
 		if !saltboxCacheValid || !sandboxCacheValid {
 			needsCacheUpdate = true
@@ -378,33 +378,47 @@ func checkIgnoreCache(extraArgs []string) bool {
 }
 
 // Helper function to check cache existence and validity (DRY principle)
-func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache) bool {
+func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosity int) bool {
 	repoCache, ok := cacheInstance.GetRepoCache(repoPath)
 	if !ok {
-		fmt.Printf("DEBUG: cacheExistsAndIsValid: Cache not found for %s\n", repoPath)
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: cacheExistsAndIsValid: Cache not found for %s\n", repoPath)
+		}
 		return false
 	}
-	fmt.Printf("DEBUG: cacheExistsAndIsValid: Cache found for %s\n", repoPath)
+	if verbosity > 0 {
+		fmt.Printf("DEBUG: cacheExistsAndIsValid: Cache found for %s\n", repoPath)
+	}
 
 	cachedTagsInterface, ok := repoCache["tags"]
 	if !ok {
-		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' key not found for %s\n", repoPath)
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' key not found for %s\n", repoPath)
+		}
 		return false
 	}
-	fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' key found for %s\n", repoPath)
+	if verbosity > 0 {
+		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' key found for %s\n", repoPath)
+	}
 
 	// Check if cachedTagsInterface is a slice of interfaces (which is how JSON arrays are typically unmarshaled)
 	cachedTagsSlice, ok := cachedTagsInterface.([]interface{})
 	if ok {
 		if len(cachedTagsSlice) == 0 {
-			fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' array is empty for %s\n", repoPath)
+			if verbosity > 0 {
+				fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' array is empty for %s\n", repoPath)
+			}
 			return false
 		}
 		// Optionally, you could iterate through cachedTagsSlice here to ensure all elements are strings
-		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is a non-empty list for %s\n", repoPath)
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is a non-empty list for %s\n", repoPath)
+		}
 		return true
 	}
 
-	fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)\n", repoPath, cachedTagsInterface)
+	if verbosity > 0 {
+		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)\n", repoPath, cachedTagsInterface)
+	}
 	return false
 }
