@@ -24,6 +24,7 @@ var installCmd = &cobra.Command{
 		verbosity, _ := cmd.Flags().GetCount("verbose")
 		skipTags, _ := cmd.Flags().GetStringSlice("skip-tags")
 		extraVars, _ := cmd.Flags().GetStringSlice("extra-vars")
+		noCache, _ := cmd.Flags().GetBool("no-cache")
 
 		var extraArgs []string
 		if verbosity > 0 {
@@ -31,7 +32,7 @@ var installCmd = &cobra.Command{
 			extraArgs = append(extraArgs, vFlag)
 		}
 
-		return handleInstall(tags, extraVars, skipTags, extraArgs, verbosity)
+		return handleInstall(tags, extraVars, skipTags, extraArgs, verbosity, noCache)
 	},
 }
 
@@ -40,13 +41,14 @@ func init() {
 	installCmd.Flags().StringSliceP("extra-vars", "e", []string{}, "Extra variables to pass to Ansible")
 	installCmd.Flags().StringSliceP("skip-tags", "s", []string{}, "Tags to skip during Ansible playbook execution")
 	installCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
+	installCmd.Flags().Bool("no-cache", false, "Skip cache validation and always perform tag checks")
 }
 
-func handleInstall(tags []string, extraVars []string, skipTags []string, extraArgs []string, verbosity int) error {
+func handleInstall(tags []string, extraVars []string, skipTags []string, extraArgs []string, verbosity int, noCache bool) error {
 	var saltboxTags []string
 	var sandboxTags []string
 	var saltboxModTags []string
-	ignoreCache := checkIgnoreCache(extraVars)
+
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
 		return fmt.Errorf("error creating cache: %w", err)
@@ -69,7 +71,7 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 
 	// Add a single info print if cache is going to be updated.
 	needsCacheUpdate := false
-	if !ignoreCache {
+	if !noCache {
 		// Check if either cache is missing or has an empty 'tags' list
 		saltboxCacheValid := cacheExistsAndIsValid(constants.SaltboxRepoPath, cacheInstance, verbosity)
 		sandboxCacheValid := cacheExistsAndIsValid(constants.SandboxRepoPath, cacheInstance, verbosity)
@@ -85,9 +87,11 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 		if needsCacheUpdate {
 			fmt.Println("INFO: Cache missing or incomplete, updating the cache")
 		}
+	} else if verbosity > 0 {
+		fmt.Println("DEBUG: Cache validation skipped due to --no-cache flag")
 	}
 
-	if !ignoreCache {
+	if !noCache {
 		var allSuggestions []string
 
 		if len(saltboxTags) > 0 {
@@ -264,7 +268,7 @@ func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, o
 		}
 
 		// 5. No close match found, provide the generic error message.
-		suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in Saltbox nor Sandbox. Use '-e sanity_check_use_cache=false' if developing your own role.", currentPrefix, providedTag))
+		suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in Saltbox nor Sandbox. Use '--no-cache' if developing your own role.", currentPrefix, providedTag))
 		if verbosity > 0 {
 			fmt.Printf("DEBUG: No match found for '%s%s'\n", currentPrefix, providedTag)
 		}
@@ -366,15 +370,6 @@ func getValidTags(repoPath string, cacheInstance *cache.Cache, verbosity int) []
 		fmt.Printf("DEBUG: Returning tags after update: %v\n", cachedTagsStrings)
 	}
 	return cachedTagsStrings
-}
-
-func checkIgnoreCache(extraArgs []string) bool {
-	for _, arg := range extraArgs {
-		if strings.Contains(arg, "sanity_check_use_cache=false") {
-			return true
-		}
-	}
-	return false
 }
 
 // Helper function to check cache existence and validity (DRY principle)
