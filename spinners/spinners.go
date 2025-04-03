@@ -47,7 +47,7 @@ func RunTaskWithSpinnerCustom(opts SpinnerOptions, taskFunc TaskFunc) error {
 	}
 
 	if opts.Color == "" {
-		opts.Color = styles.ColorWhite
+		opts.Color = styles.ColorYellow
 	}
 	if opts.StopColor == "" {
 		opts.StopColor = styles.ColorMediumGreen

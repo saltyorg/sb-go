@@ -177,6 +177,7 @@ var configCmd = &cobra.Command{
 			fmt.Println(err)
 			os.Exit(1)
 		}
+
 		// --- Settings Configuration Validation ---
 		settingsFilePath := constants.SaltboxSettingsPath
 		settingsFilename := filepath.Base(settingsFilePath)
@@ -213,6 +214,49 @@ var configCmd = &cobra.Command{
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
+		}
+
+		// --- MOTD Configuration Validation ---
+		motdConfigPath := constants.SaltboxMOTDPath
+		motdFilename := filepath.Base(motdConfigPath)
+
+		// Skip this validation if the file doesn't exist yet
+		if _, err := os.Stat(motdConfigPath); err == nil {
+			motdSuccessMessage := fmt.Sprintf("Validated %s", motdFilename)
+			motdFailureMessage := fmt.Sprintf("Failed to validate %s", motdFilename)
+
+			err = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+				TaskName:        fmt.Sprintf("Validating %s", motdFilename),
+				StopMessage:     motdSuccessMessage,
+				StopFailMessage: motdFailureMessage,
+			}, func() error {
+				motdConfigFile, err := os.ReadFile(motdConfigPath)
+				if err != nil {
+					return fmt.Errorf("error reading MOTD config file (%s): %w", motdConfigPath, err)
+				}
+
+				var motdInputMap map[string]interface{}
+				if err := yaml.Unmarshal(motdConfigFile, &motdInputMap); err != nil {
+					return fmt.Errorf("error unmarshaling MOTD config file (%s): %w", motdConfigPath, err)
+				}
+
+				var motdConfigData config.MOTDConfig
+				if err := yaml.Unmarshal(motdConfigFile, &motdConfigData); err != nil {
+					return fmt.Errorf("error unmarshaling MOTD config file (%s) into struct: %w", motdConfigPath, err)
+				}
+
+				if err := config.ValidateMOTDConfig(&motdConfigData, motdInputMap); err != nil {
+					return fmt.Errorf("MOTD configuration validation error: %w", err)
+				}
+				return nil
+			})
+
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		} else if verbose {
+			fmt.Printf("MOTD config file not found at %s, skipping validation\n", motdConfigPath)
 		}
 	},
 }

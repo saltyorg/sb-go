@@ -26,6 +26,7 @@ var (
 	showDocker         bool
 	showCPU            bool
 	showQueues         bool
+	showPlex           bool
 	showAll            bool
 	bannerTitle        string
 	bannerType         string
@@ -57,12 +58,14 @@ last login, user sessions, process information, and system update status based o
 			showDocker = true
 			showCPU = true
 			showQueues = true
+			showPlex = true
 		}
 
 		// Check if at least one flag is enabled
 		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
 			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses &&
-			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues {
+			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues &&
+			!showPlex {
 			fmt.Println("Error: No information selected to display.")
 			fmt.Println("Please use at least one of the following flags:")
 			fmt.Println("  --distro     Show distribution information")
@@ -79,6 +82,7 @@ last login, user sessions, process information, and system update status based o
 			fmt.Println("  --docker     Show Docker container information")
 			fmt.Println("  --cpu-info   Show CPU model and core count")
 			fmt.Println("  --queues     Show download queue information from Sonarr, Radarr, etc.")
+			fmt.Println("  --plex       Show Plex streaming information")
 			fmt.Println("  --all        Show all information")
 			os.Exit(1)
 		}
@@ -157,6 +161,7 @@ func displayMotd() {
 		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 12},
 		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 13},
 		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 14},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 15},
 	}
 
 	// Filter sources based on enabled flags
@@ -176,6 +181,7 @@ func displayMotd() {
 		"Disk Usage:":      showDisk,
 		"Docker:":          showDocker,
 		"Download Queues:": showQueues,
+		"Plex:":            showPlex,
 	}
 
 	// Simply use all enabled sources
@@ -250,6 +256,7 @@ func init() {
 	motdCmd.Flags().BoolVar(&showDocker, "docker", false, "Show Docker container information")
 	motdCmd.Flags().BoolVar(&showCPU, "cpu-info", false, "Show CPU model and core count information")
 	motdCmd.Flags().BoolVar(&showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
+	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
 
 	// Add a flag to show all information
 	motdCmd.Flags().BoolVar(&showAll, "all", false, "Show all information")

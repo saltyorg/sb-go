@@ -888,8 +888,3 @@ func GetDiskInfo() string {
 
 	return output.String()
 }
-
-// GetEmptyLine returns an empty line
-func GetEmptyLine() string {
-	return " " // Using a space rather than completely empty string for better visibility
-}

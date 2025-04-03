@@ -228,7 +228,18 @@ func GetQueueInfoWithContext(ctx context.Context) string {
 	}
 }
 
-// GetEmptyLineWithContext provides empty line with context/timeout support
-func GetEmptyLineWithContext(ctx context.Context) string {
-	return GetEmptyLine()
+// GetPlexInfoWithContext provides Plex info with context/timeout support
+func GetPlexInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetPlexInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return empty string on timeout to hide this section
+	}
 }

@@ -9,10 +9,11 @@ import (
 
 // MOTDConfig represents the configuration for app queue status in the MOTD
 type MOTDConfig struct {
-	Sonarr  []AppInstance `yaml:"sonarr"`
-	Radarr  []AppInstance `yaml:"radarr"`
-	Lidarr  []AppInstance `yaml:"lidarr"`
-	Readarr []AppInstance `yaml:"readarr"`
+	Sonarr  []AppInstance  `yaml:"sonarr"`
+	Radarr  []AppInstance  `yaml:"radarr"`
+	Lidarr  []AppInstance  `yaml:"lidarr"`
+	Readarr []AppInstance  `yaml:"readarr"`
+	Plex    []PlexInstance `yaml:"plex"`
 }
 
 // AppInstance represents a single app instance configuration
