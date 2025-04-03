@@ -18,6 +18,7 @@ require (
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/crypto v0.36.0
 	golang.org/x/term v0.30.0
+	golift.io/starr v1.1.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
 )

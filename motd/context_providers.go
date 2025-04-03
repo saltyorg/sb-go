@@ -212,6 +212,22 @@ func GetDiskInfoWithContext(ctx context.Context) string {
 	}
 }
 
+// GetQueueInfoWithContext provides queue info with context/timeout support
+func GetQueueInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetQueueInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return empty string on timeout to hide this section
+	}
+}
+
 // GetEmptyLineWithContext provides empty line with context/timeout support
 func GetEmptyLineWithContext(ctx context.Context) string {
 	return GetEmptyLine()
