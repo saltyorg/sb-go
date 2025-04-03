@@ -197,7 +197,7 @@ func getPlexStreamInfo(instance PlexInstance) (PlexStreamInfo, error) {
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return result, fmt.Errorf("Plex API returned status code %d", resp.StatusCode)
+		return result, fmt.Errorf("plex API returned status code %d", resp.StatusCode)
 	}
 
 	// Read and parse response

@@ -107,7 +107,7 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 			return fmt.Errorf("readarr instance '%s' has URL but no API key", instance.Name)
 		}
 		if instance.APIKey != "" && instance.URL == "" {
-			return fmt.Errorf("Readarr instance '%s' has API key but no URL", instance.Name)
+			return fmt.Errorf("readarr instance '%s' has API key but no URL", instance.Name)
 		}
 	}
 

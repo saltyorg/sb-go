@@ -101,6 +101,7 @@ last login, user sessions, process information, and system update status based o
 
 			if !validType {
 				fmt.Println("Error: Invalid banner type specified:", bannerType)
+				fmt.Println()
 				fmt.Println("Available types:")
 
 				// Print available types in columns
@@ -111,7 +112,8 @@ last login, user sessions, process information, and system update status based o
 					}
 					fmt.Printf("  %-16s", bType)
 				}
-				fmt.Println("\n")
+				fmt.Println()
+				fmt.Println()
 				os.Exit(1)
 			}
 		}
@@ -119,6 +121,7 @@ last login, user sessions, process information, and system update status based o
 		// Validate font if specified
 		if bannerFont != "" && !motd.IsValidFont(bannerFont) {
 			fmt.Println("Error: Invalid font specified:", bannerFont)
+			fmt.Println()
 			fmt.Println("Available fonts (from /usr/share/figlet):")
 
 			// Print available fonts in columns
@@ -130,7 +133,8 @@ last login, user sessions, process information, and system update status based o
 				}
 				fmt.Printf("  %-16s", font)
 			}
-			fmt.Println("\n")
+			fmt.Println()
+			fmt.Println()
 			os.Exit(1)
 		}
 

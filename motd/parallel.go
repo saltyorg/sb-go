@@ -78,24 +78,3 @@ func GetSystemInfo(sources []InfoSource) []Result {
 
 	return results
 }
-
-// GetMultilineSystemInfo gathers information that returns multiple lines
-func GetMultilineSystemInfo(source InfoSource) MultiStringResult {
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), source.Timeout)
-	defer cancel()
-
-	// This is a type assertion that requires the provider to return []string
-	providerFunc := func(ctx context.Context) []string {
-		if provider, ok := source.Provider.(func(context.Context) []string); ok {
-			return provider(ctx)
-		}
-		return []string{"Error: invalid provider type"}
-	}
-
-	return MultiStringResult{
-		Key:    source.Key,
-		Values: providerFunc(ctx),
-		Order:  source.Order,
-	}
-}
