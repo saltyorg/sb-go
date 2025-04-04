@@ -14,13 +14,13 @@ import (
 
 // RunAnsiblePlaybook executes an Ansible playbook using the specified binary and arguments.
 // It constructs the command based on the provided playbook path, extra arguments, and repository directory.
-// If silent is false, the command output is streamed directly to the console; otherwise, output is captured for error reporting.
+// If verbose is true, the command output is streamed directly to the console; otherwise, output is captured for error reporting.
 // On error, it returns a detailed error message including the exit code and, if available, the captured stderr.
-func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraArgs []string, silent bool) error {
+func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraArgs []string, verbose bool) error {
 	command := []string{ansibleBinaryPath, playbookPath, "--become"}
 	command = append(command, extraArgs...)
 
-	if !silent {
+	if verbose {
 		fmt.Println("Executing Ansible playbook with command:", strings.Join(command, " "))
 	}
 
@@ -29,7 +29,7 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 
-	if !silent {
+	if verbose {
 		cmd.Stdout = os.Stdout
 		cmd.Stdin = os.Stdin
 		cmd.Stderr = os.Stderr
@@ -43,18 +43,18 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			if silent {
+			if !verbose {
 				return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), stderrBuf.String())
 			}
 			return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d", playbookPath, exitErr.ExitCode())
 		}
-		if silent {
+		if !verbose {
 			return fmt.Errorf("\nError: Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, stderrBuf.String())
 		}
 		return fmt.Errorf("\nError: Playbook %s run failed: %w", playbookPath, err)
 	}
 
-	if !silent {
+	if verbose {
 		fmt.Printf("\nPlaybook %s executed successfully.\n", playbookPath)
 	}
 

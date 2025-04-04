@@ -21,7 +21,6 @@ var setupCmd = &cobra.Command{
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		verbose, _ := cmd.Flags().GetBool("verbose")
-		silent := !verbose
 
 		// Check for existing Saltbox installation and prompt for confirmation.
 		if _, err := os.Stat(constants.SaltboxRepoPath); err == nil {
@@ -72,19 +71,19 @@ var setupCmd = &cobra.Command{
 		}
 
 		// Perform initial setup tasks (moved to setup package)
-		setup.InitialSetup(silent)
+		setup.InitialSetup(verbose)
 
 		// Configure the locale (moved to setup package)
 		setup.ConfigureLocale()
 
 		// Setup Python venv (moved to setup package)
-		setup.PythonVenv(silent)
+		setup.PythonVenv(verbose)
 
 		// Setup Saltbox Repo (moved to setup package)
-		setup.SaltboxRepo(silent)
+		setup.SaltboxRepo(verbose)
 
 		// Install pip3 Dependencies
-		setup.InstallPipDependencies(silent)
+		setup.InstallPipDependencies(verbose)
 
 		// Copy ansible* files to /usr/local/bin
 		setup.CopyAnsibleBinaries()

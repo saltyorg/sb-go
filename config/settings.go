@@ -149,7 +149,7 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interfac
 				debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote returned error: %v\n", err)
 				//Only return if rclone and the user and the config all exist
 				if errors.Is(err, ErrRcloneNotInstalled) || errors.Is(err, ErrSystemUserNotFound) || errors.Is(err, ErrRcloneConfigNotFound) {
-					fmt.Printf("\nWarning: rclone remote validation skipped: %v\n", err)
+					fmt.Printf("Warning: rclone remote validation skipped: %v\n", err)
 				} else {
 					return err
 				}
@@ -249,7 +249,7 @@ func validateRcloneRemote(remoteName string) error {
 	// Get the Saltbox user.
 	rcloneUser, err := utils.GetSaltboxUser()
 	if err != nil {
-		fmt.Printf("\nWarning: rclone remote validation skipped: could not retrieve saltbox user: %v\n", err)
+		fmt.Printf("Warning: rclone remote validation skipped: could not retrieve saltbox user: %v\n", err)
 		debugPrintf("DEBUG: validateRcloneRemote - error getting Saltbox user: %v\n", err)
 		return ErrSystemUserNotFound
 	}

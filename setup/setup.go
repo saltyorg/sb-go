@@ -21,10 +21,10 @@ import (
 )
 
 // InitialSetup performs the initial setup tasks.
-func InitialSetup(silent bool) {
+func InitialSetup(verbose bool) {
 	// Update apt cache
 	if err := spinners.RunTaskWithSpinner("Updating apt package cache", func() error {
-		updateCache := apt.UpdatePackageLists(silent)
+		updateCache := apt.UpdatePackageLists(verbose)
 		return updateCache()
 	}); err != nil {
 		fmt.Println("Error updating apt cache:", err)
@@ -33,7 +33,7 @@ func InitialSetup(silent bool) {
 
 	// Install git and curl
 	if err := spinners.RunTaskWithSpinner("Installing git and curl", func() error {
-		installGitCurl := apt.InstallPackage([]string{"git", "curl"}, silent)
+		installGitCurl := apt.InstallPackage([]string{"git", "curl"}, verbose)
 		return installGitCurl()
 	}); err != nil {
 		fmt.Println("Error installing git and curl:", err)
@@ -60,7 +60,7 @@ func InitialSetup(silent bool) {
 
 	// Install software-properties-common and apt-transport-https
 	if err := spinners.RunTaskWithSpinner("Installing software-properties-common and apt-transport-https", func() error {
-		installPropsTransport := apt.InstallPackage([]string{"software-properties-common", "apt-transport-https"}, silent)
+		installPropsTransport := apt.InstallPackage([]string{"software-properties-common", "apt-transport-https"}, verbose)
 		return installPropsTransport()
 	}); err != nil {
 		fmt.Println("Error installing software-properties-common and apt-transport-https:", err)
@@ -77,7 +77,7 @@ func InitialSetup(silent bool) {
 
 	// Update apt cache again after adding repositories
 	if err := spinners.RunTaskWithSpinner("Updating apt package cache again", func() error {
-		updateCacheAgain := apt.UpdatePackageLists(silent)
+		updateCacheAgain := apt.UpdatePackageLists(verbose)
 		return updateCacheAgain()
 	}); err != nil {
 		fmt.Println("Error updating apt cache:", err)
@@ -91,7 +91,7 @@ func InitialSetup(silent bool) {
 			"build-essential", "libssl-dev", "libffi-dev", "python3-dev",
 			"python3-testresources", "python3-apt", "python3-venv",
 		}
-		installPackages := apt.InstallPackage(packages, silent)
+		installPackages := apt.InstallPackage(packages, verbose)
 		return installPackages()
 	}); err != nil {
 		fmt.Println("Error installing additional packages:", err)
@@ -164,7 +164,7 @@ func ConfigureLocale() {
 }
 
 // PythonVenv installs Python from deadsnakes, if required, and creates the Ansible venv.
-func PythonVenv(silent bool) {
+func PythonVenv(verbose bool) {
 	osRelease, _ := ubuntu.ParseOSRelease("/etc/os-release")
 	versionCodename := osRelease["VERSION_CODENAME"]
 
@@ -176,7 +176,7 @@ func PythonVenv(silent bool) {
 
 		// Add deadsnakes PPA
 		if err := spinners.RunTaskWithSpinner("Adding deadsnakes PPA", func() error {
-			addPPA := apt.AddPPA("ppa:deadsnakes/ppa", silent)
+			addPPA := apt.AddPPA("ppa:deadsnakes/ppa", verbose)
 			return addPPA()
 		}); err != nil {
 			fmt.Println("Error adding deadsnakes PPA", err)
@@ -185,7 +185,7 @@ func PythonVenv(silent bool) {
 
 		// Install Python 3.12 and venv
 		if err := spinners.RunTaskWithSpinner("Installing Python 3.12 and venv", func() error {
-			installPython := apt.InstallPackage([]string{"python3.12", "python3.12-dev", "python3.12-venv"}, silent)
+			installPython := apt.InstallPackage([]string{"python3.12", "python3.12-dev", "python3.12-venv"}, verbose)
 			return installPython()
 		}); err != nil {
 			fmt.Println("Error installing Python 3.12:", err)
@@ -225,7 +225,7 @@ func PythonVenv(silent bool) {
 
 		// Install python3-pip (needed for Noble)
 		if err := spinners.RunTaskWithSpinner("Installing python3-pip", func() error {
-			installPipPackage := apt.InstallPackage([]string{"python3-pip"}, silent)
+			installPipPackage := apt.InstallPackage([]string{"python3-pip"}, verbose)
 			return installPipPackage()
 		}); err != nil {
 			fmt.Println("Error installing python3-pip:", err)
@@ -267,7 +267,7 @@ func PythonVenv(silent bool) {
 // SaltboxRepo checks out the master branch of the Saltbox GitHub repository.
 // Resets existing git repository folder if present.
 // Runs submodule update.
-func SaltboxRepo(silent bool) {
+func SaltboxRepo(verbose bool) {
 	saltboxPath := constants.SaltboxRepoPath
 	saltboxRepoURL := constants.SaltboxRepoURL
 	branch := "master" // Or get this from a flag/config
@@ -277,7 +277,7 @@ func SaltboxRepo(silent bool) {
 	if os.IsNotExist(err) {
 		// Clone the repository if it doesn't exist.  Use a spinner.
 		if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch), func() error {
-			return git.CloneRepository(saltboxRepoURL, saltboxPath, branch, silent)
+			return git.CloneRepository(saltboxRepoURL, saltboxPath, branch, verbose)
 		}); err != nil {
 			fmt.Printf("Error cloning Saltbox repository: %v\n", err)
 			os.Exit(1)
@@ -288,7 +288,7 @@ func SaltboxRepo(silent bool) {
 			submoduleCmd := exec.Command("git", "submodule", "update", "--init", "--recursive")
 			submoduleCmd.Dir = saltboxPath
 			var stdoutBuf, stderrBuf bytes.Buffer
-			if !silent {
+			if verbose {
 				submoduleCmd.Stdout = os.Stdout
 				submoduleCmd.Stderr = os.Stderr
 			} else {
@@ -330,7 +330,7 @@ func SaltboxRepo(silent bool) {
 					cmd := exec.Command(command[0], command[1:]...)
 					cmd.Dir = saltboxPath
 					var stdoutBuf, stderrBuf bytes.Buffer
-					if silent {
+					if !verbose {
 						cmd.Stdout = os.Stdout
 						cmd.Stderr = os.Stderr
 					} else {
@@ -372,7 +372,7 @@ func SaltboxRepo(silent bool) {
 
 }
 
-func InstallPipDependencies(silent bool) {
+func InstallPipDependencies(verbose bool) {
 	venvPythonPath := constants.AnsibleVenvPythonPath()
 	python3Cmd := []string{venvPythonPath, "-m", "pip", "install", "--timeout=360", "--no-cache-dir", "--disable-pip-version-check", "--upgrade"}
 
@@ -381,7 +381,7 @@ func InstallPipDependencies(silent bool) {
 		installBaseDeps := append(python3Cmd, "pip", "setuptools", "wheel")
 		cmdInstallBase := exec.Command(installBaseDeps[0], installBaseDeps[1:]...)
 		var stdoutBuf, stderrBuf bytes.Buffer
-		if !silent {
+		if verbose {
 			cmdInstallBase.Stdout = os.Stdout
 			cmdInstallBase.Stderr = os.Stderr
 		} else {
@@ -400,7 +400,7 @@ func InstallPipDependencies(silent bool) {
 		installRequirements := append(python3Cmd, "--requirement", requirementsPath)
 		cmdInstallReq := exec.Command(installRequirements[0], installRequirements[1:]...)
 		var stdoutBuf, stderrBuf bytes.Buffer
-		if !silent {
+		if verbose {
 			cmdInstallReq.Stdout = os.Stdout
 			cmdInstallReq.Stderr = os.Stderr
 		} else {

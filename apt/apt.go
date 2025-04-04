@@ -16,10 +16,10 @@ import (
 // - "sudo apt-get install -y" to install packages non-interactively.
 // - The provided package names appended individually.
 // The function sets the environment variable "DEBIAN_FRONTEND=noninteractive" to suppress interactive prompts.
-// Depending on the silent flag, command output is either streamed directly to the console or captured in buffers.
+// Depending on the verbose flag, command output is either streamed directly to the console or captured in buffers.
 // In case of an error, the returned function provides a detailed error message including the exit code and,
-// if in silent mode, the captured stderr output.
-func InstallPackage(packages []string, silent bool) func() error {
+// if not in verbose mode, the captured stderr output.
+func InstallPackage(packages []string, verbose bool) func() error {
 	return func() error {
 		// Build the command arguments starting with "sudo apt-get install -y"
 		command := []string{"sudo", "apt-get", "install", "-y"}
@@ -33,8 +33,8 @@ func InstallPackage(packages []string, silent bool) func() error {
 
 		var stdoutBuf, stderrBuf bytes.Buffer
 
-		// Configure output based on silent flag.
-		if !silent {
+		// Configure output based on verbose flag.
+		if verbose {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
@@ -50,14 +50,14 @@ func InstallPackage(packages []string, silent bool) func() error {
 			// Create a comma-separated string of package names for error messaging.
 			packageList := strings.Join(packages, ", ")
 			if errors.As(err, &exitErr) {
-				if silent {
+				if !verbose {
 					return fmt.Errorf("failed to install packages '%s'.\nExit code: %d\nStderr:\n%s",
 						packageList, exitErr.ExitCode(), stderrBuf.String())
 				}
 				return fmt.Errorf("failed to install packages '%s'.\nExit code: %d",
 					packageList, exitErr.ExitCode())
 			}
-			if silent {
+			if !verbose {
 				return fmt.Errorf("failed to install packages '%s': %w\nStderr:\n%s",
 					packageList, err, stderrBuf.String())
 			}
@@ -65,8 +65,8 @@ func InstallPackage(packages []string, silent bool) func() error {
 				packageList, err)
 		}
 
-		// On successful installation, print a success message if not silent.
-		if !silent {
+		// On successful installation, print a success message if verbose.
+		if verbose {
 			packageList := strings.Join(packages, ", ")
 			fmt.Printf("Packages '%s' installed successfully.\n", packageList)
 		}
@@ -77,10 +77,10 @@ func InstallPackage(packages []string, silent bool) func() error {
 
 // UpdatePackageLists returns a function that updates the system's apt package lists.
 // When executed, it runs the "sudo apt-get update" command with the non-interactive environment.
-// The silent flag determines whether the command output is streamed to the console or captured in buffers.
-// If the command fails, a detailed error message is returned including the exit code and (when silent)
+// The verbose flag determines whether the command output is streamed to the console or captured in buffers.
+// If the command fails, a detailed error message is returned including the exit code and (when not verbose)
 // the stderr output.
-func UpdatePackageLists(silent bool) func() error {
+func UpdatePackageLists(verbose bool) func() error {
 	return func() error {
 		// Build the command to update package lists.
 		command := []string{"sudo", "apt-get", "update"}
@@ -90,8 +90,8 @@ func UpdatePackageLists(silent bool) func() error {
 
 		var stdoutBuf, stderrBuf bytes.Buffer
 
-		// Configure output based on silent flag.
-		if !silent {
+		// Configure output based on verbose flag.
+		if verbose {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
@@ -105,19 +105,19 @@ func UpdatePackageLists(silent bool) func() error {
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
-				if silent {
+				if !verbose {
 					return fmt.Errorf("failed to update package lists.\nExit code: %d\nStderr:\n%s", exitErr.ExitCode(), stderrBuf.String())
 				}
 				return fmt.Errorf("failed to update package lists.\nExit code: %d", exitErr.ExitCode())
 			}
-			if silent {
+			if !verbose {
 				return fmt.Errorf("failed to update package lists: %w\nStderr:\n%s", err, stderrBuf.String())
 			}
 			return fmt.Errorf("failed to update package lists: %w", err)
 		}
 
-		// Notify success if not in silent mode.
-		if !silent {
+		// Notify success if verbose.
+		if verbose {
 			fmt.Println("Package lists updated successfully.")
 		}
 
@@ -209,11 +209,11 @@ func addRepo(repoLine, sourcesFile string) error {
 
 // AddPPA returns a function that adds a Personal Package Archive (PPA) to the system using "add-apt-repository".
 // When executed, the returned function constructs the command "sudo add-apt-repository <ppa> --yes"
-// and runs it with non-interactive settings. The silent flag controls whether command output is streamed
+// and runs it with non-interactive settings. The verbose flag controls whether command output is streamed
 // directly to the console or captured in buffers for error reporting.
-// If the command fails, an error is returned with details including the exit code and (when silent)
+// If the command fails, an error is returned with details including the exit code and (when not verbose)
 // the captured stderr output.
-func AddPPA(ppa string, silent bool) func() error {
+func AddPPA(ppa string, verbose bool) func() error {
 	return func() error {
 		// Build the command for adding the PPA.
 		command := []string{"sudo", "add-apt-repository", ppa, "--yes"}
@@ -222,8 +222,8 @@ func AddPPA(ppa string, silent bool) func() error {
 		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 
 		var stdoutBuf, stderrBuf bytes.Buffer
-		// Configure command output based on the silent flag.
-		if !silent {
+		// Configure command output based on the verbose flag.
+		if verbose {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
@@ -236,19 +236,19 @@ func AddPPA(ppa string, silent bool) func() error {
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
-				if silent {
+				if !verbose {
 					return fmt.Errorf("failed to add PPA '%s'.\nExit code: %d\nStderr:\n%s", ppa, exitErr.ExitCode(), stderrBuf.String())
 				}
 				return fmt.Errorf("failed to add PPA '%s'.\nExit code: %d", ppa, exitErr.ExitCode())
 			}
-			if silent {
+			if !verbose {
 				return fmt.Errorf("failed to add PPA '%s': %w\nStderr:\n%s", ppa, err, stderrBuf.String())
 			}
 			return fmt.Errorf("failed to add PPA '%s': %w", ppa, err)
 		}
 
-		// Print success message if not in silent mode.
-		if !silent {
+		// Print success message if in verbose mode.
+		if verbose {
 			fmt.Printf("PPA '%s' added successfully.\n", ppa)
 		}
 

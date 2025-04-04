@@ -12,8 +12,8 @@ import (
 )
 
 // CloneRepository clones a Git repository to a specified path and branch.
-// The silent flag controls whether stdout and stderr are directly outputted.
-func CloneRepository(repoURL, destPath, branch string, silent bool) error {
+// The verbose flag controls whether stdout and stderr are directly outputted.
+func CloneRepository(repoURL, destPath, branch string, verbose bool) error {
 	if _, err := os.Stat(destPath); !os.IsNotExist(err) {
 		return fmt.Errorf("destination path '%s' already exists", destPath)
 	}
@@ -23,7 +23,7 @@ func CloneRepository(repoURL, destPath, branch string, silent bool) error {
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 
-	if !silent {
+	if verbose {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	} else {
@@ -36,14 +36,14 @@ func CloneRepository(repoURL, destPath, branch string, silent bool) error {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			if silent {
+			if !verbose {
 				return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s'.\nExit code: %d\nStderr:\n%s",
 					repoURL, branch, destPath, exitErr.ExitCode(), stderrBuf.String())
 			}
 			return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s'.\nExit code: %d",
 				repoURL, branch, destPath, exitErr.ExitCode())
 		}
-		if silent {
+		if !verbose {
 			return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s': %w\nStderr:\n%s",
 				repoURL, branch, destPath, err, stderrBuf.String())
 		}
@@ -51,7 +51,7 @@ func CloneRepository(repoURL, destPath, branch string, silent bool) error {
 			repoURL, branch, destPath, err)
 	}
 
-	if !silent {
+	if verbose {
 		fmt.Printf("Repository '%s' (branch: '%s') cloned successfully to '%s'\n", repoURL, branch, destPath)
 	}
 
