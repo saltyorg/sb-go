@@ -31,6 +31,7 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 
 	if !silent {
 		cmd.Stdout = os.Stdout
+		cmd.Stdin = os.Stdin
 		cmd.Stderr = os.Stderr
 	} else {
 		cmd.Stdout = &stdoutBuf
