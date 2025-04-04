@@ -174,18 +174,27 @@ func CheckDesktopEnvironment() error {
 }
 
 // InstallPip installs pip using get-pip.py.
-func InstallPip() error {
+// If verbose is true, the output of the curl and python commands will be printed to stdout/stderr.
+func InstallPip(verbose bool) error {
 	fmt.Println("Installing pip using get-pip.py...")
 	if err := os.Chdir("/tmp"); err != nil {
 		return fmt.Errorf("failed to change directory to /tmp: %w", err)
 	}
 	// Download get-pip.py
 	curlCmd := exec.Command("curl", "-sLO", "https://bootstrap.pypa.io/get-pip.py")
+	if verbose {
+		curlCmd.Stdout = os.Stdout
+		curlCmd.Stderr = os.Stderr
+	}
 	if err := curlCmd.Run(); err != nil {
 		return fmt.Errorf("error downloading get-pip.py: %w", err)
 	}
 	// Run get-pip.py with python3.12
 	pythonCmd := exec.Command("python3.12", "get-pip.py")
+	if verbose {
+		pythonCmd.Stdout = os.Stdout
+		pythonCmd.Stderr = os.Stderr
+	}
 	if err := pythonCmd.Run(); err != nil {
 		return fmt.Errorf("error running get-pip.py: %w", err)
 	}

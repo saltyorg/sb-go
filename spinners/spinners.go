@@ -81,30 +81,18 @@ func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
 	return nil
 }
 
-// RunInfoSpinner (for backwards compatibility)
+// RunInfoSpinner prints an informational message.
 func RunInfoSpinner(message string) error {
-	opts := SpinnerOptions{
-		TaskName:        message,
-		Color:           styles.ColorLightBlue,
-		StopColor:       styles.ColorLightBlue,
-		StopFailColor:   styles.ColorLightBlue,
-		StopMessage:     message,
-		StopFailMessage: message,
-	}
-	return runTaskWithSpinner(opts, func() error { return nil })
+	style := getStyle(styles.ColorLightBlue)
+	fmt.Println(style.Render(fmt.Sprintf("● %s", message)))
+	return nil
 }
 
-// RunWarningSpinner (for backwards compatibility)
+// RunWarningSpinner prints a warning message.
 func RunWarningSpinner(message string) error {
-	opts := SpinnerOptions{
-		TaskName:        message,
-		Color:           styles.ColorYellow,
-		StopColor:       styles.ColorYellow,
-		StopFailColor:   styles.ColorYellow,
-		StopMessage:     message,
-		StopFailMessage: message,
-	}
-	return runTaskWithSpinner(opts, func() error { return nil })
+	style := getStyle(styles.ColorYellow)
+	fmt.Println(style.Render(fmt.Sprintf("● %s", message)))
+	return nil
 }
 
 // --- Bubble Tea Model ---

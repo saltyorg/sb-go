@@ -74,7 +74,7 @@ var setupCmd = &cobra.Command{
 		setup.InitialSetup(verbose)
 
 		// Configure the locale (moved to setup package)
-		setup.ConfigureLocale()
+		setup.ConfigureLocale(verbose)
 
 		// Setup Python venv (moved to setup package)
 		setup.PythonVenv(verbose)
@@ -86,7 +86,7 @@ var setupCmd = &cobra.Command{
 		setup.InstallPipDependencies(verbose)
 
 		// Copy ansible* files to /usr/local/bin
-		setup.CopyAnsibleBinaries()
+		setup.CopyAnsibleBinaries(verbose)
 
 		fmt.Println("Initial setup tasks completed.")
 
@@ -95,5 +95,6 @@ var setupCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(setupCmd)
+	// Add the -v flag as a persistent flag to the config command.
 	setupCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 }

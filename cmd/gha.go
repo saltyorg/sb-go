@@ -16,19 +16,19 @@ var ghaCmd = &cobra.Command{
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Perform initial setup tasks (moved to setup package)
-		setup.InitialSetup(false)
+		setup.InitialSetup(verbose)
 
 		// Configure the locale (moved to setup package)
-		setup.ConfigureLocale()
+		setup.ConfigureLocale(verbose)
 
 		// Setup Python venv (moved to setup package)
-		setup.PythonVenv(false)
+		setup.PythonVenv(verbose)
 
-		if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {
+		if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
 			fmt.Printf("Error downloading and installing saltbox.fact: %v\n", err)
 			os.Exit(1)
 		}
-		if err := setup.CopyDefaultConfigFiles(); err != nil {
+		if err := setup.CopyDefaultConfigFiles(verbose); err != nil {
 			fmt.Printf("Error copying default configuration files: %v\n", err)
 			os.Exit(1)
 		}
@@ -37,4 +37,6 @@ var ghaCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(ghaCmd)
+	// Add the -v flag as a persistent flag to the config command.
+	ghaCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }

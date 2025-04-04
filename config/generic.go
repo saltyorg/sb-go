@@ -25,6 +25,11 @@ func debugPrintf(format string, a ...interface{}) {
 
 // checkExtraFields recursively checks for extra fields in nested maps AND slices.
 func checkExtraFields(inputMap map[string]interface{}, config interface{}) error {
+	return checkExtraFieldsInternal(inputMap, config, "")
+}
+
+// checkExtraFieldsInternal is a helper function that tracks the context information.
+func checkExtraFieldsInternal(inputMap map[string]interface{}, config interface{}, context string) error {
 	debugPrintf("\nDEBUG: checkExtraFields called with inputMap: %+v, config type: %T\n", inputMap, config)
 
 	configValue := reflect.ValueOf(config).Elem()
@@ -42,12 +47,18 @@ func checkExtraFields(inputMap map[string]interface{}, config interface{}) error
 		if value, ok := inputMap[yamlKey]; ok {
 			debugPrintf("DEBUG: Found YAML key '%s' in inputMap\n", yamlKey)
 
+			// Context for nested structures
+			currentContext := yamlKey
+			if context != "" {
+				currentContext = context + "." + yamlKey
+			}
+
 			switch v := value.(type) {
 			case map[string]interface{}:
 				debugPrintf("DEBUG: Field '%s' is a map, recursing...\n", yamlKey)
 				nestedFieldValue := configValue.Field(i)
 				if nestedFieldValue.Kind() == reflect.Struct {
-					if err := checkExtraFields(v, nestedFieldValue.Addr().Interface()); err != nil {
+					if err := checkExtraFieldsInternal(v, nestedFieldValue.Addr().Interface(), currentContext); err != nil {
 						return err
 					}
 				} else {
@@ -62,15 +73,19 @@ func checkExtraFields(inputMap map[string]interface{}, config interface{}) error
 					if elementType.Kind() == reflect.Struct {
 						for j, sliceElement := range v {
 							debugPrintf("DEBUG: Checking slice element %d\n", j)
+
+							// For array elements, include the index in the context
+							elementContext := fmt.Sprintf("%s[%d]", currentContext, j)
+
 							if elementMap, ok := sliceElement.(map[string]interface{}); ok {
 								if elementType.Kind() == reflect.Ptr {
 									newElement := reflect.New(elementType.Elem()).Interface() // Create a new instance
-									if err := checkExtraFields(elementMap, newElement); err != nil {
+									if err := checkExtraFieldsInternal(elementMap, newElement, elementContext); err != nil {
 										return err
 									}
 								} else {
 									newElement := reflect.New(elementType).Interface()
-									if err := checkExtraFields(elementMap, newElement); err != nil {
+									if err := checkExtraFieldsInternal(elementMap, newElement, elementContext); err != nil {
 										return err
 									}
 								}
@@ -109,7 +124,14 @@ func checkExtraFields(inputMap map[string]interface{}, config interface{}) error
 			}
 		}
 		if !found {
-			return fmt.Errorf("unknown field '%s' in configuration", key)
+			// Provide context information about where the unknown field was found
+			if context == "" {
+				// Root level field
+				return fmt.Errorf("unknown field '%s' in configuration (root level)", key)
+			} else {
+				// Field within a nested structure
+				return fmt.Errorf("unknown field '%s' in configuration (inside '%s')", key, context)
+			}
 		}
 	}
 

@@ -23,6 +23,8 @@ var reinstallPythonCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(reinstallPythonCmd)
+	// Add the -v flag as a persistent flag to the config command.
+	reinstallPythonCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }
 
 func handleReinstallPython() error {
@@ -42,7 +44,7 @@ func handleReinstallPython() error {
 			return fmt.Errorf("error getting saltbox user: %w", err)
 		}
 
-		if err := venv.ManageAnsibleVenv(true, saltboxUser); err != nil {
+		if err := venv.ManageAnsibleVenv(true, saltboxUser, verbose); err != nil {
 			return fmt.Errorf("error managing Ansible venv: %w", err)
 		}
 	} else {

@@ -40,9 +40,6 @@ var restartCmd = &cobra.Command{
 		// Check service with spinner
 		opts := spinners.SpinnerOptions{
 			TaskName:        "Checking Docker controller service",
-			Color:           "blue",
-			StopColor:       "green",
-			StopFailColor:   "red",
 			StopMessage:     "Docker controller service ready",
 			StopFailMessage: "Docker controller service check failed",
 		}
@@ -66,7 +63,7 @@ var restartCmd = &cobra.Command{
 				}
 
 				if verbose {
-					fmt.Printf("Ignoring containers: %s\n", strings.Join(ignoreContainers, ", "))
+					_ = spinners.RunInfoSpinner(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
 				}
 			}
 
@@ -88,7 +85,7 @@ var restartCmd = &cobra.Command{
 			}
 
 			if verbose {
-				fmt.Printf("Stopping containers. Job ID: %s\n", stopJobResp.JobID)
+				_ = spinners.RunInfoSpinner(fmt.Sprintf("Stopping containers. Job ID: %s", stopJobResp.JobID))
 			}
 
 			// Wait for stop job to complete
@@ -125,7 +122,7 @@ var restartCmd = &cobra.Command{
 			}
 
 			if verbose {
-				fmt.Printf("Starting containers. Job ID: %s\n", startJobResp.JobID)
+				_ = spinners.RunInfoSpinner(fmt.Sprintf("Starting containers. Job ID: %s", startJobResp.JobID))
 			}
 
 			// Wait for start job to complete
@@ -144,9 +141,6 @@ var restartCmd = &cobra.Command{
 		// Run spinner for stopping containers
 		stopOpts := spinners.SpinnerOptions{
 			TaskName:        "Stopping Docker containers",
-			Color:           "yellow",
-			StopColor:       "green",
-			StopFailColor:   "red",
 			StopMessage:     "Stopped Docker containers",
 			StopFailMessage: "Failed to stop Docker containers",
 		}
@@ -159,9 +153,6 @@ var restartCmd = &cobra.Command{
 		// Run spinner for starting containers
 		startOpts := spinners.SpinnerOptions{
 			TaskName:        "Starting Docker containers",
-			Color:           "yellow",
-			StopColor:       "green",
-			StopFailColor:   "red",
 			StopMessage:     "Started Docker containers",
 			StopFailMessage: "Failed to start Docker containers",
 		}
@@ -172,7 +163,7 @@ var restartCmd = &cobra.Command{
 		}
 
 		if verbose {
-			fmt.Println("Containers restarted successfully.")
+			_ = spinners.RunInfoSpinner("Containers restarted successfully")
 		}
 	},
 }

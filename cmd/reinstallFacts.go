@@ -14,7 +14,7 @@ var reinstallFactsCmd = &cobra.Command{
 	Short: "Reinstall the Rust saltbox.fact file",
 	Long:  `Reinstall the Rust saltbox.fact file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := saltboxfact.DownloadAndInstallSaltboxFact(true); err != nil {
+		if err := saltboxfact.DownloadAndInstallSaltboxFact(true, verbose); err != nil {
 			fmt.Println("Error reinstalling saltbox.fact:", err)
 			os.Exit(1)
 		}
@@ -23,4 +23,6 @@ var reinstallFactsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(reinstallFactsCmd)
+	// Add the -v flag as a persistent flag to the config command.
+	reinstallFactsCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }

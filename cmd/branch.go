@@ -48,7 +48,7 @@ func changeBranch(branchName string) error {
 	}
 
 	// Always update saltbox.fact during branch change
-	if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {
+	if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
 		return err
 	}
 

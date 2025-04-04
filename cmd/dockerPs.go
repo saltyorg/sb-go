@@ -28,9 +28,7 @@ var psCmd = &cobra.Command{
 	Use:   "ps",
 	Short: "List Docker containers with port mappings",
 	Long: `List all Docker containers and their status, displaying their internal
-ports (as potentially exposed by Traefik labels) and their external port bindings.
-The output is formatted in a table, with deduplicated Traefik internal ports and
-only listing ports bound to the host.`,
+ports (as potentially exposed by Traefik labels) and their external port bindings.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())

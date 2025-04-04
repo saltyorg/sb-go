@@ -38,9 +38,6 @@ var startCmd = &cobra.Command{
 		// Check service with spinner
 		opts := spinners.SpinnerOptions{
 			TaskName:        "Checking Docker controller service",
-			Color:           "blue",
-			StopColor:       "green",
-			StopFailColor:   "red",
 			StopMessage:     "Docker controller service ready",
 			StopFailMessage: "Docker controller service check failed",
 		}
@@ -74,7 +71,7 @@ var startCmd = &cobra.Command{
 			}
 
 			if verbose {
-				fmt.Printf("Starting containers. Job ID: %s\n", jobResp.JobID)
+				_ = spinners.RunInfoSpinner(fmt.Sprintf("Starting containers. Job ID: %s", jobResp.JobID))
 			}
 
 			// Wait for job completion
@@ -93,9 +90,6 @@ var startCmd = &cobra.Command{
 		// Run spinner for starting containers
 		startOpts := spinners.SpinnerOptions{
 			TaskName:        "Starting Docker containers",
-			Color:           "yellow",
-			StopColor:       "green",
-			StopFailColor:   "red",
 			StopMessage:     "Started Docker containers",
 			StopFailMessage: "Failed to start Docker containers",
 		}
@@ -106,7 +100,7 @@ var startCmd = &cobra.Command{
 		}
 
 		if verbose {
-			fmt.Println("Containers started successfully.")
+			_ = spinners.RunInfoSpinner("Containers started successfully")
 		}
 	},
 }
