@@ -72,47 +72,74 @@ type AnsibleBool string
 
 // UnmarshalYAML implements custom unmarshalling for AnsibleBool.
 func (a *AnsibleBool) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML called\n")
 	var s string
 	if err := unmarshal(&s); err != nil {
+		debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - error unmarshaling to string: %v\n", err)
 		return err // If it's not unmarshalled as string, it's an error
 	}
 	normalizedVal := strings.ToLower(s)
+	debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - normalized value: '%s'\n", normalizedVal)
 	switch normalizedVal {
 	case "yes", "true", "on", "1", "no", "false", "off", "0":
 		*a = AnsibleBool(normalizedVal)
+		debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - valid value, set to: '%s'\n", *a)
 		return nil // Valid value
 	default:
-		return fmt.Errorf("invalid Ansible boolean value: %s", s) // Return error
+		err := fmt.Errorf("invalid Ansible boolean value: %s", s) // Return error
+		debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - %v\n", err)
+		return err
 	}
 }
 
 // ValidateAdvSettingsConfig validates the AdvSettingsConfig struct.
 func ValidateAdvSettingsConfig(config *AdvSettingsConfig, inputMap map[string]interface{}) error {
+	debugPrintf("\nDEBUG: ValidateAdvSettingsConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 
 	// Register custom validators (from generic.go).
+	debugPrintf("DEBUG: ValidateAdvSettingsConfig - registering custom validators\n")
 	RegisterCustomValidators(validate)
 
 	// Validate the overall structure.
+	debugPrintf("DEBUG: ValidateAdvSettingsConfig - validating struct: %+v\n", config)
 	if err := validate.Struct(config); err != nil {
+		debugPrintf("DEBUG: ValidateAdvSettingsConfig - struct validation error: %v\n", err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
 				lowercaseField := strings.ToLower(e.Field())
+				debugPrintf("DEBUG: ValidateAdvSettingsConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", lowercaseField, e.Tag(), e.Value(), e.Param())
 				switch e.Tag() {
 				case "required":
-					return fmt.Errorf("field '%s' is required", lowercaseField)
+					err := fmt.Errorf("field '%s' is required", lowercaseField)
+					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					return err
 				case "ansiblebool":
-					return fmt.Errorf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s", lowercaseField, e.Value())
+					err := fmt.Errorf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s", lowercaseField, e.Value())
+					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					return err
 				case "timezone_or_auto":
-					return fmt.Errorf("field '%s' must be a valid timezone or 'auto', got: %s", lowercaseField, e.Value())
+					err := fmt.Errorf("field '%s' must be a valid timezone or 'auto', got: %s", lowercaseField, e.Value())
+					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					return err
 				default:
-					return fmt.Errorf("field '%s' is invalid: %s", lowercaseField, e.Error())
+					err := fmt.Errorf("field '%s' is invalid: %s", lowercaseField, e.Error())
+					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					return err
 				}
 			}
 		}
 		return err
 	}
 
-	return checkExtraFields(inputMap, config) // Use the function from generic.go
+	// Check for extra fields.
+	debugPrintf("DEBUG: ValidateAdvSettingsConfig - checking for extra fields\n")
+	if err := checkExtraFields(inputMap, config); err != nil {
+		debugPrintf("DEBUG: ValidateAdvSettingsConfig - checkExtraFields returned error: %v\n", err)
+		return err
+	}
+
+	debugPrintf("DEBUG: ValidateAdvSettingsConfig - validation successful\n")
+	return nil
 }

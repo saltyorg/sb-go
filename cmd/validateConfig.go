@@ -33,34 +33,27 @@ var configCmd = &cobra.Command{
 		accountsSuccessMessage := fmt.Sprintf("Validated %s", accountsFilename)
 		accountsFailureMessage := fmt.Sprintf("Failed to validate %s", accountsFilename)
 
-		err := spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
-			TaskName:        fmt.Sprintf("Validating %s", accountsFilename),
-			StopMessage:     accountsSuccessMessage,
-			StopFailMessage: accountsFailureMessage,
-		}, func() error {
-			configFile, err := os.ReadFile(accountsConfigFilePath)
-			if err != nil {
-				return fmt.Errorf("error reading accounts config file (%s): %w", accountsConfigFilePath, err)
+		var accountsValidationError error
+		if verbose {
+			fmt.Printf("Validating %s...\n", accountsFilename)
+			accountsValidationError = validateConfigFile(accountsConfigFilePath, &config.Config{}, config.ValidateConfig)
+			if accountsValidationError == nil {
+				fmt.Println(accountsSuccessMessage)
+			} else {
+				fmt.Println(accountsFailureMessage)
 			}
+		} else {
+			accountsValidationError = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+				TaskName:        fmt.Sprintf("Validating %s", accountsFilename),
+				StopMessage:     accountsSuccessMessage,
+				StopFailMessage: accountsFailureMessage,
+			}, func() error {
+				return validateConfigFile(accountsConfigFilePath, &config.Config{}, config.ValidateConfig)
+			})
+		}
 
-			var inputMap map[string]interface{}
-			if err := yaml.Unmarshal(configFile, &inputMap); err != nil {
-				return fmt.Errorf("error unmarshaling accounts config file (%s): %w", accountsConfigFilePath, err)
-			}
-
-			var configData config.Config
-			if err := yaml.Unmarshal(configFile, &configData); err != nil {
-				return fmt.Errorf("error unmarshaling accounts config file (%s) into struct: %w", accountsConfigFilePath, err)
-			}
-
-			if err := config.ValidateConfig(&configData, inputMap); err != nil {
-				return fmt.Errorf("accounts configuration validation error: %w", err)
-			}
-			return nil
-		})
-
-		if err != nil {
-			fmt.Println(err)
+		if accountsValidationError != nil {
+			fmt.Println(accountsValidationError)
 			os.Exit(1)
 		}
 
@@ -71,34 +64,27 @@ var configCmd = &cobra.Command{
 		advSuccessMessage := fmt.Sprintf("Validated %s", advSettingsFilename)
 		advFailureMessage := fmt.Sprintf("Failed to validate %s", advSettingsFilename)
 
-		err = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
-			TaskName:        fmt.Sprintf("Validating %s", advSettingsFilename),
-			StopMessage:     advSuccessMessage,
-			StopFailMessage: advFailureMessage,
-		}, func() error {
-			advConfigFile, err := os.ReadFile(advSettingsFilePath)
-			if err != nil {
-				return fmt.Errorf("error reading advanced settings config file (%s): %w", advSettingsFilePath, err)
+		var advSettingsValidationError error
+		if verbose {
+			fmt.Printf("Validating %s...\n", advSettingsFilename)
+			advSettingsValidationError = validateConfigFile(advSettingsFilePath, &config.AdvSettingsConfig{}, config.ValidateAdvSettingsConfig)
+			if advSettingsValidationError == nil {
+				fmt.Println(advSuccessMessage)
+			} else {
+				fmt.Println(advFailureMessage)
 			}
+		} else {
+			advSettingsValidationError = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+				TaskName:        fmt.Sprintf("Validating %s", advSettingsFilename),
+				StopMessage:     advSuccessMessage,
+				StopFailMessage: advFailureMessage,
+			}, func() error {
+				return validateConfigFile(advSettingsFilePath, &config.AdvSettingsConfig{}, config.ValidateAdvSettingsConfig)
+			})
+		}
 
-			var advInputMap map[string]interface{}
-			if err := yaml.Unmarshal(advConfigFile, &advInputMap); err != nil {
-				return fmt.Errorf("error unmarshaling advanced settings config file (%s): %w", advSettingsFilePath, err)
-			}
-
-			var advConfigData config.AdvSettingsConfig
-			if err := yaml.Unmarshal(advConfigFile, &advConfigData); err != nil {
-				return fmt.Errorf("error unmarshaling advanced settings config file (%s) into struct: %w", advSettingsFilePath, err)
-			}
-
-			if err := config.ValidateAdvSettingsConfig(&advConfigData, advInputMap); err != nil {
-				return fmt.Errorf("advanced settings configuration validation error: %w", err)
-			}
-			return nil
-		})
-
-		if err != nil {
-			fmt.Println(err)
+		if advSettingsValidationError != nil {
+			fmt.Println(advSettingsValidationError)
 			os.Exit(1)
 		}
 
@@ -109,34 +95,27 @@ var configCmd = &cobra.Command{
 		backupSuccessMessage := fmt.Sprintf("Validated %s", backupFilename)
 		backupFailureMessage := fmt.Sprintf("Failed to validate %s", backupFilename)
 
-		err = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
-			TaskName:        fmt.Sprintf("Validating %s", backupFilename),
-			StopMessage:     backupSuccessMessage,
-			StopFailMessage: backupFailureMessage,
-		}, func() error {
-			backupConfigFile, err := os.ReadFile(backupConfigFilePath)
-			if err != nil {
-				return fmt.Errorf("error reading backup config file (%s): %w", backupConfigFilePath, err)
+		var backupValidationError error
+		if verbose {
+			fmt.Printf("Validating %s...\n", backupFilename)
+			backupValidationError = validateConfigFile(backupConfigFilePath, &config.BackupConfig{}, config.ValidateBackupConfig)
+			if backupValidationError == nil {
+				fmt.Println(backupSuccessMessage)
+			} else {
+				fmt.Println(backupFailureMessage)
 			}
+		} else {
+			backupValidationError = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+				TaskName:        fmt.Sprintf("Validating %s", backupFilename),
+				StopMessage:     backupSuccessMessage,
+				StopFailMessage: backupFailureMessage,
+			}, func() error {
+				return validateConfigFile(backupConfigFilePath, &config.BackupConfig{}, config.ValidateBackupConfig)
+			})
+		}
 
-			var backupInputMap map[string]interface{}
-			if err := yaml.Unmarshal(backupConfigFile, &backupInputMap); err != nil {
-				return fmt.Errorf("error unmarshaling backup config file (%s): %w", backupConfigFilePath, err)
-			}
-
-			var backupConfigData config.BackupConfig
-			if err := yaml.Unmarshal(backupConfigFile, &backupConfigData); err != nil {
-				return fmt.Errorf("error unmarshaling backup config file (%s) into struct: %w", backupConfigFilePath, err)
-			}
-
-			if err := config.ValidateBackupConfig(&backupConfigData, backupInputMap); err != nil {
-				return fmt.Errorf("backup configuration validation error: %w", err)
-			}
-			return nil
-		})
-
-		if err != nil {
-			fmt.Println(err)
+		if backupValidationError != nil {
+			fmt.Println(backupValidationError)
 			os.Exit(1)
 		}
 
@@ -147,34 +126,27 @@ var configCmd = &cobra.Command{
 		hetznerVLANSuccessMessage := fmt.Sprintf("Validated %s", hetznerVLANFilename)
 		hetznerVLANFailureMessage := fmt.Sprintf("Failed to validate %s", hetznerVLANFilename)
 
-		err = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
-			TaskName:        fmt.Sprintf("Validating %s", hetznerVLANFilename),
-			StopMessage:     hetznerVLANSuccessMessage,
-			StopFailMessage: hetznerVLANFailureMessage,
-		}, func() error {
-			hetznerVLANConfigFile, err := os.ReadFile(hetznerVLANConfigFilePath)
-			if err != nil {
-				return fmt.Errorf("error reading hetzner VLAN config file (%s): %w", hetznerVLANConfigFilePath, err)
+		var hetznerVLANValidationError error
+		if verbose {
+			fmt.Printf("Validating %s...\n", hetznerVLANFilename)
+			hetznerVLANValidationError = validateConfigFile(hetznerVLANConfigFilePath, &config.HetznerVLANConfig{}, config.ValidateHetznerVLANConfig)
+			if hetznerVLANValidationError == nil {
+				fmt.Println(hetznerVLANSuccessMessage)
+			} else {
+				fmt.Println(hetznerVLANFailureMessage)
 			}
+		} else {
+			hetznerVLANValidationError = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+				TaskName:        fmt.Sprintf("Validating %s", hetznerVLANFilename),
+				StopMessage:     hetznerVLANSuccessMessage,
+				StopFailMessage: hetznerVLANFailureMessage,
+			}, func() error {
+				return validateConfigFile(hetznerVLANConfigFilePath, &config.HetznerVLANConfig{}, config.ValidateHetznerVLANConfig)
+			})
+		}
 
-			var hetznerVLANInputMap map[string]interface{}
-			if err := yaml.Unmarshal(hetznerVLANConfigFile, &hetznerVLANInputMap); err != nil {
-				return fmt.Errorf("error unmarshaling hetzner VLAN config file (%s): %w", hetznerVLANConfigFilePath, err)
-			}
-
-			var hetznerVLANConfigData config.HetznerVLANConfig
-			if err := yaml.Unmarshal(hetznerVLANConfigFile, &hetznerVLANConfigData); err != nil {
-				return fmt.Errorf("error unmarshaling hetzner VLAN config file (%s) into struct: %w", hetznerVLANConfigFilePath, err)
-			}
-
-			if err := config.ValidateHetznerVLANConfig(&hetznerVLANConfigData, hetznerVLANInputMap); err != nil {
-				return fmt.Errorf("hetzner VLAN configuration validation error: %w", err)
-			}
-			return nil
-		})
-
-		if err != nil {
-			fmt.Println(err)
+		if hetznerVLANValidationError != nil {
+			fmt.Println(hetznerVLANValidationError)
 			os.Exit(1)
 		}
 
@@ -185,34 +157,27 @@ var configCmd = &cobra.Command{
 		settingsSuccessMessage := fmt.Sprintf("Validated %s", settingsFilename)
 		settingsFailureMessage := fmt.Sprintf("Failed to validate %s", settingsFilename)
 
-		err = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
-			TaskName:        fmt.Sprintf("Validating %s", settingsFilename),
-			StopMessage:     settingsSuccessMessage,
-			StopFailMessage: settingsFailureMessage,
-		}, func() error {
-			settingsConfigFile, err := os.ReadFile(settingsFilePath)
-			if err != nil {
-				return fmt.Errorf("error reading settings config file (%s): %w", settingsFilePath, err)
+		var settingsValidationError error
+		if verbose {
+			fmt.Printf("Validating %s...\n", settingsFilename)
+			settingsValidationError = validateConfigFile(settingsFilePath, &config.SettingsConfig{}, config.ValidateSettingsConfig)
+			if settingsValidationError == nil {
+				fmt.Println(settingsSuccessMessage)
+			} else {
+				fmt.Println(settingsFailureMessage)
 			}
+		} else {
+			settingsValidationError = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+				TaskName:        fmt.Sprintf("Validating %s", settingsFilename),
+				StopMessage:     settingsSuccessMessage,
+				StopFailMessage: settingsFailureMessage,
+			}, func() error {
+				return validateConfigFile(settingsFilePath, &config.SettingsConfig{}, config.ValidateSettingsConfig)
+			})
+		}
 
-			var settingsInputMap map[string]interface{}
-			if err := yaml.Unmarshal(settingsConfigFile, &settingsInputMap); err != nil {
-				return fmt.Errorf("error unmarshaling settings config file (%s): %w", settingsFilePath, err)
-			}
-
-			var settingsConfigData config.SettingsConfig
-			if err := yaml.Unmarshal(settingsConfigFile, &settingsConfigData); err != nil {
-				return fmt.Errorf("error unmarshaling settings config file (%s) into struct: %w", settingsFilePath, err)
-			}
-
-			if err := config.ValidateSettingsConfig(&settingsConfigData, settingsInputMap); err != nil {
-				return fmt.Errorf("settings configuration validation error: %w", err)
-			}
-			return nil
-		})
-
-		if err != nil {
-			fmt.Println(err)
+		if settingsValidationError != nil {
+			fmt.Println(settingsValidationError)
 			os.Exit(1)
 		}
 
@@ -225,40 +190,56 @@ var configCmd = &cobra.Command{
 			motdSuccessMessage := fmt.Sprintf("Validated %s", motdFilename)
 			motdFailureMessage := fmt.Sprintf("Failed to validate %s", motdFilename)
 
-			err = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
-				TaskName:        fmt.Sprintf("Validating %s", motdFilename),
-				StopMessage:     motdSuccessMessage,
-				StopFailMessage: motdFailureMessage,
-			}, func() error {
-				motdConfigFile, err := os.ReadFile(motdConfigPath)
-				if err != nil {
-					return fmt.Errorf("error reading MOTD config file (%s): %w", motdConfigPath, err)
+			var motdValidationError error
+			if verbose {
+				fmt.Printf("Validating %s...\n", motdFilename)
+				motdValidationError = validateConfigFile(motdConfigPath, &config.MOTDConfig{}, config.ValidateMOTDConfig)
+				if motdValidationError == nil {
+					fmt.Println(motdSuccessMessage)
+				} else {
+					fmt.Println(motdFailureMessage)
 				}
+			} else {
+				motdValidationError = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+					TaskName:        fmt.Sprintf("Validating %s", motdFilename),
+					StopMessage:     motdSuccessMessage,
+					StopFailMessage: motdFailureMessage,
+				}, func() error {
+					return validateConfigFile(motdConfigPath, &config.MOTDConfig{}, config.ValidateMOTDConfig)
+				})
+			}
 
-				var motdInputMap map[string]interface{}
-				if err := yaml.Unmarshal(motdConfigFile, &motdInputMap); err != nil {
-					return fmt.Errorf("error unmarshaling MOTD config file (%s): %w", motdConfigPath, err)
-				}
-
-				var motdConfigData config.MOTDConfig
-				if err := yaml.Unmarshal(motdConfigFile, &motdConfigData); err != nil {
-					return fmt.Errorf("error unmarshaling MOTD config file (%s) into struct: %w", motdConfigPath, err)
-				}
-
-				if err := config.ValidateMOTDConfig(&motdConfigData, motdInputMap); err != nil {
-					return fmt.Errorf("MOTD configuration validation error: %w", err)
-				}
-				return nil
-			})
-
-			if err != nil {
-				fmt.Println(err)
+			if motdValidationError != nil {
+				fmt.Println(motdValidationError)
 				os.Exit(1)
 			}
 		} else if verbose {
 			fmt.Printf("MOTD config file not found at %s, skipping validation\n", motdConfigPath)
 		}
 	},
+}
+
+type validationFunc[T any] func(config *T, input map[string]interface{}) error
+
+func validateConfigFile[T any](filePath string, configData *T, validateFn validationFunc[T]) error {
+	configFile, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("error reading config file (%s): %w", filePath, err)
+	}
+
+	var inputMap map[string]interface{}
+	if err := yaml.Unmarshal(configFile, &inputMap); err != nil {
+		return fmt.Errorf("error unmarshaling config file (%s): %w", filePath, err)
+	}
+
+	if err := yaml.Unmarshal(configFile, configData); err != nil {
+		return fmt.Errorf("error unmarshaling config file (%s) into struct: %w", filePath, err)
+	}
+
+	if err := validateFn(configData, inputMap); err != nil {
+		return fmt.Errorf("configuration validation error: %w", err)
+	}
+	return nil
 }
 
 func init() {

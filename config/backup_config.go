@@ -61,31 +61,52 @@ type RsyncConfig struct {
 
 // ValidateBackupConfig validates the BackupConfig struct.
 func ValidateBackupConfig(config *BackupConfig, inputMap map[string]interface{}) error {
+	debugPrintf("\nDEBUG: ValidateBackupConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 
 	// Register custom validators (from generic.go).
+	debugPrintf("DEBUG: ValidateBackupConfig - registering custom validators\n")
 	RegisterCustomValidators(validate)
 
 	// Validate the overall structure.
+	debugPrintf("DEBUG: ValidateBackupConfig - validating struct: %+v\n", config)
 	if err := validate.Struct(config); err != nil {
+		debugPrintf("DEBUG: ValidateBackupConfig - struct validation error: %v\n", err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
 				lowercaseField := strings.ToLower(e.Field())
+				debugPrintf("DEBUG: ValidateBackupConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", lowercaseField, e.Tag(), e.Value(), e.Param())
 				switch e.Tag() {
 				case "required":
-					return fmt.Errorf("field '%s' is required", lowercaseField)
+					err := fmt.Errorf("field '%s' is required", lowercaseField)
+					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					return err
 				case "ansiblebool":
-					return fmt.Errorf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s", lowercaseField, e.Value())
+					err := fmt.Errorf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s", lowercaseField, e.Value())
+					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					return err
 				case "cron_special_time":
-					return fmt.Errorf("field '%s' must be a valid Ansible cron special time (annually, daily, hourly, monthly, reboot, weekly, yearly), got: %s", lowercaseField, e.Value())
+					err := fmt.Errorf("field '%s' must be a valid Ansible cron special time (annually, daily, hourly, monthly, reboot, weekly, yearly), got: %s", lowercaseField, e.Value())
+					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					return err
 				default:
-					return fmt.Errorf("field '%s' is invalid: %s", lowercaseField, e.Error())
+					err := fmt.Errorf("field '%s' is invalid: %s", lowercaseField, e.Error())
+					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					return err
 				}
 			}
 		}
 		return err
 	}
 
-	return checkExtraFields(inputMap, config) // Use the function from generic.go
+	// Check for extra fields.
+	debugPrintf("DEBUG: ValidateBackupConfig - checking for extra fields\n")
+	if err := checkExtraFields(inputMap, config); err != nil {
+		debugPrintf("DEBUG: ValidateBackupConfig - checkExtraFields returned error: %v\n", err)
+		return err
+	}
+
+	debugPrintf("DEBUG: ValidateBackupConfig - validation successful\n")
+	return nil
 }

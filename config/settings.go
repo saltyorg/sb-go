@@ -63,82 +63,124 @@ type VFSCacheConfig struct {
 // rcloneTemplateValidator is the custom validator for rclone templates.
 func rcloneTemplateValidator(fl validator.FieldLevel) bool {
 	value := fl.Field().String()
+	debugPrintf("DEBUG: rcloneTemplateValidator called with value: '%s'\n", value)
 
 	// Check for predefined values.
 	switch strings.ToLower(value) {
 	case "dropbox", "google", "sftp", "nfs":
+		debugPrintf("DEBUG: rcloneTemplateValidator - value is a predefined type, returning true\n")
 		return true
 	}
 
 	// Check for absolute path and file existence.
 	if strings.HasPrefix(value, "/") {
+		debugPrintf("DEBUG: rcloneTemplateValidator - value is an absolute path, checking file existence\n")
 		_, err := os.Stat(value)
-		return err == nil // Valid if the file exists
+		isValid := err == nil // Valid if the file exists
+		debugPrintf("DEBUG: rcloneTemplateValidator - file exists: %t, returning %t\n", isValid, isValid)
+		return isValid
 	}
 
+	debugPrintf("DEBUG: rcloneTemplateValidator - value is not a predefined type or absolute path, returning false\n")
 	return false
 }
 
 // ValidateSettingsConfig validates the SettingsConfig struct.
 func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interface{}) error {
+	debugPrintf("\nDEBUG: ValidateSettingsConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
+	debugPrintf("DEBUG: ValidateSettingsConfig - registering custom validators\n")
 	RegisterCustomValidators(validate) //From generic.go
 
+	debugPrintf("DEBUG: ValidateSettingsConfig - registering dirpath validator\n")
 	err := validate.RegisterValidation("dirpath", dirPathValidator) // Register the dirpath validator
 	if err != nil {
-		return fmt.Errorf("failed to register dirpath validator: %w", err)
+		err := fmt.Errorf("failed to register dirpath validator: %w", err)
+		debugPrintf("DEBUG: ValidateSettingsConfig - %v\n", err)
+		return err
 	}
+	debugPrintf("DEBUG: ValidateSettingsConfig - registering rclone_template validator\n")
 	err = validate.RegisterValidation("rclone_template", rcloneTemplateValidator)
 	if err != nil {
-		return fmt.Errorf("failed to register rclone template validator: %w", err)
+		err := fmt.Errorf("failed to register rclone template validator: %w", err)
+		debugPrintf("DEBUG: ValidateSettingsConfig - %v\n", err)
+		return err
 	}
 	// Validate the struct.
+	debugPrintf("DEBUG: ValidateSettingsConfig - validating struct: %+v\n", config)
 	if err := validate.Struct(config); err != nil {
+		debugPrintf("DEBUG: ValidateSettingsConfig - struct validation error: %v\n", err)
 		return formatValidationError(err) // Use a helper function
 	}
 
 	// Now, validate nested structs explicitly.
+	debugPrintf("DEBUG: ValidateSettingsConfig - validating nested structs\n")
 	for _, remote := range config.Rclone.Remotes {
+		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote: %+v\n", remote)
 		if err := validate.Struct(remote); err != nil {
+			debugPrintf("DEBUG: ValidateSettingsConfig - remote validation error: %v\n", err)
 			return formatValidationError(err)
 		}
+		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote.Settings: %+v\n", remote.Settings)
 		if err := validate.Struct(remote.Settings); err != nil {
+			debugPrintf("DEBUG: ValidateSettingsConfig - remote.Settings validation error: %v\n", err)
 			return formatValidationError(err)
 		}
+		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote.Settings.VFSCache: %+v\n", remote.Settings.VFSCache)
 		if err := validate.Struct(remote.Settings.VFSCache); err != nil {
+			debugPrintf("DEBUG: ValidateSettingsConfig - remote.Settings.VFSCache validation error: %v\n", err)
 			return formatValidationError(err)
 		}
 
 		// Additional validation for rclone remote existence (except for NFS).
 		if strings.ToLower(remote.Settings.Template) != "nfs" {
+			debugPrintf("DEBUG: ValidateSettingsConfig - template is not NFS, validating rclone remote existence\n")
 			// Split the remote string into name and path.
 			parts := strings.SplitN(remote.Remote, ":", 2)
 			if len(parts) != 2 {
-				return fmt.Errorf("invalid remote format: '%s', expected 'remote:path'", remote.Remote)
+				err := fmt.Errorf("invalid remote format: '%s', expected 'remote:path'", remote.Remote)
+				debugPrintf("DEBUG: ValidateSettingsConfig - %v\n", err)
+				return err
 			}
 			remoteName := parts[0]
+			debugPrintf("DEBUG: ValidateSettingsConfig - remoteName: '%s'\n", remoteName)
 
 			if err := validateRcloneRemote(remoteName); err != nil {
+				debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote returned error: %v\n", err)
 				//Only return if rclone and the user and the config all exist
 				if errors.Is(err, ErrRcloneNotInstalled) || errors.Is(err, ErrSystemUserNotFound) || errors.Is(err, ErrRcloneConfigNotFound) {
 					fmt.Printf("\nWarning: rclone remote validation skipped: %v\n", err)
 				} else {
 					return err
 				}
+			} else {
+				debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote successful\n")
 			}
+		} else {
+			debugPrintf("DEBUG: ValidateSettingsConfig - template is NFS, skipping rclone remote existence validation\n")
 		}
 	}
 
-	return checkExtraFields(inputMap, config)
+	// Check for extra fields
+	debugPrintf("DEBUG: ValidateSettingsConfig - checking for extra fields\n")
+	if err := checkExtraFields(inputMap, config); err != nil {
+		debugPrintf("DEBUG: ValidateSettingsConfig - checkExtraFields returned error: %v\n", err)
+		return err
+	}
+
+	debugPrintf("DEBUG: ValidateSettingsConfig - validation successful\n")
+	return nil
 }
 
 // formatValidationError formats validation errors for better readability.
 func formatValidationError(err error) error {
+	debugPrintf("DEBUG: formatValidationError called with error: %v\n", err)
 	var validationErrors validator.ValidationErrors
 	if errors.As(err, &validationErrors) {
 		var sb strings.Builder
 		for _, e := range validationErrors {
 			lowercaseField := strings.ToLower(e.Field())
+			debugPrintf("DEBUG: formatValidationError - validation error on field '%s', tag '%s', value '%v', param '%s'\n", lowercaseField, e.Tag(), e.Value(), e.Param())
 			switch e.Tag() {
 			case "required":
 				sb.WriteString(fmt.Sprintf("field '%s' is required\n", lowercaseField))
@@ -152,29 +194,37 @@ func formatValidationError(err error) error {
 				sb.WriteString(fmt.Sprintf("field '%s' is invalid: %s\n", lowercaseField, e.Error()))
 			}
 		}
-		return fmt.Errorf(sb.String())
+		formattedError := fmt.Errorf(sb.String())
+		debugPrintf("DEBUG: formatValidationError - formatted error: %v\n", formattedError)
+		return formattedError
 	}
+	debugPrintf("DEBUG: formatValidationError - error is not a validation error, returning original error\n")
 	return err // Return the original error if it's not a validator.ValidationErrors
 }
 
 // custom validator for directory paths
 func dirPathValidator(fl validator.FieldLevel) bool {
 	dirPath := fl.Field().String()
+	debugPrintf("DEBUG: dirPathValidator called with dirPath: '%s'\n", dirPath)
 
 	// Check if the path is absolute or relative
 	if !filepath.IsAbs(dirPath) {
+		debugPrintf("DEBUG: dirPathValidator - path is relative, making it absolute\n")
 		// If relative, make it absolute based on the current working directory
 		wd, err := os.Getwd()
 		if err != nil {
+			debugPrintf("DEBUG: dirPathValidator - error getting working directory: %v, returning false\n", err)
 			return false // If we can't determine the working dir, consider it invalid
 		}
 		dirPath = filepath.Join(wd, dirPath)
+		debugPrintf("DEBUG: dirPathValidator - absolute path: '%s'\n", dirPath)
 	}
 	// We don't check if the dir exists, only that the path is valid
 
 	// Regular expression to check if it's a valid path (allows any characters)
 	// Simplified regex, no need to check for starting slash separately.
 	match, _ := regexp.MatchString(`(?:[^/]*/)*[^/]*$`, dirPath)
+	debugPrintf("DEBUG: dirPathValidator - path match regex: %t, returning %t\n", match, match)
 	return match
 }
 
@@ -187,56 +237,82 @@ var (
 
 // validateRcloneRemote checks if the given rclone remote exists.
 func validateRcloneRemote(remoteName string) error {
+	debugPrintf("DEBUG: validateRcloneRemote called with remoteName: '%s'\n", remoteName)
 	// Check if rclone is installed.
 	_, err := exec.LookPath("rclone")
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrRcloneNotInstalled, err)
+		err := fmt.Errorf("%w: %v", ErrRcloneNotInstalled, err)
+		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		return err
 	}
+	debugPrintf("DEBUG: validateRcloneRemote - rclone is installed\n")
 	// Get the Saltbox user.
 	rcloneUser, err := utils.GetSaltboxUser()
 	if err != nil {
 		fmt.Printf("\nWarning: rclone remote validation skipped: could not retrieve saltbox user: %v\n", err)
+		debugPrintf("DEBUG: validateRcloneRemote - error getting Saltbox user: %v\n", err)
 		return ErrSystemUserNotFound
 	}
+	debugPrintf("DEBUG: validateRcloneRemote - Saltbox user: '%s'\n", rcloneUser)
 
 	// Check if the user exists on the system.
 	_, err = user.Lookup(rcloneUser)
 	if err != nil {
+		debugPrintf("DEBUG: validateRcloneRemote - error looking up user\n")
 		var unknownUserError user.UnknownUserError
 		if errors.As(err, &unknownUserError) {
-			return fmt.Errorf("%w: user '%s' does not exist", ErrSystemUserNotFound, rcloneUser)
+			err := fmt.Errorf("%w: user '%s' does not exist", ErrSystemUserNotFound, rcloneUser)
+			debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+			return err
 		}
 		// Some other error occurred during user lookup.
-		return fmt.Errorf("error looking up user '%s': %w", rcloneUser, err)
+		err := fmt.Errorf("error looking up user '%s': %w", rcloneUser, err)
+		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		return err
 	}
+	debugPrintf("DEBUG: validateRcloneRemote - user exists\n")
 
 	// Define the rclone config path (standard location).
 	rcloneConfigPath := fmt.Sprintf("/home/%s/.config/rclone/rclone.conf", rcloneUser)
+	debugPrintf("DEBUG: validateRcloneRemote - rcloneConfigPath: '%s'\n", rcloneConfigPath)
 
 	// Check if the rclone config file exists
 	_, err = os.Stat(rcloneConfigPath)
 	if os.IsNotExist(err) {
-		return fmt.Errorf("%w: %v", ErrRcloneConfigNotFound, err)
+		err := fmt.Errorf("%w: %v", ErrRcloneConfigNotFound, err)
+		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		return err
 	}
+	debugPrintf("DEBUG: validateRcloneRemote - rclone config file exists\n")
 
 	cmd := exec.Command("sudo", "-u", rcloneUser, "rclone", "config", "show")
 	cmd.Env = append(os.Environ(), fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath))
+	debugPrintf("DEBUG: validateRcloneRemote - command: '%s'\n", cmd.String())
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, output)
+		err := fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, output)
+		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		return err
 	}
+	debugPrintf("DEBUG: validateRcloneRemote - rclone config show output: '%s'\n", string(output))
 
 	// Use a regular expression to search for the remote within the rclone config show output.
 	remoteRegex := fmt.Sprintf(`(?m)^\[%s\]$`, regexp.QuoteMeta(remoteName))
 	re, err := regexp.Compile(remoteRegex)
 	if err != nil {
-		return fmt.Errorf("failed to compile regex for remote name: %w", err)
+		err := fmt.Errorf("failed to compile regex for remote name: %w", err)
+		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		return err
 	}
+	debugPrintf("DEBUG: validateRcloneRemote - remoteRegex: '%s'\n", remoteRegex)
 
 	if !re.MatchString(string(output)) {
-		return fmt.Errorf("rclone remote '%s' not found in configuration", remoteName)
+		err := fmt.Errorf("rclone remote '%s' not found in configuration", remoteName)
+		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		return err
 	}
 
+	debugPrintf("DEBUG: validateRcloneRemote - rclone remote exists\n")
 	return nil
 }
