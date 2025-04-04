@@ -843,6 +843,29 @@ func CopyDefaultConfigFiles(verbose bool) error {
 		return fmt.Errorf("error listing default config files: %w", err)
 	}
 
+	processFile := func(srcPath, destPath, baseName, destName string) error {
+		srcFile, err := os.Open(srcPath)
+		if err != nil {
+			return fmt.Errorf("error opening source file %s: %w", srcPath, err)
+		}
+		defer srcFile.Close()
+
+		destFile, err := os.Create(destPath)
+		if err != nil {
+			return fmt.Errorf("error creating destination file %s: %w", destPath, err)
+		}
+		defer destFile.Close()
+
+		// Set Permissions
+		if err := os.Chmod(destPath, 0755); err != nil {
+			return fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err)
+		}
+		if _, err := io.Copy(destFile, srcFile); err != nil {
+			return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)
+		}
+		return nil
+	}
+
 	if verbose {
 		fmt.Println("--- Copying Default Configuration Files (Verbose) ---")
 		fmt.Printf("Defaults directory: %s\n", defaultsDir)
@@ -859,27 +882,8 @@ func CopyDefaultConfigFiles(verbose bool) error {
 			if _, err := os.Stat(destPath); os.IsNotExist(err) {
 				// Destination file doesn't exist, proceed with copying.
 				fmt.Printf("Copying %s...\n", baseName)
-				srcFile, err := os.Open(srcPath)
-				if err != nil {
-					fmt.Errorf("error opening source file %s: %w", srcPath, err)
-					continue
-				}
-				defer srcFile.Close()
-
-				destFile, err := os.Create(destPath)
-				if err != nil {
-					fmt.Errorf("error creating destination file %s: %w", destPath, err)
-					continue
-				}
-				defer destFile.Close()
-
-				// Set Permissions
-				if err := os.Chmod(destPath, 0755); err != nil {
-					fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err)
-					continue
-				}
-				if _, err := io.Copy(destFile, srcFile); err != nil {
-					fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)
+				if err := processFile(srcPath, destPath, baseName, destName); err != nil {
+					fmt.Errorf("%v", err)
 					continue
 				}
 			} else if err != nil {
@@ -901,28 +905,9 @@ func CopyDefaultConfigFiles(verbose bool) error {
 			if _, err := os.Stat(destPath); os.IsNotExist(err) {
 				// Destination file doesn't exist, proceed with copying.
 				if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Copying %s", baseName), func() error {
-					srcFile, err := os.Open(srcPath)
-					if err != nil {
-						return fmt.Errorf("error opening source file %s: %w", srcPath, err)
-					}
-					defer srcFile.Close()
-
-					destFile, err := os.Create(destPath)
-					if err != nil {
-						return fmt.Errorf("error creating destination file %s: %w", destPath, err)
-					}
-					defer destFile.Close()
-
-					// Set Permissions
-					if err := os.Chmod(destPath, 0755); err != nil {
-						return fmt.Errorf("error setting permissions on destination file: %w", err)
-					}
-					if _, err := io.Copy(destFile, srcFile); err != nil {
-						return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)
-					}
-					return nil
+					return processFile(srcPath, destPath, baseName, destName)
 				}); err != nil {
-					return err // RunTaskWithSpinner already formats error, no need to wrap again
+					return err
 				}
 			} else if err != nil {
 				// os.Stat error other than IsNotExist
