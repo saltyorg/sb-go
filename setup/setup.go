@@ -189,8 +189,8 @@ func ConfigureLocale(verbose bool) {
 			fmt.Printf("Locale %s is already installed.\n", targetLocale)
 		}
 
-		fmt.Printf("Setting system-wide locale to %s using update-locale...\n", targetLocale)
-		cmdUpdateLocale := exec.Command("update-locale", "LC_ALL="+targetLocale)
+		fmt.Printf("Setting system-wide locale (LC_ALL and LANG) to %s using update-locale...\n", targetLocale)
+		cmdUpdateLocale := exec.Command("update-locale", "LC_ALL="+targetLocale, "LANG="+targetLocale)
 		cmdUpdateLocale.Stdout = os.Stdout
 		cmdUpdateLocale.Stderr = os.Stderr
 		if err := cmdUpdateLocale.Run(); err != nil {
@@ -203,7 +203,11 @@ func ConfigureLocale(verbose bool) {
 			fmt.Printf("Warning: Error reading /etc/default/locale: %v\n", err)
 		}
 
-		if !strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale) {
+		// Check for both LC_ALL and LANG settings
+		lcAllSet := strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale)
+		langSet := strings.Contains(string(localeFileContent), "LANG="+targetLocale)
+
+		if !lcAllSet || !langSet {
 			fmt.Println("Locale not set correctly, reconfiguring locales...")
 			cmdReconfigureLocales := exec.Command("dpkg-reconfigure", "locales")
 			cmdReconfigureLocales.Stdout = os.Stdout
@@ -218,12 +222,21 @@ func ConfigureLocale(verbose bool) {
 			if err != nil && !os.IsNotExist(err) {
 				fmt.Printf("Warning: Error reading /etc/default/locale after reconfigure: %v\n", err)
 			}
+
+			// Check again for both variables
+			lcAllSet = strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale)
+			langSet = strings.Contains(string(localeFileContent), "LANG="+targetLocale)
 		}
 
-		if !strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale) {
-			fmt.Printf("Warning: Locale still not set correctly in /etc/default/locale\n")
+		if !lcAllSet || !langSet {
+			if !lcAllSet {
+				fmt.Printf("Warning: LC_ALL not set correctly in /etc/default/locale\n")
+			}
+			if !langSet {
+				fmt.Printf("Warning: LANG not set correctly in /etc/default/locale\n")
+			}
 		} else {
-			fmt.Printf("Locale set to %s\n", targetLocale)
+			fmt.Printf("Locales LC_ALL and LANG both set to %s\n", targetLocale)
 		}
 
 		fmt.Println("--- Locale Configuration (Verbose) Complete ---")
@@ -240,12 +253,12 @@ func ConfigureLocale(verbose bool) {
 			}
 		}
 
-		// Use update-locale to set the system-wide locale.
-		if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Setting system-wide locale to %s", targetLocale), func() error {
-			cmdUpdateLocale := exec.Command("update-locale", "LC_ALL="+targetLocale)
+		// Use update-locale to set both LANG and LC_ALL system-wide locale variables
+		if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Setting system-wide locale (LC_ALL and LANG) to %s", targetLocale), func() error {
+			cmdUpdateLocale := exec.Command("update-locale", "LC_ALL="+targetLocale, "LANG="+targetLocale)
 			return cmdUpdateLocale.Run()
 		}); err != nil {
-			// Don't exit here; try dpkg-reconfigure as a fallback.  Log with an info spinner.
+			// Don't exit here; try dpkg-reconfigure as a fallback. Log with an info spinner.
 			_ = spinners.RunInfoSpinner(fmt.Sprintf("Attempting to set locale with update-locale failed: %v", err))
 		}
 
@@ -256,7 +269,11 @@ func ConfigureLocale(verbose bool) {
 			_ = spinners.RunWarningSpinner(fmt.Sprintf("Error reading /etc/default/locale: %v", err))
 		}
 
-		if !strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale) {
+		// Check for both LC_ALL and LANG settings
+		lcAllSet := strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale)
+		langSet := strings.Contains(string(localeFileContent), "LANG="+targetLocale)
+
+		if !lcAllSet || !langSet {
 			// Use a spinner for dpkg-reconfigure.
 			if err := spinners.RunTaskWithSpinner("Locale not set correctly, reconfiguring locales...", func() error {
 				cmdReconfigureLocales := exec.Command("dpkg-reconfigure", "locales")
@@ -271,13 +288,22 @@ func ConfigureLocale(verbose bool) {
 			if err != nil && !os.IsNotExist(err) {
 				_ = spinners.RunWarningSpinner(fmt.Sprintf("Error reading /etc/default/locale after reconfigure: %v", err))
 			}
+
+			// Check again for both variables
+			lcAllSet = strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale)
+			langSet = strings.Contains(string(localeFileContent), "LANG="+targetLocale)
 		}
 
-		if !strings.Contains(string(localeFileContent), "LC_ALL="+targetLocale) {
-			_ = spinners.RunWarningSpinner(fmt.Sprintf("Warning: Locale still not set correctly in /etc/default/locale"))
+		if !lcAllSet || !langSet {
+			if !lcAllSet {
+				_ = spinners.RunWarningSpinner("Warning: LC_ALL not set correctly in /etc/default/locale")
+			}
+			if !langSet {
+				_ = spinners.RunWarningSpinner("Warning: LANG not set correctly in /etc/default/locale")
+			}
 		} else {
-			//Use an info spinner, to be consistent with other successful steps
-			_ = spinners.RunInfoSpinner(fmt.Sprintf("Locale set to %s", targetLocale))
+			// Use an info spinner, to be consistent with other successful steps
+			_ = spinners.RunInfoSpinner(fmt.Sprintf("Locales LC_ALL and LANG both set to %s", targetLocale))
 		}
 	}
 }
