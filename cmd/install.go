@@ -113,6 +113,10 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 		}
 	}
 
+	if verbosity > 0 {
+		fmt.Println("DEBUG: No suggestions needed, continuing")
+	}
+
 	ansibleBinaryPath := constants.AnsiblePlaybookBinaryPath
 
 	if len(saltboxTags) > 0 {
@@ -155,7 +159,7 @@ func runPlaybook(repoPath, playbookPath string, tags []string, ansibleBinaryPath
 
 	allArgs = append(allArgs, extraArgs...)
 
-	err := ansible.RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath, allArgs, false)
+	err := ansible.RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath, allArgs, true)
 	if err != nil {
 		return fmt.Errorf("error running playbook: %w", err)
 	}
