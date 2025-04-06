@@ -31,6 +31,7 @@ func init() {
 }
 
 func handleUpdate() error {
+	doSelfUpdate(false, verbose)
 	if err := updateSaltbox(verbose); err != nil {
 		return fmt.Errorf("error updating Saltbox: %w", err)
 	}
