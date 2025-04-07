@@ -22,7 +22,7 @@ var selfUpdateCmd = &cobra.Command{
 	Long:  `Update Saltbox CLI`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// When called from command, pass along the debug flag value
-		doSelfUpdate(true, debug)
+		doSelfUpdate(false, debug)
 	},
 }
 
