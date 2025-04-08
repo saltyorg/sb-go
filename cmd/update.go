@@ -44,22 +44,19 @@ func handleUpdate() error {
 
 // updateSaltbox updates the Saltbox repository and configuration.
 func updateSaltbox(verbose bool) error {
-	if err := spinners.RunInfoSpinner("Validating Saltbox configuration"); err != nil {
-		return err
-	}
-
-	err := validate.ValidateAllConfigs(verbose)
-	if err != nil {
-		fmt.Println("Saltbox update cancelled")
-		return fmt.Errorf("error validating configs: %w", err)
-	}
-
 	if verbose {
 		fmt.Println("--- Updating Saltbox (Verbose) ---")
 
 		fmt.Println("Checking Saltbox repository path...")
 		if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
 			return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
+		}
+
+		fmt.Println("Validating Saltbox configuration")
+		err := validate.ValidateAllConfigs(verbose)
+		if err != nil {
+			fmt.Println("Saltbox update cancelled")
+			return fmt.Errorf("error validating configs: %w", err)
 		}
 
 		fmt.Println("Getting Saltbox user...")
@@ -126,6 +123,16 @@ func updateSaltbox(verbose bool) error {
 
 		if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
 			return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
+		}
+
+		if err := spinners.RunInfoSpinner("Validating Saltbox configuration"); err != nil {
+			return err
+		}
+
+		err := validate.ValidateAllConfigs(verbose)
+		if err != nil {
+			fmt.Println("Saltbox update cancelled")
+			return fmt.Errorf("error validating configs: %w", err)
 		}
 
 		saltboxUser, err := utils.GetSaltboxUser()
