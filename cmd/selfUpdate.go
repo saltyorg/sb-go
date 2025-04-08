@@ -22,7 +22,7 @@ var selfUpdateCmd = &cobra.Command{
 	Long:  `Update Saltbox CLI`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// When called from command, pass along the debug flag value
-		doSelfUpdate(false, debug)
+		doSelfUpdate(false, debug, "")
 	},
 }
 
@@ -48,7 +48,7 @@ func promptForConfirmation(prompt string) bool {
 	return response == "y" || response == "yes"
 }
 
-func doSelfUpdate(autoUpdate bool, verbose bool) {
+func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 	if verbose {
 		fmt.Println("Debug: Starting self-update process")
 		fmt.Printf("Debug: Current version: %s\n", runtime.Version)
@@ -114,5 +114,11 @@ func doSelfUpdate(autoUpdate bool, verbose bool) {
 		fmt.Printf("Debug: Update successful - previous version: %s, new version: %s\n", v, result.Version)
 	}
 	fmt.Println("Successfully updated sb CLI to version:", result.Version)
-	fmt.Println()
+
+	// Print optional message if provided
+	if optionalMessage != "" {
+		fmt.Println(optionalMessage)
+	}
+	fmt.Println("")
+	os.Exit(0)
 }
