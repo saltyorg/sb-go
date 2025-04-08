@@ -48,23 +48,30 @@ func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]interface{}) err
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
-				lowercaseField := strings.ToLower(e.Field())
-				debugPrintf("DEBUG: ValidateMOTDConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", lowercaseField, e.Tag(), e.Value(), e.Param())
+				// Get the full path to the field based on the namespace
+				fieldPath := e.Namespace()
+				// Remove the "Config." prefix to make the error message cleaner
+				fieldPath = strings.Replace(fieldPath, "MOTDConfig.", "", 1)
+				// Convert to lowercase for consistency
+				fieldPath = strings.ToLower(fieldPath)
+
+				debugPrintf("DEBUG: ValidateMOTDConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", fieldPath, e.Tag(), e.Value(), e.Param())
+
 				switch e.Tag() {
 				case "required":
-					err := fmt.Errorf("field '%s' is required", lowercaseField)
+					err := fmt.Errorf("field '%s' is required", fieldPath)
 					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
 					return err
 				case "url":
-					err := fmt.Errorf("field '%s' must be a valid URL", lowercaseField)
+					err := fmt.Errorf("field '%s' must be a valid URL", fieldPath)
 					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
 					return err
 				case "required_with":
-					err := fmt.Errorf("field '%s' is required when %s is provided", lowercaseField, e.Param())
+					err := fmt.Errorf("field '%s' is required when %s is provided", fieldPath, e.Param())
 					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
 					return err
 				default:
-					err := fmt.Errorf("field '%s' is invalid: %s", lowercaseField, e.Error())
+					err := fmt.Errorf("field '%s' is invalid: %s", fieldPath, e.Error())
 					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
 					return err
 				}

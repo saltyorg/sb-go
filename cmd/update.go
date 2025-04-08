@@ -9,6 +9,7 @@ import (
 	"github.com/saltyorg/sb-go/git"
 	"github.com/saltyorg/sb-go/spinners"
 	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/validate"
 	"github.com/saltyorg/sb-go/venv"
 	"os"
 
@@ -43,6 +44,15 @@ func handleUpdate() error {
 
 // updateSaltbox updates the Saltbox repository and configuration.
 func updateSaltbox(verbose bool) error {
+	if err := spinners.RunInfoSpinner("Validating Saltbox configuration"); err != nil {
+		return err
+	}
+
+	err := validate.ValidateAllConfigs(verbose)
+	if err != nil {
+		return fmt.Errorf("error validating configs: %w", err)
+	}
+
 	if verbose {
 		fmt.Println("--- Updating Saltbox (Verbose) ---")
 
@@ -86,16 +96,6 @@ func updateSaltbox(verbose bool) error {
 		fmt.Println("Downloading and installing Saltbox fact...")
 		if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
 			return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
-		}
-
-		tags := []string{"--tags", "settings"}
-		skipTags := []string{"--skip-tags", "sanity-check,pre-tasks"}
-
-		ansibleArgs := append(tags, skipTags...)
-
-		fmt.Println("Running Ansible Playbook to upgrade configuration files...")
-		if err := ansible.RunAnsiblePlaybook(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, ansibleArgs, verbose); err != nil {
-			return fmt.Errorf("error running ansible playbook: %w", err)
 		}
 
 		fmt.Println("Getting new Git commit hash...")
@@ -155,17 +155,6 @@ func updateSaltbox(verbose bool) error {
 
 		if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
 			return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
-		}
-
-		tags := []string{"--tags", "settings"}
-		skipTags := []string{"--skip-tags", "sanity-check,pre-tasks"}
-
-		ansibleArgs := append(tags, skipTags...)
-
-		if err := spinners.RunTaskWithSpinner("Running Ansible Playbook to upgrade configuration files", func() error {
-			return ansible.RunAnsiblePlaybook(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, ansibleArgs, verbose)
-		}); err != nil {
-			return fmt.Errorf("error running ansible playbook: %w", err)
 		}
 
 		newCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)

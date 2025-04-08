@@ -85,19 +85,26 @@ func ValidateHetznerVLANConfig(config *HetznerVLANConfig, inputMap map[string]in
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
-				lowercaseField := strings.ToLower(e.Field())
-				debugPrintf("DEBUG: ValidateHetznerVLANConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", lowercaseField, e.Tag(), e.Value(), e.Param())
+				// Get the full path to the field based on the namespace
+				fieldPath := e.Namespace()
+				// Remove the "Config." prefix to make the error message cleaner
+				fieldPath = strings.Replace(fieldPath, "HetznerVLANConfig.", "", 1)
+				// Convert to lowercase for consistency
+				fieldPath = strings.ToLower(fieldPath)
+
+				debugPrintf("DEBUG: ValidateHetznerVLANConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", fieldPath, e.Tag(), e.Value(), e.Param())
+
 				switch e.Tag() {
 				case "required":
-					err := fmt.Errorf("field '%s' is required", lowercaseField)
+					err := fmt.Errorf("field '%s' is required", fieldPath)
 					debugPrintf("DEBUG: ValidateHetznerVLANConfig - %v\n", err)
 					return err
 				case "whole_number":
-					err := fmt.Errorf("field '%s' must be a whole number (integer or string representation of an integer), got: %s", lowercaseField, e.Value())
+					err := fmt.Errorf("field '%s' must be a whole number (integer or string representation of an integer), got: %s", fieldPath, e.Value())
 					debugPrintf("DEBUG: ValidateHetznerVLANConfig - %v\n", err)
 					return err
 				default:
-					err := fmt.Errorf("field '%s' is invalid: %s", lowercaseField, e.Error())
+					err := fmt.Errorf("field '%s' is invalid: %s", fieldPath, e.Error())
 					debugPrintf("DEBUG: ValidateHetznerVLANConfig - %v\n", err)
 					return err
 				}

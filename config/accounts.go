@@ -115,27 +115,35 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
-				lowercaseField := strings.ToLower(e.Field())
-				debugPrintf("DEBUG: ValidateConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", lowercaseField, e.Tag(), e.Value(), e.Param())
+				// Get the full path to the field based on the namespace
+				fieldPath := e.Namespace()
+				// Remove the "Config." prefix to make the error message cleaner
+				fieldPath = strings.Replace(fieldPath, "Config.", "", 1)
+				// Convert to lowercase for consistency
+				fieldPath = strings.ToLower(fieldPath)
+
+				debugPrintf("DEBUG: ValidateConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n",
+					fieldPath, e.Tag(), e.Value(), e.Param())
+
 				switch e.Tag() {
 				case "required":
-					return fmt.Errorf("field '%s' is required", lowercaseField)
+					return fmt.Errorf("field '%s' is required", fieldPath)
 				case "email":
-					return fmt.Errorf("field '%s' must be a valid email address, got: %s", lowercaseField, e.Value())
+					return fmt.Errorf("field '%s' must be a valid email address, got: %s", fieldPath, e.Value())
 				case "fqdn":
-					return fmt.Errorf("field '%s' must be a fully qualified domain name, got: %s", lowercaseField, e.Value())
+					return fmt.Errorf("field '%s' must be a fully qualified domain name, got: %s", fieldPath, e.Value())
 				case "min":
-					return fmt.Errorf("field '%s' must be at least %s characters long, got: %s", lowercaseField, e.Param(), e.Value())
+					return fmt.Errorf("field '%s' must be at least %s characters long, got: %s", fieldPath, e.Param(), e.Value())
 				case "ssh_key_or_url":
-					return fmt.Errorf("field '%s' must be a valid SSH public key or URL, got: %s", lowercaseField, e.Value())
+					return fmt.Errorf("field '%s' must be a valid SSH public key or URL, got: %s", fieldPath, e.Value())
 				case "ne":
-					return fmt.Errorf("field '%s' must not be equal to the default value: %s", lowercaseField, e.Value())
+					return fmt.Errorf("field '%s' must not be equal to the default value: %s", fieldPath, e.Value())
 				case "string":
-					return fmt.Errorf("field '%s' must be a string, got: %v", lowercaseField, e.Value())
+					return fmt.Errorf("field '%s' must be a string, got: %v", fieldPath, e.Value())
 				case "required_without_all":
-					return fmt.Errorf("either '%s' or its related fields must be provided", lowercaseField)
+					return fmt.Errorf("either '%s' or its related fields must be provided", fieldPath)
 				default:
-					return fmt.Errorf("field '%s' is invalid: %s", lowercaseField, e.Error())
+					return fmt.Errorf("field '%s' is invalid: %s", fieldPath, e.Error())
 				}
 			}
 		}

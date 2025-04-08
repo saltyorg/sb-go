@@ -66,7 +66,18 @@ func RunTaskWithSpinnerCustom(opts SpinnerOptions, taskFunc TaskFunc) error {
 
 // Internal function to handle the actual spinner logic.
 func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
-	p := tea.NewProgram(newSpinnerModel(opts, taskFunc))
+	// Create a channel to receive the task error
+	errCh := make(chan error, 1)
+
+	// Modify the task function to send the error to the channel
+	wrappedTaskFunc := func() error {
+		err := taskFunc()
+		errCh <- err // Send the error to the channel
+		return err
+	}
+
+	// Create and run the program with the wrapped task
+	p := tea.NewProgram(newSpinnerModel(opts, wrappedTaskFunc))
 
 	go func() {
 		sigCh := make(chan os.Signal, 1)
@@ -78,7 +89,9 @@ func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("failed to run spinner: %w", err)
 	}
-	return nil
+
+	// Get the task error from the channel
+	return <-errCh
 }
 
 // RunInfoSpinner prints an informational message.

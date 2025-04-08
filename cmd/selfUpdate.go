@@ -91,7 +91,8 @@ func doSelfUpdate(autoUpdate bool, verbose bool) {
 	// If autoUpdate is false, ask for confirmation
 	if !autoUpdate {
 		if !promptForConfirmation("Do you want to update") {
-			fmt.Println("Update cancelled")
+			fmt.Println("Update of sb CLI cancelled")
+			fmt.Println()
 			return
 		}
 	} else if verbose {

@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -110,26 +111,33 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interfac
 	debugPrintf("DEBUG: ValidateSettingsConfig - validating struct: %+v\n", config)
 	if err := validate.Struct(config); err != nil {
 		debugPrintf("DEBUG: ValidateSettingsConfig - struct validation error: %v\n", err)
-		return formatValidationError(err) // Use a helper function
+		return formatValidationError(err, config) // Pass the config to help with remote identification
+	}
+
+	// Check for extra fields
+	debugPrintf("DEBUG: ValidateSettingsConfig - checking for extra fields\n")
+	if err := checkExtraFields(inputMap, config); err != nil {
+		debugPrintf("DEBUG: ValidateSettingsConfig - checkExtraFields returned error: %v\n", err)
+		return err
 	}
 
 	// Now, validate nested structs explicitly.
 	debugPrintf("DEBUG: ValidateSettingsConfig - validating nested structs\n")
-	for _, remote := range config.Rclone.Remotes {
+	for i, remote := range config.Rclone.Remotes {
 		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote: %+v\n", remote)
 		if err := validate.Struct(remote); err != nil {
 			debugPrintf("DEBUG: ValidateSettingsConfig - remote validation error: %v\n", err)
-			return formatValidationError(err)
+			return formatRemoteValidationError(err, remote.Remote, i)
 		}
 		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote.Settings: %+v\n", remote.Settings)
 		if err := validate.Struct(remote.Settings); err != nil {
 			debugPrintf("DEBUG: ValidateSettingsConfig - remote.Settings validation error: %v\n", err)
-			return formatValidationError(err)
+			return formatRemoteValidationError(err, remote.Remote, i)
 		}
 		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote.Settings.VFSCache: %+v\n", remote.Settings.VFSCache)
 		if err := validate.Struct(remote.Settings.VFSCache); err != nil {
 			debugPrintf("DEBUG: ValidateSettingsConfig - remote.Settings.VFSCache validation error: %v\n", err)
-			return formatValidationError(err)
+			return formatRemoteValidationError(err, remote.Remote, i)
 		}
 
 		// Additional validation for rclone remote existence (except for NFS).
@@ -161,45 +169,165 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interfac
 		}
 	}
 
-	// Check for extra fields
-	debugPrintf("DEBUG: ValidateSettingsConfig - checking for extra fields\n")
-	if err := checkExtraFields(inputMap, config); err != nil {
-		debugPrintf("DEBUG: ValidateSettingsConfig - checkExtraFields returned error: %v\n", err)
-		return err
-	}
-
 	debugPrintf("DEBUG: ValidateSettingsConfig - validation successful\n")
 	return nil
 }
 
 // formatValidationError formats validation errors for better readability.
-func formatValidationError(err error) error {
+func formatValidationError(err error, config *SettingsConfig) error {
 	debugPrintf("DEBUG: formatValidationError called with error: %v\n", err)
 	var validationErrors validator.ValidationErrors
 	if errors.As(err, &validationErrors) {
 		var sb strings.Builder
+
+		// Group errors by remote
+		remoteErrors := make(map[string][]string)
+		generalErrors := []string{}
+
 		for _, e := range validationErrors {
-			lowercaseField := strings.ToLower(e.Field())
-			debugPrintf("DEBUG: formatValidationError - validation error on field '%s', tag '%s', value '%v', param '%s'\n", lowercaseField, e.Tag(), e.Value(), e.Param())
+			// Get the full path to the field based on the namespace
+			fieldPath := e.Namespace()
+
+			debugPrintf("DEBUG: formatValidationError - validation error on field '%s', tag '%s', value '%v', param '%s'\n",
+				fieldPath, e.Tag(), e.Value(), e.Param())
+
+			// Check if this is a remote-related error
+			remoteMatch := regexp.MustCompile(`Rclone\.Remotes\[(\d+)\]`).FindStringSubmatch(fieldPath)
+
+			// Convert struct field names to YAML field names for better user understanding
+			yamlFieldPath := convertToYAMLFieldPath(fieldPath)
+
+			var errorMsg string
 			switch e.Tag() {
 			case "required":
-				sb.WriteString(fmt.Sprintf("field '%s' is required\n", lowercaseField))
+				errorMsg = fmt.Sprintf("field '%s' is required", yamlFieldPath)
 			case "ansiblebool":
-				sb.WriteString(fmt.Sprintf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s\n", lowercaseField, e.Value()))
+				errorMsg = fmt.Sprintf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s",
+					yamlFieldPath, e.Value())
 			case "dirpath":
-				sb.WriteString(fmt.Sprintf("field '%s' must be a valid directory path, got: %s\n", lowercaseField, e.Value()))
+				errorMsg = fmt.Sprintf("field '%s' must be a valid directory path, got: %s",
+					yamlFieldPath, e.Value())
 			case "rclone_template":
-				sb.WriteString(fmt.Sprintf("field '%s' must be one of 'dropbox', 'google', 'sftp', 'nfs', or a valid absolute file path, got: %s\n", lowercaseField, e.Value()))
+				errorMsg = fmt.Sprintf("field '%s' must be one of 'dropbox', 'google', 'sftp', 'nfs', or a valid absolute file path, got: %s",
+					yamlFieldPath, e.Value())
 			default:
-				sb.WriteString(fmt.Sprintf("field '%s' is invalid: %s\n", lowercaseField, e.Error()))
+				errorMsg = fmt.Sprintf("field '%s' is invalid: %s", yamlFieldPath, e.Error())
+			}
+
+			// If this is a remote-specific error, add it to the appropriate group
+			if len(remoteMatch) > 1 {
+				remoteIndex := remoteMatch[1]
+				// Try to get a human-readable identifier for this remote
+				remoteIdentifier := fmt.Sprintf("remote #%s", remoteIndex)
+
+				// If we have access to the config struct, try to get the remote name
+				if config != nil && len(config.Rclone.Remotes) > 0 {
+					idx, _ := strconv.Atoi(remoteIndex)
+					if idx < len(config.Rclone.Remotes) {
+						remoteIdentifier = fmt.Sprintf("remote '%s'", config.Rclone.Remotes[idx].Remote)
+					}
+				}
+
+				remoteErrors[remoteIdentifier] = append(remoteErrors[remoteIdentifier], errorMsg)
+			} else {
+				generalErrors = append(generalErrors, errorMsg)
 			}
 		}
+
+		// Write general errors first
+		for _, errMsg := range generalErrors {
+			sb.WriteString(errMsg + "\n")
+		}
+
+		// Write remote-specific errors grouped by remote
+		if len(remoteErrors) > 0 {
+			for remoteIdentifier, errors := range remoteErrors {
+				sb.WriteString(fmt.Sprintf("\nErrors for %s:\n", remoteIdentifier))
+
+				for _, errMsg := range errors {
+					sb.WriteString("  - " + errMsg + "\n")
+				}
+			}
+		}
+
 		formattedError := fmt.Errorf(sb.String())
 		debugPrintf("DEBUG: formatValidationError - formatted error: %v\n", formattedError)
 		return formattedError
 	}
 	debugPrintf("DEBUG: formatValidationError - error is not a validation error, returning original error\n")
 	return err // Return the original error if it's not a validator.ValidationErrors
+}
+
+// formatRemoteValidationError formats validation errors specifically for remote validation
+func formatRemoteValidationError(err error, remoteName string, remoteIndex int) error {
+	debugPrintf("DEBUG: formatRemoteValidationError called with error: %v, remoteName: %s, remoteIndex: %d\n",
+		err, remoteName, remoteIndex)
+
+	var validationErrors validator.ValidationErrors
+	if errors.As(err, &validationErrors) {
+		var sb strings.Builder
+
+		sb.WriteString(fmt.Sprintf("Errors for remote '%s':\n", remoteName))
+
+		for _, e := range validationErrors {
+			fieldPath := e.Namespace()
+			debugPrintf("DEBUG: formatRemoteValidationError - validation error on field '%s', tag '%s', value '%v'\n",
+				fieldPath, e.Tag(), e.Value())
+
+			// Convert the struct field path to a meaningful YAML path
+			yamlFieldPath := convertToYAMLFieldPath(fieldPath)
+
+			var errorMsg string
+			switch e.Tag() {
+			case "required":
+				errorMsg = fmt.Sprintf("field '%s' is required", yamlFieldPath)
+			case "ansiblebool":
+				errorMsg = fmt.Sprintf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s",
+					yamlFieldPath, e.Value())
+			case "dirpath":
+				errorMsg = fmt.Sprintf("field '%s' must be a valid directory path, got: %s",
+					yamlFieldPath, e.Value())
+			case "rclone_template":
+				errorMsg = fmt.Sprintf("field '%s' must be one of 'dropbox', 'google', 'sftp', 'nfs', or a valid absolute file path, got: %s",
+					yamlFieldPath, e.Value())
+			default:
+				errorMsg = fmt.Sprintf("field '%s' is invalid: %s", yamlFieldPath, e.Error())
+			}
+
+			sb.WriteString("  - " + errorMsg + "\n")
+		}
+
+		formattedError := fmt.Errorf(sb.String())
+		debugPrintf("DEBUG: formatRemoteValidationError - formatted error: %v\n", formattedError)
+		return formattedError
+	}
+
+	return err
+}
+
+// convertToYAMLFieldPath converts internal struct field names to their YAML equivalents
+func convertToYAMLFieldPath(fieldPath string) string {
+	// First, handle rclone.remotes path pattern
+	remotePathPattern := regexp.MustCompile(`Rclone\.Remotes\[(\d+)\]`)
+	fieldPath = remotePathPattern.ReplaceAllString(fieldPath, "rclone.remotes[$1]")
+
+	// Extract the actual YAML path structure from the field path
+	// This preserves the hierarchical structure while converting to YAML names
+
+	// Convert camelCase to snake_case
+	re := regexp.MustCompile(`([a-z0-9])([A-Z])`)
+	fieldPath = re.ReplaceAllString(fieldPath, "${1}_${2}")
+	fieldPath = strings.ToLower(fieldPath)
+
+	// Remove struct names from the path
+	fieldPath = strings.Replace(fieldPath, "settings_config.", "", 1)
+	fieldPath = strings.Replace(fieldPath, "remote_config.", "", 1)
+	fieldPath = strings.Replace(fieldPath, "remote_settings.", "", 1)
+	fieldPath = strings.Replace(fieldPath, "vfs_cache_config.", "vfs_cache.", 1)
+	fieldPath = strings.Replace(fieldPath, "rclone_settings.", "rclone.", 1)
+	fieldPath = strings.Replace(fieldPath, "authelia_config.", "authelia.", 1)
+
+	return fieldPath
 }
 
 // custom validator for directory paths
