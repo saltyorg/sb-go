@@ -3,9 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/go-playground/validator/v10"
 	"strconv"
 	"strings"
+
+	"github.com/go-playground/validator/v10"
 )
 
 // HetznerVLANConfig represents the Hetzner VLAN configuration.

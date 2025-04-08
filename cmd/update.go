@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/saltyorg/sb-go/ansible"
 	"github.com/saltyorg/sb-go/cache"
 	"github.com/saltyorg/sb-go/constants"
@@ -11,8 +13,6 @@ import (
 	"github.com/saltyorg/sb-go/utils"
 	"github.com/saltyorg/sb-go/validate"
 	"github.com/saltyorg/sb-go/venv"
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +32,9 @@ func init() {
 }
 
 func handleUpdate() error {
+	// Set verbose mode for spinners
+	spinners.SetVerboseMode(verbose)
+
 	doSelfUpdate(false, verbose)
 	if err := updateSaltbox(verbose); err != nil {
 		return fmt.Errorf("error updating Saltbox: %w", err)
@@ -44,282 +47,146 @@ func handleUpdate() error {
 
 // updateSaltbox updates the Saltbox repository and configuration.
 func updateSaltbox(verbose bool) error {
-	if verbose {
-		fmt.Println("--- Updating Saltbox (Verbose) ---")
+	// Check if Saltbox repo exists
+	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
+		return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
+	}
 
-		fmt.Println("Checking Saltbox repository path...")
-		if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
-			return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
-		}
+	if err := spinners.RunInfoSpinner("Validating Saltbox configuration"); err != nil {
+		return err
+	}
 
-		fmt.Println("Validating Saltbox configuration")
-		err := validate.ValidateAllConfigs(verbose)
-		if err != nil {
-			fmt.Println("Saltbox update cancelled")
-			return fmt.Errorf("error validating configs: %w", err)
-		}
+	// Validate Saltbox configuration
+	err := validate.AllSaltboxConfigs(verbose)
+	if err != nil {
+		fmt.Println("Saltbox update cancelled")
+		return fmt.Errorf("error validating configs: %w", err)
+	}
 
-		fmt.Println("Getting Saltbox user...")
-		saltboxUser, err := utils.GetSaltboxUser()
-		if err != nil {
-			return fmt.Errorf("error getting saltbox user: %w", err)
-		}
-		fmt.Printf("Saltbox user: %s\n", saltboxUser)
+	// Get Saltbox user
+	saltboxUser, err := utils.GetSaltboxUser()
+	if err != nil {
+		return fmt.Errorf("error getting saltbox user: %w", err)
+	}
 
-		fmt.Println("Managing Ansible venv...")
-		if err := venv.ManageAnsibleVenv(false, saltboxUser, verbose); err != nil {
-			return fmt.Errorf("error managing Ansible venv: %w", err)
-		}
+	// Manage Ansible venv - this function already has internal spinners
+	if err := venv.ManageAnsibleVenv(false, saltboxUser, verbose); err != nil {
+		return fmt.Errorf("error managing Ansible venv: %w", err)
+	}
 
-		customCommands := [][]string{
-			{
-				"cp",
-				fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SaltboxRepoPath),
-				fmt.Sprintf("%s/ansible.cfg", constants.SaltboxRepoPath),
-			},
-		}
+	// Setup custom commands for git
+	customCommands := [][]string{
+		{
+			"cp",
+			fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SaltboxRepoPath),
+			fmt.Sprintf("%s/ansible.cfg", constants.SaltboxRepoPath),
+		},
+	}
 
-		fmt.Println("Getting old Git commit hash...")
-		oldCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting old commit hash: %w", err)
-		}
-		fmt.Printf("Old commit hash: %s\n", oldCommitHash)
+	// Get old commit hash
+	oldCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
+	if err != nil {
+		return fmt.Errorf("error getting old commit hash: %w", err)
+	}
 
-		fmt.Println("Fetching and resetting Git repository...")
-		if err := git.FetchAndReset(constants.SaltboxRepoPath, "master", saltboxUser, customCommands); err != nil {
-			return fmt.Errorf("error fetching and resetting git: %w", err)
-		}
+	// Fetch and reset git repo - this function already has internal spinners
+	if err := git.FetchAndReset(constants.SaltboxRepoPath, "master", saltboxUser, customCommands); err != nil {
+		return fmt.Errorf("error fetching and resetting git: %w", err)
+	}
 
-		fmt.Println("Downloading and installing Saltbox fact...")
-		if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
-			return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
-		}
+	// Download and install Saltbox fact - this function already has internal spinners
+	if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {
+		return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
+	}
 
-		fmt.Println("Getting new Git commit hash...")
-		newCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting new commit hash: %w", err)
-		}
-		fmt.Printf("New commit hash: %s\n", newCommitHash)
+	// Get new commit hash
+	newCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
+	if err != nil {
+		return fmt.Errorf("error getting new commit hash: %w", err)
+	}
 
-		if oldCommitHash != newCommitHash {
-			fmt.Println("Saltbox Commit Hash changed, updating tags cache...")
-			ansibleCache, err := cache.NewCache()
-			if err != nil {
-				return fmt.Errorf("error creating cache: %w", err)
-			}
-			if _, err := ansible.RunAndCacheAnsibleTags(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache); err != nil {
-				return fmt.Errorf("error running and caching ansible tags: %w", err)
-			}
-		}
-
-		fmt.Println("--- Saltbox Update Completed (Verbose) ---")
-
-	} else {
-		if err := spinners.RunInfoSpinner("Updating Saltbox"); err != nil {
+	// Update tags cache if commit hash changed
+	if oldCommitHash != newCommitHash {
+		if err := spinners.RunInfoSpinner("Saltbox Commit Hash changed, updating tags cache."); err != nil {
 			return err
 		}
-
-		if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
-			return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
-		}
-
-		if err := spinners.RunInfoSpinner("Validating Saltbox configuration"); err != nil {
-			return err
-		}
-
-		err := validate.ValidateAllConfigs(verbose)
+		ansibleCache, err := cache.NewCache()
 		if err != nil {
-			fmt.Println("Saltbox update cancelled")
-			return fmt.Errorf("error validating configs: %w", err)
+			return fmt.Errorf("error creating cache: %w", err)
 		}
-
-		saltboxUser, err := utils.GetSaltboxUser()
-		if err != nil {
-			return fmt.Errorf("error getting saltbox user: %w", err)
-		}
-
-		if err := venv.ManageAnsibleVenv(false, saltboxUser, verbose); err != nil {
-			return fmt.Errorf("error managing Ansible venv: %w", err)
-		}
-
-		customCommands := [][]string{
-			{
-				"cp",
-				fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SaltboxRepoPath),
-				fmt.Sprintf("%s/ansible.cfg", constants.SaltboxRepoPath),
-			},
-		}
-
-		oldCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting old commit hash: %w", err)
-		}
-
-		if err := git.FetchAndReset(constants.SaltboxRepoPath, "master", saltboxUser, customCommands); err != nil {
-			return fmt.Errorf("error fetching and resetting git: %w", err)
-		}
-
-		if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
-			return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
-		}
-
-		newCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting new commit hash: %w", err)
-		}
-
-		if oldCommitHash != newCommitHash {
-			if err := spinners.RunInfoSpinner("Saltbox Commit Hash changed, updating tags cache."); err != nil {
-				return err
-			}
-			ansibleCache, err := cache.NewCache()
-			if err != nil {
-				return fmt.Errorf("error creating cache: %w", err)
-			}
-			if _, err := ansible.RunAndCacheAnsibleTags(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache); err != nil {
-				return fmt.Errorf("error running and caching ansible tags: %w", err)
-			}
-		}
-
-		if err := spinners.RunInfoSpinner("Saltbox Update Completed"); err != nil {
-			return err
+		if _, err := ansible.RunAndCacheAnsibleTags(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache); err != nil {
+			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}
-	return nil
+
+	// Final success message
+	return spinners.RunInfoSpinner("Saltbox Update Completed")
 }
 
 // updateSandbox updates the Sandbox repository and configuration.
 func updateSandbox(verbose bool) error {
-	if verbose {
-		fmt.Println("--- Updating Sandbox (Verbose) ---")
+	// Check if Sandbox repo exists
+	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
+		return fmt.Errorf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)
+	}
 
-		fmt.Println("Checking Sandbox repository path...")
-		if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
-			return fmt.Errorf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)
-		}
+	// Get Saltbox user
+	saltboxUser, err := utils.GetSaltboxUser()
+	if err != nil {
+		return fmt.Errorf("error getting saltbox user: %w", err)
+	}
 
-		fmt.Println("Getting Saltbox user...")
-		saltboxUser, err := utils.GetSaltboxUser()
-		if err != nil {
-			return fmt.Errorf("error getting saltbox user: %w", err)
-		}
-		fmt.Printf("Saltbox user: %s\n", saltboxUser)
+	// Setup custom commands for git
+	customCommands := [][]string{
+		{
+			"cp",
+			fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SandboxRepoPath),
+			fmt.Sprintf("%s/ansible.cfg", constants.SandboxRepoPath),
+		},
+	}
 
-		customCommands := [][]string{
-			{
-				"cp",
-				fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SandboxRepoPath),
-				fmt.Sprintf("%s/ansible.cfg", constants.SandboxRepoPath),
-			},
-		}
+	// Get old commit hash
+	oldCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
+	if err != nil {
+		return fmt.Errorf("error getting old commit hash: %w", err)
+	}
 
-		fmt.Println("Getting old Git commit hash...")
-		oldCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting old commit hash: %w", err)
-		}
-		fmt.Printf("Old commit hash: %s\n", oldCommitHash)
+	// Fetch and reset git repo - this function already has internal spinners
+	if err := git.FetchAndReset(constants.SandboxRepoPath, "master", saltboxUser, customCommands); err != nil {
+		return fmt.Errorf("error fetching and resetting git: %w", err)
+	}
 
-		fmt.Println("Fetching and resetting Git repository...")
-		if err := git.FetchAndReset(constants.SandboxRepoPath, "master", saltboxUser, customCommands); err != nil {
-			return fmt.Errorf("error fetching and resetting git: %w", err)
-		}
+	// Run Ansible playbook to upgrade configuration files
+	tags := []string{"--tags", "settings"}
+	skipTags := []string{"--skip-tags", "sanity-check,pre-tasks"}
+	ansibleArgs := append(tags, skipTags...)
 
-		tags := []string{"--tags", "settings"}
-		skipTags := []string{"--skip-tags", "sanity-check,pre-tasks"}
+	if err := spinners.RunTaskWithSpinner("Running Ansible Playbook to upgrade configuration files", func() error {
+		return ansible.RunAnsiblePlaybook(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, ansibleArgs, verbose)
+	}); err != nil {
+		return fmt.Errorf("error running ansible playbook: %w", err)
+	}
 
-		ansibleArgs := append(tags, skipTags...)
+	// Get new commit hash
+	newCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
+	if err != nil {
+		return fmt.Errorf("error getting new commit hash: %w", err)
+	}
 
-		fmt.Println("Running Ansible Playbook to upgrade configuration files...")
-		if err := ansible.RunAnsiblePlaybook(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, ansibleArgs, verbose); err != nil {
-			return fmt.Errorf("error running ansible playbook: %w", err)
-		}
-
-		fmt.Println("Getting new Git commit hash...")
-		newCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting new commit hash: %w", err)
-		}
-		fmt.Printf("New commit hash: %s\n", newCommitHash)
-
-		if oldCommitHash != newCommitHash {
-			fmt.Println("Sandbox Commit Hash changed, updating tags cache...")
-			ansibleCache, err := cache.NewCache()
-			if err != nil {
-				return fmt.Errorf("error creating cache: %w", err)
-			}
-			if _, err := ansible.RunAndCacheAnsibleTags(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache); err != nil {
-				return fmt.Errorf("error running and caching ansible tags: %w", err)
-			}
-		}
-
-		fmt.Println("--- Sandbox Update Completed (Verbose) ---")
-
-	} else {
-		if err := spinners.RunInfoSpinner("Updating Sandbox"); err != nil {
+	// Update tags cache if commit hash changed
+	if oldCommitHash != newCommitHash {
+		if err := spinners.RunInfoSpinner("Sandbox Commit Hash changed, updating tags cache."); err != nil {
 			return err
 		}
-
-		if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
-			return fmt.Errorf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)
-		}
-
-		saltboxUser, err := utils.GetSaltboxUser()
+		ansibleCache, err := cache.NewCache()
 		if err != nil {
-			return fmt.Errorf("error getting saltbox user: %w", err)
+			return fmt.Errorf("error creating cache: %w", err)
 		}
-
-		customCommands := [][]string{
-			{
-				"cp",
-				fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SandboxRepoPath),
-				fmt.Sprintf("%s/ansible.cfg", constants.SandboxRepoPath),
-			},
-		}
-
-		oldCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting old commit hash: %w", err)
-		}
-
-		if err := git.FetchAndReset(constants.SandboxRepoPath, "master", saltboxUser, customCommands); err != nil {
-			return fmt.Errorf("error fetching and resetting git: %w", err)
-		}
-
-		tags := []string{"--tags", "settings"}
-		skipTags := []string{"--skip-tags", "sanity-check,pre-tasks"}
-
-		ansibleArgs := append(tags, skipTags...)
-
-		if err := spinners.RunTaskWithSpinner("Running Ansible Playbook to upgrade configuration files", func() error {
-			return ansible.RunAnsiblePlaybook(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, ansibleArgs, verbose)
-		}); err != nil {
-			return fmt.Errorf("error running ansible playbook: %w", err)
-		}
-
-		newCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
-		if err != nil {
-			return fmt.Errorf("error getting new commit hash: %w", err)
-		}
-
-		if oldCommitHash != newCommitHash {
-			if err := spinners.RunInfoSpinner("Sandbox Commit Hash changed, updating tags cache."); err != nil {
-				return err
-			}
-			ansibleCache, err := cache.NewCache()
-			if err != nil {
-				return fmt.Errorf("error creating cache: %w", err)
-			}
-			if _, err := ansible.RunAndCacheAnsibleTags(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache); err != nil {
-				return fmt.Errorf("error running and caching ansible tags: %w", err)
-			}
-		}
-
-		if err := spinners.RunInfoSpinner("Sandbox Update Completed"); err != nil {
-			return err
+		if _, err := ansible.RunAndCacheAnsibleTags(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache); err != nil {
+			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}
-	return nil
+
+	// Final success message
+	return spinners.RunInfoSpinner("Sandbox Update Completed")
 }

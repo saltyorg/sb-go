@@ -5,20 +5,19 @@ import (
 	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/saltyorg/sb-go/config"
 	"github.com/saltyorg/sb-go/constants"
 	"github.com/saltyorg/sb-go/spinners"
+	"gopkg.in/yaml.v3"
 )
 
 // validationFunc defines a function type that validates a config struct
 type validationFunc[T any] func(config *T, input map[string]interface{}) error
 
-// ValidateAllConfigs validates all Saltbox configuration files
+// AllSaltboxConfigs validates all Saltbox configuration files
 // verbose: Enable verbose output mode
 // Returns an error if any validation fails, nil otherwise
-func ValidateAllConfigs(verbose bool) error {
+func AllSaltboxConfigs(verbose bool) error {
 	// Set verbose mode in the config package.
 	config.SetVerbose(verbose)
 

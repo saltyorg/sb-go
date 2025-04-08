@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/saltyorg/sb-go/ansible"
 	"github.com/saltyorg/sb-go/cache"
 	"github.com/saltyorg/sb-go/constants"
 	"github.com/saltyorg/sb-go/git"
 	"github.com/saltyorg/sb-go/utils"
-	"strings"
-
 	"github.com/spf13/cobra"
 )
 

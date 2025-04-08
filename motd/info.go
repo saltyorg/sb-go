@@ -2,12 +2,13 @@ package motd
 
 import (
 	"fmt"
-	"github.com/charmbracelet/lipgloss"
 	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // GetDistribution returns the Ubuntu distribution version with codename

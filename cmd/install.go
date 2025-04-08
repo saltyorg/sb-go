@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/saltyorg/sb-go/ansible"
-	"github.com/saltyorg/sb-go/cache"
-	"github.com/saltyorg/sb-go/constants"
 	"os"
 	"sort"
 	"strings"
 
 	"github.com/agnivade/levenshtein"
+	"github.com/saltyorg/sb-go/ansible"
+	"github.com/saltyorg/sb-go/cache"
+	"github.com/saltyorg/sb-go/constants"
 	"github.com/spf13/cobra"
 )
 

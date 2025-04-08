@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/saltyorg/sb-go/validate"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 var (
@@ -14,7 +15,10 @@ var configCmd = &cobra.Command{
 	Short: "Validate Saltbox configuration files",
 	Long:  `Validate Saltbox configuration files`,
 	Run: func(cmd *cobra.Command, args []string) {
-		validate.ValidateAllConfigs(verbose)
+		err := validate.AllSaltboxConfigs(verbose)
+		if err != nil {
+			os.Exit(1)
+		}
 	},
 }
 

@@ -3,14 +3,14 @@ package utils
 import (
 	"errors"
 	"fmt"
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/ubuntu"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/ubuntu"
 	"gopkg.in/yaml.v3"
 )
 

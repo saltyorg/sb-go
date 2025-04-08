@@ -5,10 +5,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/saltyorg/sb-go/spinners"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/saltyorg/sb-go/spinners"
 )
 
 // CloneRepository clones a Git repository to a specified path and branch.

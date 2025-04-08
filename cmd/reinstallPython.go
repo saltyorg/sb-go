@@ -3,11 +3,11 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"github.com/saltyorg/sb-go/utils"
-	"github.com/saltyorg/sb-go/venv"
 	"os/exec"
 	"strings"
 
+	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/venv"
 	"github.com/spf13/cobra"
 )
 

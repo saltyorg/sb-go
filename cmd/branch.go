@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/saltyorg/sb-go/ansible"
 	"github.com/saltyorg/sb-go/cache"
 	"github.com/saltyorg/sb-go/constants"
@@ -9,8 +11,6 @@ import (
 	"github.com/saltyorg/sb-go/git"
 	"github.com/saltyorg/sb-go/spinners"
 	"github.com/saltyorg/sb-go/utils"
-	"strings"
-
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +48,7 @@ func changeBranch(branchName string) error {
 	}
 
 	// Always update saltbox.fact during branch change
-	if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
+	if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {
 		return err
 	}
 

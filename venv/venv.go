@@ -2,12 +2,13 @@ package venv
 
 import (
 	"fmt"
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/spinners"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/spinners"
 )
 
 // ManageAnsibleVenv manages the Ansible virtual environment.

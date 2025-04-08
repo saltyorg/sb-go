@@ -8,9 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/saltyorg/sb-go/constants"
 	"github.com/spf13/cobra"
-
-	"github.com/saltyorg/sb-go/constants" // Import constants from your project
 )
 
 // ConfigItem represents a configuration file option

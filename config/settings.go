@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/saltyorg/sb-go/utils" // Import the utils package
+	"github.com/saltyorg/sb-go/utils"
 )
 
 // SettingsConfig represents the settings configuration.
@@ -182,7 +182,7 @@ func formatValidationError(err error, config *SettingsConfig) error {
 
 		// Group errors by remote
 		remoteErrors := make(map[string][]string)
-		generalErrors := []string{}
+		var generalErrors []string
 
 		for _, e := range validationErrors {
 			// Get the full path to the field based on the namespace

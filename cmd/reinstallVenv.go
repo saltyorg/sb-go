@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/saltyorg/sb-go/spinners"
 	"github.com/saltyorg/sb-go/utils"
 	"github.com/saltyorg/sb-go/venv"
-
 	"github.com/spf13/cobra"
 )
 
@@ -27,35 +27,26 @@ func init() {
 
 // handleReinstallVenv handles the reinstallation of the Ansible virtual environment.
 func handleReinstallVenv(verbose bool) error {
-	if verbose {
-		fmt.Println("--- Reinstalling Ansible Virtual Environment (Verbose) ---")
+	// Set verbose mode for spinners
+	spinners.SetVerboseMode(verbose)
 
-		saltboxUser, err := utils.GetSaltboxUser()
-		if err != nil {
-			return fmt.Errorf("error getting saltbox user: %w", err)
-		}
-		fmt.Printf("Saltbox User: %s\n", saltboxUser)
-
-		if err := venv.ManageAnsibleVenv(true, saltboxUser, verbose); err != nil {
-			return fmt.Errorf("error managing Ansible venv: %w", err)
-		}
-
-		fmt.Println("--- Ansible Virtual Environment Reinstalled (Verbose) ---")
-
-	} else {
-		if err := spinners.RunInfoSpinner("Reinstalling Ansible virtual environment."); err != nil {
-			return err
-		}
-
-		saltboxUser, err := utils.GetSaltboxUser()
-		if err != nil {
-			return fmt.Errorf("error getting saltbox user: %w", err)
-		}
-
-		if err := venv.ManageAnsibleVenv(true, saltboxUser, verbose); err != nil {
-			return fmt.Errorf("error managing Ansible venv: %w", err)
-		}
+	// Display initial message
+	if err := spinners.RunInfoSpinner("Reinstalling Ansible virtual environment"); err != nil {
+		return err
 	}
 
-	return nil
+	// Get Saltbox user
+	saltboxUser, err := utils.GetSaltboxUser()
+	if err != nil {
+		return fmt.Errorf("error getting saltbox user: %w", err)
+	}
+
+	// Manage Ansible venv with force recreate flag set to true
+	// This function already has internal spinners
+	if err := venv.ManageAnsibleVenv(true, saltboxUser, verbose); err != nil {
+		return fmt.Errorf("error managing Ansible venv: %w", err)
+	}
+
+	// Success message
+	return spinners.RunInfoSpinner("Ansible Virtual Environment reinstalled successfully")
 }

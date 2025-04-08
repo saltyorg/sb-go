@@ -14,6 +14,7 @@ import (
 
 // GlobalSpinnerStyle holds the default style for the spinner itself.
 var GlobalSpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorMagenta))
+var VerboseMode bool
 
 type TaskFunc func() error
 
@@ -27,8 +28,26 @@ type SpinnerOptions struct {
 	StopFailMessage string
 }
 
-// RunTaskWithSpinner provides a spinner with default options.
+// SetVerboseMode sets the verbose mode for all spinners
+func SetVerboseMode(verbose bool) {
+	VerboseMode = verbose
+}
+
+// RunTaskWithSpinner provides a spinner with default options or text output in verbose mode
 func RunTaskWithSpinner(message string, taskFunc TaskFunc) error {
+	if VerboseMode {
+		// In verbose mode, just print the message and execute the task directly
+		fmt.Println(message + "...")
+		err := taskFunc()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+		} else {
+			fmt.Println(message + " completed")
+		}
+		return err
+	}
+
+	// Otherwise, use the spinner UI
 	opts := SpinnerOptions{
 		TaskName:        message,
 		Color:           styles.ColorYellow,
@@ -96,6 +115,10 @@ func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
 
 // RunInfoSpinner prints an informational message.
 func RunInfoSpinner(message string) error {
+	if VerboseMode {
+		fmt.Println(message)
+		return nil
+	}
 	style := getStyle(styles.ColorLightBlue)
 	fmt.Println(style.Render(fmt.Sprintf("● %s", message)))
 	return nil
@@ -103,6 +126,10 @@ func RunInfoSpinner(message string) error {
 
 // RunWarningSpinner prints a warning message.
 func RunWarningSpinner(message string) error {
+	if VerboseMode {
+		fmt.Println(message)
+		return nil
+	}
 	style := getStyle(styles.ColorYellow)
 	fmt.Println(style.Render(fmt.Sprintf("● %s", message)))
 	return nil

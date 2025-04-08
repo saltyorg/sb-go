@@ -3,13 +3,13 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/saltyorg/sb-go/constants"
 	"github.com/saltyorg/sb-go/setup"
 	"github.com/saltyorg/sb-go/spinners"
 	"github.com/saltyorg/sb-go/utils"
-	"os"
-	"strings"
-
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +20,8 @@ var setupCmd = &cobra.Command{
 	Long:   `Install Saltbox and its dependencies`,
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		verbose, _ := cmd.Flags().GetBool("verbose")
+		// Set verbose mode for spinners
+		spinners.SetVerboseMode(verbose)
 
 		// Check for existing Saltbox installation and prompt for confirmation.
 		if _, err := os.Stat(constants.SaltboxRepoPath); err == nil {
@@ -74,7 +75,7 @@ var setupCmd = &cobra.Command{
 		setup.InitialSetup(verbose)
 
 		// Configure the locale (moved to setup package)
-		setup.ConfigureLocale(verbose)
+		setup.ConfigureLocale()
 
 		// Setup Python venv (moved to setup package)
 		setup.PythonVenv(verbose)
@@ -83,18 +84,24 @@ var setupCmd = &cobra.Command{
 		setup.SaltboxRepo(verbose)
 
 		// Install pip3 Dependencies
-		setup.InstallPipDependencies(verbose)
+		setup.InstallPipDependencies()
 
 		// Copy ansible* files to /usr/local/bin
-		setup.CopyAnsibleBinaries(verbose)
+		setup.CopyAnsibleBinaries()
 
-		fmt.Println("Initial setup tasks completed.")
-
+		if verbose {
+			fmt.Println("Initial setup tasks completed")
+		} else {
+			if err := spinners.RunInfoSpinner("Initial setup tasks completed"); err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(setupCmd)
 	// Add the -v flag as a persistent flag to the config command.
-	setupCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
+	setupCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }
