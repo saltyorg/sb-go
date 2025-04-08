@@ -50,6 +50,7 @@ func updateSaltbox(verbose bool) error {
 
 	err := validate.ValidateAllConfigs(verbose)
 	if err != nil {
+		fmt.Println("Saltbox update cancelled")
 		return fmt.Errorf("error validating configs: %w", err)
 	}
 
