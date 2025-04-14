@@ -20,7 +20,21 @@ var installCmd = &cobra.Command{
 	Long:  `Runs Ansible playbooks with specified tags`,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tags := strings.Split(args[0], ",")
+		joined := strings.Join(args, ",")
+		rawTags := strings.Split(joined, ",")
+
+		var tags []string
+		for _, t := range rawTags {
+			tag := strings.TrimSpace(t)
+			if tag != "" {
+				tags = append(tags, tag)
+			}
+		}
+
+		if len(tags) == 0 {
+			return fmt.Errorf("no tags provided")
+		}
+
 		verbosity, _ := cmd.Flags().GetCount("verbose")
 		skipTags, _ := cmd.Flags().GetStringSlice("skip-tags")
 		extraVars, _ := cmd.Flags().GetStringSlice("extra-vars")
