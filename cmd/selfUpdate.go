@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"github.com/saltyorg/sb-go/utils"
 	"os"
 	"strings"
 
@@ -22,7 +23,7 @@ var selfUpdateCmd = &cobra.Command{
 	Long:  `Update Saltbox CLI`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// When called from command, pass along the debug flag value
-		doSelfUpdate(false, debug, "")
+		doSelfUpdate(false, debug, "", false)
 	},
 }
 
@@ -48,7 +49,7 @@ func promptForConfirmation(prompt string) bool {
 	return response == "y" || response == "yes"
 }
 
-func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
+func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, relaunch bool) {
 	if verbose {
 		fmt.Println("Debug: Starting self-update process")
 		fmt.Printf("Debug: Current version: %s\n", runtime.Version)
@@ -120,5 +121,12 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 		fmt.Println(optionalMessage)
 	}
 	fmt.Println("")
+
+	if relaunch {
+		if err := utils.RelaunchAsRoot(); err != nil {
+			//fmt.Println("Error relaunching:", err)
+			os.Exit(1)
+		}
+	}
 	os.Exit(0)
 }
