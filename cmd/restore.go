@@ -256,7 +256,7 @@ func init() {
 }
 
 func validateAndRestore(user, password, restoreURL, dir, folder string, verbose bool) (int, error) {
-	files := []string{"ansible.cfg", "accounts.yml", "settings.yml", "adv_settings.yml", "backup_config.yml", "providers.yml", "hetzner_vlan.yml", "rclone.conf", "localhost.yml"}
+	files := []string{"accounts.yml", "adv_settings.yml", "backup_config.yml", "hetzner_vlan.yml", "localhost.yml", "motd.yml", "providers.yml", "rclone.conf", "settings.yml"}
 	if verbose {
 		fmt.Printf("DEBUG: Creating temporary folder: %s\n", folder)
 	}
