@@ -3,7 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/spinners"
 	"os"
 	"strings"
 
@@ -23,7 +23,7 @@ var selfUpdateCmd = &cobra.Command{
 	Long:  `Update Saltbox CLI`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// When called from command, pass along the debug flag value
-		doSelfUpdate(false, debug, "", false)
+		doSelfUpdate(false, debug, "")
 	},
 }
 
@@ -49,7 +49,7 @@ func promptForConfirmation(prompt string) bool {
 	return response == "y" || response == "yes"
 }
 
-func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, relaunch bool) {
+func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 	if verbose {
 		fmt.Println("Debug: Starting self-update process")
 		fmt.Printf("Debug: Current version: %s\n", runtime.Version)
@@ -57,7 +57,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, relaunc
 		fmt.Printf("Debug: Looking for updates in repository: saltyorg/sb-go\n")
 
 		// Enable detailed logging in the selfupdate package if possible
-		selfupdate.EnableLog()
+		//selfupdate.EnableLog()
 	}
 
 	v := semver.MustParse(runtime.Version)
@@ -82,17 +82,17 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, relaunc
 		if verbose {
 			fmt.Println("Debug: No update available - current version is the latest")
 		}
-		fmt.Println("Current binary is the latest version:", runtime.Version)
+		_ = spinners.RunInfoSpinner(fmt.Sprintf("Current binary is the latest version: %s", runtime.Version))
 		return
 	}
 
 	// An update is available
-	fmt.Printf("New sb CLI version available: %s (current: %s)\n", latest.Version, v)
+	_ = spinners.RunInfoSpinner(fmt.Sprintf("New sb CLI version available: %s (current: %s)", latest.Version, v))
 
 	// If autoUpdate is false, ask for confirmation
 	if !autoUpdate {
 		if !promptForConfirmation("Do you want to update") {
-			fmt.Println("Update of sb CLI cancelled")
+			_ = spinners.RunWarningSpinner("Update of sb CLI cancelled")
 			fmt.Println()
 			return
 		}
@@ -114,19 +114,13 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, relaunc
 	if verbose {
 		fmt.Printf("Debug: Update successful - previous version: %s, new version: %s\n", v, result.Version)
 	}
-	fmt.Println("Successfully updated sb CLI to version:", result.Version)
+	_ = spinners.RunInfoSpinner(fmt.Sprintf("Successfully updated sb CLI to version: %s", result.Version))
 
 	// Print optional message if provided
 	if optionalMessage != "" {
-		fmt.Println(optionalMessage)
+		fmt.Println()
+		_ = spinners.RunInfoSpinner(optionalMessage)
 	}
 	fmt.Println("")
-
-	if relaunch {
-		if err := utils.RelaunchAsRoot(); err != nil {
-			//fmt.Println("Error relaunching:", err)
-			os.Exit(1)
-		}
-	}
 	os.Exit(0)
 }
