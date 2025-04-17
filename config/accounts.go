@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/go-playground/validator/v10"
+	"golang.org/x/net/publicsuffix"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,6 +30,15 @@ type AppriseConfig string
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
 func (a *AppriseConfig) UnmarshalYAML(value *yaml.Node) error {
 	debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML called with value: %+v\n", value)
+
+	// Handle nil or empty values explicitly
+	if value == nil || value.Kind == yaml.ScalarNode && value.Value == "" {
+		debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML - nil or empty value detected, setting to empty string\n")
+		*a = AppriseConfig("")
+		return nil
+	}
+
+	// Handle properly formatted string values
 	var s string
 	if err := value.Decode(&s); err != nil {
 		debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML - error decoding: %v\n", err)
@@ -205,9 +215,13 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 	// --- 3. Check for extra fields in other sections ---
 	if appriseVal, ok := inputMap["apprise"]; ok {
 		debugPrintf("DEBUG: ValidateConfig - found 'apprise' section in inputMap: %+v\n", appriseVal)
-		if _, isString := appriseVal.(string); !isString {
-			return fmt.Errorf("field 'apprise' must be a string, got: %T", appriseVal)
+		// Allow empty string or nil for apprise
+		if appriseVal != nil && appriseVal != "" {
+			if _, isString := appriseVal.(string); !isString {
+				return fmt.Errorf("field 'apprise' must be a string, got: %T", appriseVal)
+			}
 		}
+		// If we get here, the apprise key exists but could be empty or nil, which is fine
 	}
 
 	if cfMap, ok := inputMap["cloudflare"].(map[string]interface{}); ok {
@@ -281,16 +295,24 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 // getRootDomain extracts the root domain from a potential FQDN that includes a subdomain.
 func getRootDomain(fqdn string) (string, error) {
 	debugPrintf("DEBUG: getRootDomain called with fqdn: '%s'\n", fqdn)
-	parts := strings.Split(fqdn, ".")
-	if len(parts) < 2 {
-		err := fmt.Errorf("invalid domain format: %s", fqdn)
+
+	// Validate the domain format first
+	if fqdn == "" {
+		err := fmt.Errorf("empty domain name")
+		debugPrintf("DEBUG: getRootDomain - %v\n", err)
+		return "", err
+	}
+
+	// Get the effective TLD plus one level using the public suffix list
+	domain, err := publicsuffix.EffectiveTLDPlusOne(fqdn)
+	if err != nil {
+		err = fmt.Errorf("invalid domain format: %s: %w", fqdn, err)
 		debugPrintf("DEBUG: getRootDomain - invalid domain format: %v\n", err)
 		return "", err
 	}
-	// Return the last two parts joined by a dot (e.g., "example.com")
-	root := strings.Join(parts[len(parts)-2:], ".")
-	debugPrintf("DEBUG: getRootDomain - extracted root domain: '%s'\n", root)
-	return root, nil
+
+	debugPrintf("DEBUG: getRootDomain - extracted root domain: '%s'\n", domain)
+	return domain, nil
 }
 
 // validateCloudflare checks Cloudflare API credentials and domain ownership.
