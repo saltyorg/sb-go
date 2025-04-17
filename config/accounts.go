@@ -56,7 +56,7 @@ type UserConfig struct {
 	Domain string `yaml:"domain" validate:"required,fqdn,ne=testsaltbox.ml"`
 	Email  string `yaml:"email" validate:"required,email,ne=your@email.com"`
 	Name   string `yaml:"name" validate:"required,min=1"`
-	Pass   string `yaml:"pass" validate:"required,min=12,ne=password1234"`
+	Pass   string `yaml:"pass" validate:"required,min=1,ne=password1234"`
 	SSHKey string `yaml:"ssh_key" validate:"omitempty,ssh_key_or_url"` // Custom validator
 }
 
@@ -149,6 +149,12 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 		}
 		return err
 	}
+
+	// --- Password strength warning (non-fatal) ---
+	if len(config.User.Pass) > 0 && len(config.User.Pass) < 12 {
+		fmt.Printf("WARNING: field 'user.pass' is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).\n", len(config.User.Pass))
+	}
+
 	// --- Check for extra fields at the TOP LEVEL ---
 	debugPrintf("DEBUG: ValidateConfig - checking for extra top-level fields in inputMap: %+v\n", inputMap)
 	configType := reflect.TypeOf(Config{})
