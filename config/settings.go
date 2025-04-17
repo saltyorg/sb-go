@@ -145,12 +145,13 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interfac
 			debugPrintf("DEBUG: ValidateSettingsConfig - template is not NFS, validating rclone remote existence\n")
 			// Split the remote string into name and path.
 			parts := strings.SplitN(remote.Remote, ":", 2)
-			if len(parts) != 2 {
-				err := fmt.Errorf("invalid remote format: '%s', expected 'remote:path'", remote.Remote)
-				debugPrintf("DEBUG: ValidateSettingsConfig - %v\n", err)
-				return err
+			remoteName := remote.Remote
+			if len(parts) == 2 {
+				remoteName = parts[0]
+				debugPrintf("DEBUG: ValidateSettingsConfig - remote is in 'remote:path' format, remoteName: '%s'\n", remoteName)
+			} else {
+				debugPrintf("DEBUG: ValidateSettingsConfig - remote is a bare name: '%s'\n", remote.Remote)
 			}
-			remoteName := parts[0]
 			debugPrintf("DEBUG: ValidateSettingsConfig - remoteName: '%s'\n", remoteName)
 
 			if err := validateRcloneRemote(remoteName); err != nil {
