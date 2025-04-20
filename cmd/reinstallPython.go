@@ -30,6 +30,9 @@ func init() {
 }
 
 func handleReinstallPython() error {
+	// Set verbose mode for spinners
+	spinners.SetVerboseMode(verbose)
+
 	release, err := detectOSRelease()
 	if err != nil {
 		return fmt.Errorf("error detecting OS release: %w", err)
@@ -90,12 +93,14 @@ func removePython(verbose bool) error {
 	}
 
 	if len(missingPackages) == len(packages) {
-		return fmt.Errorf("none of the required Python packages are installed, nothing to remove")
+		// No packages to remove, but we'll continue execution
+		_ = spinners.RunInfoSpinner("None of the Python packages are installed, skipping removal step")
+		return nil
 	}
 
 	if verbose {
 		if len(missingPackages) > 0 {
-			_ = spinners.RunInfoSpinner(fmt.Sprintf("Note: The following packages are not installed: %s\n", strings.Join(missingPackages, ", ")))
+			_ = spinners.RunInfoSpinner(fmt.Sprintf("Note: The following packages are not installed: %s", strings.Join(missingPackages, ", ")))
 			_ = spinners.RunInfoSpinner("Proceeding with removal of installed packages...")
 		}
 	}
