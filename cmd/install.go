@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -12,7 +11,6 @@ import (
 	"github.com/saltyorg/sb-go/cache"
 	"github.com/saltyorg/sb-go/constants"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
 
 // installCmd represents the install command
@@ -85,8 +83,10 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 		}
 	}
 
+	// Add a single info print if cache is going to be updated.
 	needsCacheUpdate := false
 	if !noCache {
+		// Check if either cache is missing or has an empty 'tags' list
 		saltboxCacheValid := cacheExistsAndIsValid(constants.SaltboxRepoPath, cacheInstance, verbosity)
 		sandboxCacheValid := cacheExistsAndIsValid(constants.SandboxRepoPath, cacheInstance, verbosity)
 
@@ -129,13 +129,6 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 
 	if verbosity > 0 {
 		fmt.Println("DEBUG: No suggestions needed, continuing")
-	}
-
-	// Inject __extra_var_keys__ if any
-	extraVarKeys := extractExtraVarKeys(extraVars)
-	if len(extraVarKeys) > 0 {
-		encodedKeys, _ := json.Marshal(extraVarKeys)
-		extraVars = append(extraVars, fmt.Sprintf(`{"__extra_var_keys__": %s}`, string(encodedKeys)))
 	}
 
 	ansibleBinaryPath := constants.AnsiblePlaybookBinaryPath
@@ -441,52 +434,4 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosit
 		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)\n", repoPath, cachedTagsInterface)
 	}
 	return false
-}
-
-func extractExtraVarKeys(extraVars []string) []string {
-	keys := make(map[string]struct{})
-
-	for _, entry := range extraVars {
-		// Handle `key=value` format
-		if strings.Contains(entry, "=") && !strings.HasPrefix(entry, "@") {
-			parts := strings.SplitN(entry, "=", 2)
-			if len(parts) >= 2 {
-				keys[strings.TrimSpace(parts[0])] = struct{}{}
-			}
-		}
-
-		// Handle @file.json / @file.yml
-		if strings.HasPrefix(entry, "@") {
-			path := strings.TrimPrefix(entry, "@")
-			content, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-
-			var parsed map[string]interface{}
-			if strings.HasSuffix(path, ".json") {
-				if err := json.Unmarshal(content, &parsed); err != nil {
-					continue
-				}
-			} else if strings.HasSuffix(path, ".yml") || strings.HasSuffix(path, ".yaml") {
-				if err := yaml.Unmarshal(content, &parsed); err != nil {
-					continue
-				}
-			} else {
-				continue
-			}
-
-			for k := range parsed {
-				keys[k] = struct{}{}
-			}
-		}
-	}
-
-	// Convert map to sorted slice
-	var keyList []string
-	for k := range keys {
-		keyList = append(keyList, k)
-	}
-	sort.Strings(keyList)
-	return keyList
 }
