@@ -110,7 +110,14 @@ func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
 	}
 
 	// Get the task error from the channel
-	return <-errCh
+	taskErr := <-errCh
+
+	// If there's an error, print the details on a separate line
+	if taskErr != nil {
+		fmt.Printf("  Error details: %v\n", taskErr)
+	}
+
+	return taskErr
 }
 
 // RunInfoSpinner prints an informational message.
@@ -208,7 +215,7 @@ func (m spinnerModel) View() string {
 	}
 	if m.finished {
 		if m.taskErr != nil {
-			return getStyle(m.opts.StopFailColor).Render(fmt.Sprintf("● %s: %v\n", m.opts.StopFailMessage, m.taskErr))
+			return getStyle(m.opts.StopFailColor).Render(fmt.Sprintf("● %s: Failed\n", m.opts.StopFailMessage))
 		}
 		return getStyle(m.opts.StopColor).Render(fmt.Sprintf("● %s\n", m.opts.StopMessage))
 	}
