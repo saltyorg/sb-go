@@ -380,16 +380,29 @@ func validateCloudflare(apiKey, email, domain string) error {
 
 	// Validate SSL mode - reject "flexible" and "off" modes
 	if sslMode == "flexible" || sslMode == "off" {
-		err = fmt.Errorf("cloudflare SSL/TLS encryption mode of '%s' is not valid", sslMode)
+		err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
+			"  This SSL/TLS mode is not compatible with Saltbox.\n"+
+			"  With '%s' mode, connections will fail or behave unexpectedly.\n\n"+
+			"  Please update your Cloudflare settings by:\n"+
+			"  1. Log in to your Cloudflare dashboard\n"+
+			"  2. Go to the SSL/TLS section for domain '%s'\n"+
+			"  3. Change the encryption mode to 'Full' or 'Full (strict)'\n"+
+			"  4. Save your changes\n",
+			sslMode, sslMode, rootDomain)
 		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
 		return err
 	}
 
 	// If the SSL mode is empty, warn but don't error
 	if sslMode == "" {
-		fmt.Printf("WARNING: Could not determine SSL/TLS mode for domain '%s'", rootDomain)
+		fmt.Printf("WARNING: Could not determine SSL/TLS mode for domain '%s'.\n"+
+			"  Please verify your Cloudflare settings:\n"+
+			"  1. Log in to your Cloudflare dashboard\n"+
+			"  2. Navigate to the SSL/TLS section\n"+
+			"  3. Confirm encryption mode is set to 'Full' or 'Full (strict)'\n"+
+			"  4. Flexible or Off modes are incompatible with Saltbox\n", rootDomain)
 	} else {
-		debugPrintf("DEBUG: validateCloudflare - SSL mode: '%s'\n", sslMode)
+		debugPrintf("DEBUG: validateCloudflare - SSL mode '%s' is secure\n", sslMode)
 	}
 
 	return nil
