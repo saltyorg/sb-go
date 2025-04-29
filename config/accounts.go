@@ -113,6 +113,7 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 
 	// Register the custom SSH key/URL validator.
 	RegisterCustomValidators(validate) // Moved to generic.go
+
 	err := validate.RegisterValidation("ssh_key_or_url", customSSHKeyOrURLValidator)
 	if err != nil {
 		return fmt.Errorf("failed to register SSH key/URL validator: %w", err)
@@ -268,9 +269,9 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 		}
 	}
 
-	// --- 4. Validate Cloudflare credentials and domain ---
+	// --- 4. Validate Cloudflare credentials, domain, and SSL/TLS settings ---
 	if config.Cloudflare.API != "" && config.Cloudflare.Email != "" {
-		debugPrintf("DEBUG: ValidateConfig - validating Cloudflare credentials and domain\n")
+		debugPrintf("DEBUG: ValidateConfig - validating Cloudflare credentials, domain, and SSL/TLS settings\n")
 		if err := validateCloudflare(config.Cloudflare.API, config.Cloudflare.Email, config.User.Domain); err != nil {
 			return fmt.Errorf("cloudflare validation failed: %w", err)
 		}
@@ -315,7 +316,7 @@ func getRootDomain(fqdn string) (string, error) {
 	return domain, nil
 }
 
-// validateCloudflare checks Cloudflare API credentials and domain ownership.
+// validateCloudflare checks Cloudflare API credentials, domain ownership, and SSL/TLS settings.
 func validateCloudflare(apiKey, email, domain string) error {
 	debugPrintf("DEBUG: validateCloudflare called with apiKey: '%s', email: '%s', domain: '%s'\n", apiKey, email, domain)
 	// Create a new Cloudflare API client.
@@ -355,6 +356,42 @@ func validateCloudflare(apiKey, email, domain string) error {
 		return err
 	}
 	debugPrintf("DEBUG: validateCloudflare - domain '%s' verified successfully (zone ID: '%s')\n", rootDomain, zoneID)
+
+	// --- Verify SSL/TLS Settings ---
+	// Get the current SSL/TLS settings for the zone
+	ctx := context.Background()
+	zoneSettings, err := api.ZoneSettings(ctx, zoneID)
+	if err != nil {
+		err = fmt.Errorf("failed to get zone settings: %w", err)
+		debugPrintf("DEBUG: validateCloudflare - failed to get zone settings: %v\n", err)
+		return err
+	}
+
+	// Look for the ssl setting
+	var sslMode string
+	for _, setting := range zoneSettings.Result {
+		if setting.ID == "ssl" {
+			sslMode = setting.Value.(string)
+			break
+		}
+	}
+
+	debugPrintf("DEBUG: validateCloudflare - SSL mode for domain '%s': '%s'\n", rootDomain, sslMode)
+
+	// Validate SSL mode - reject "flexible" and "off" modes
+	if sslMode == "flexible" || sslMode == "off" {
+		err = fmt.Errorf("cloudflare SSL/TLS encryption mode of '%s' is not valid", sslMode)
+		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+		return err
+	}
+
+	// If the SSL mode is empty, warn but don't error
+	if sslMode == "" {
+		fmt.Printf("WARNING: Could not determine SSL/TLS mode for domain '%s'", rootDomain)
+	} else {
+		debugPrintf("DEBUG: validateCloudflare - SSL mode: '%s'\n", sslMode)
+	}
+
 	return nil
 }
 
