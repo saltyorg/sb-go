@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/saltyorg/sb-go/utils"
 	"os"
 	"sort"
 	"strings"
@@ -20,6 +21,10 @@ var installCmd = &cobra.Command{
 	Long:  `Runs Ansible playbooks with specified tags`,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := utils.CheckLXC(); err != nil {
+			return err
+		}
+
 		joined := strings.Join(args, ",")
 		rawTags := strings.Split(joined, ",")
 
