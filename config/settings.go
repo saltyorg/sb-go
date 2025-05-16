@@ -121,6 +121,17 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interfac
 		return err
 	}
 
+	// Check if rclone is enabled by converting AnsibleBool to lowercase string
+	rcloneEnabledValue := strings.ToLower(string(config.Rclone.Enabled))
+	debugPrintf("DEBUG: ValidateSettingsConfig - rclone.enabled = '%s'\n", rcloneEnabledValue)
+
+	// Determine if rclone is enabled based on the value
+	rcloneEnabled := false
+	switch rcloneEnabledValue {
+	case "yes", "true", "on", "1":
+		rcloneEnabled = true
+	}
+
 	// Now, validate nested structs explicitly.
 	debugPrintf("DEBUG: ValidateSettingsConfig - validating nested structs\n")
 	for i, remote := range config.Rclone.Remotes {
@@ -140,33 +151,38 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interfac
 			return formatRemoteValidationError(err, remote.Remote, i)
 		}
 
-		// Additional validation for rclone remote existence (except for NFS).
-		if strings.ToLower(remote.Settings.Template) != "nfs" {
-			debugPrintf("DEBUG: ValidateSettingsConfig - template is not NFS, validating rclone remote existence\n")
-			// Split the remote string into name and path.
-			parts := strings.SplitN(remote.Remote, ":", 2)
-			remoteName := remote.Remote
-			if len(parts) == 2 {
-				remoteName = parts[0]
-				debugPrintf("DEBUG: ValidateSettingsConfig - remote is in 'remote:path' format, remoteName: '%s'\n", remoteName)
-			} else {
-				debugPrintf("DEBUG: ValidateSettingsConfig - remote is a bare name: '%s'\n", remote.Remote)
-			}
-			debugPrintf("DEBUG: ValidateSettingsConfig - remoteName: '%s'\n", remoteName)
-
-			if err := validateRcloneRemote(remoteName); err != nil {
-				debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote returned error: %v\n", err)
-				//Only return if rclone and the user and the config all exist
-				if errors.Is(err, ErrRcloneNotInstalled) || errors.Is(err, ErrSystemUserNotFound) || errors.Is(err, ErrRcloneConfigNotFound) {
-					fmt.Printf("Warning: rclone remote validation skipped: %v\n", err)
+		// Only validate remote existence if rclone is enabled
+		if rcloneEnabled {
+			// Additional validation for rclone remote existence (except for NFS).
+			if strings.ToLower(remote.Settings.Template) != "nfs" {
+				debugPrintf("DEBUG: ValidateSettingsConfig - template is not NFS, validating rclone remote existence\n")
+				// Split the remote string into name and path.
+				parts := strings.SplitN(remote.Remote, ":", 2)
+				remoteName := remote.Remote
+				if len(parts) == 2 {
+					remoteName = parts[0]
+					debugPrintf("DEBUG: ValidateSettingsConfig - remote is in 'remote:path' format, remoteName: '%s'\n", remoteName)
 				} else {
-					return err
+					debugPrintf("DEBUG: ValidateSettingsConfig - remote is a bare name: '%s'\n", remote.Remote)
+				}
+				debugPrintf("DEBUG: ValidateSettingsConfig - remoteName: '%s'\n", remoteName)
+
+				if err := validateRcloneRemote(remoteName); err != nil {
+					debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote returned error: %v\n", err)
+					//Only return if rclone and the user and the config all exist
+					if errors.Is(err, ErrRcloneNotInstalled) || errors.Is(err, ErrSystemUserNotFound) || errors.Is(err, ErrRcloneConfigNotFound) {
+						fmt.Printf("Warning: rclone remote validation skipped: %v\n", err)
+					} else {
+						return err
+					}
+				} else {
+					debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote successful\n")
 				}
 			} else {
-				debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote successful\n")
+				debugPrintf("DEBUG: ValidateSettingsConfig - template is NFS, skipping rclone remote existence validation\n")
 			}
 		} else {
-			debugPrintf("DEBUG: ValidateSettingsConfig - template is NFS, skipping rclone remote existence validation\n")
+			debugPrintf("DEBUG: ValidateSettingsConfig - rclone is disabled, skipping remote existence validation\n")
 		}
 	}
 
