@@ -42,7 +42,7 @@ var installCmd = &cobra.Command{
 
 		verbosity, _ := cmd.Flags().GetCount("verbose")
 		skipTags, _ := cmd.Flags().GetStringSlice("skip-tags")
-		extraVars, _ := cmd.Flags().GetStringSlice("extra-vars")
+		extraVars, _ := cmd.Flags().GetStringArray("extra-vars")
 		noCache, _ := cmd.Flags().GetBool("no-cache")
 
 		var extraArgs []string
@@ -57,7 +57,7 @@ var installCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(installCmd)
-	installCmd.Flags().StringSliceP("extra-vars", "e", []string{}, "Extra variables to pass to Ansible")
+	installCmd.Flags().StringArrayP("extra-vars", "e", []string{}, "Extra variables to pass to Ansible")
 	installCmd.Flags().StringSliceP("skip-tags", "s", []string{}, "Tags to skip during Ansible playbook execution")
 	installCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
 	installCmd.Flags().Bool("no-cache", false, "Skip cache validation and always perform tag checks")
