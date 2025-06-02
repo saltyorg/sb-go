@@ -16,14 +16,16 @@ import (
 // Debug flag to enable verbose output
 var debug bool
 
+// Auto-accept flag to skip confirmation
+var autoAccept bool
+
 // selfUpdateCmd represents the selfUpdate command
 var selfUpdateCmd = &cobra.Command{
 	Use:   "self-update",
 	Short: "Update Saltbox CLI",
 	Long:  `Update Saltbox CLI`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// When called from command, pass along the debug flag value
-		doSelfUpdate(false, debug, "")
+		doSelfUpdate(autoAccept, debug, "")
 	},
 }
 
@@ -32,6 +34,8 @@ func init() {
 
 	// Add debug flag
 	selfUpdateCmd.Flags().BoolVarP(&debug, "verbose", "v", false, "Enable verbose debug output")
+	// Add auto-accept flag
+	selfUpdateCmd.Flags().BoolVarP(&autoAccept, "yes", "y", false, "Automatically accept update without confirmation")
 }
 
 // promptForConfirmation asks the user for confirmation (y/n)
@@ -55,6 +59,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 		fmt.Printf("Debug: Current version: %s\n", runtime.Version)
 		fmt.Printf("Debug: Current git commit: %s\n", runtime.GitCommit)
 		fmt.Printf("Debug: Looking for updates in repository: saltyorg/sb-go\n")
+		fmt.Printf("Debug: Auto-update mode: %t\n", autoUpdate)
 
 		// Enable detailed logging in the selfupdate package if possible
 		//selfupdate.EnableLog()
