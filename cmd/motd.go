@@ -26,6 +26,8 @@ var (
 	showDocker           bool
 	showCPU              bool
 	showQueues           bool
+	showSabnzbd          bool
+	showNzbget           bool
 	showPlex             bool
 	showEmby             bool
 	showJellyfin         bool
@@ -62,6 +64,8 @@ last login, user sessions, process information, and system update status based o
 			showDocker = true
 			showCPU = true
 			showQueues = true
+			showSabnzbd = true
+			showNzbget = true
 			showPlex = true
 			showEmby = true
 			showJellyfin = true
@@ -71,7 +75,7 @@ last login, user sessions, process information, and system update status based o
 		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
 			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses && !showJellyfin && !showEmby &&
 			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues &&
-			!showPlex {
+			!showPlex && !showSabnzbd && !showNzbget {
 			fmt.Println("Error: No information selected to display.")
 			fmt.Println("Please use at least one of the following flags:")
 			fmt.Println("  --distro     Show distribution information")
@@ -88,6 +92,8 @@ last login, user sessions, process information, and system update status based o
 			fmt.Println("  --docker     Show Docker container information")
 			fmt.Println("  --cpu-info   Show CPU model and core count")
 			fmt.Println("  --queues     Show download queue information from Sonarr, Radarr, etc.")
+			fmt.Println("  --sabnzbd    Show Sabnzbd queue information")
+			fmt.Println("  --nzbget     Show NZBGet queue information")
 			fmt.Println("  --plex       Show Plex streaming information")
 			fmt.Println("  --emby       Show Emby streaming information")
 			fmt.Println("  --jellyfin   Show Jellyfin streaming information")
@@ -191,9 +197,11 @@ func displayMotd() {
 		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 12},
 		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 13},
 		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 14},
-		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 15},
-		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 16},
-		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 17},
+		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 15},
+		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 16},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 17},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 18},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 19},
 	}
 
 	// Filter sources based on enabled flags
@@ -213,6 +221,8 @@ func displayMotd() {
 		"Disk Usage:":      showDisk,
 		"Docker:":          showDocker,
 		"Download Queues:": showQueues,
+		"SABnzbd:":         showSabnzbd,
+		"NZBGet:":          showNzbget,
 		"Plex:":            showPlex,
 		"Emby:":            showEmby,
 		"Jellyfin:":        showJellyfin,
@@ -290,6 +300,8 @@ func init() {
 	motdCmd.Flags().BoolVar(&showDocker, "docker", false, "Show Docker container information")
 	motdCmd.Flags().BoolVar(&showCPU, "cpu-info", false, "Show CPU model and core count information")
 	motdCmd.Flags().BoolVar(&showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
+	motdCmd.Flags().BoolVar(&showSabnzbd, "sabnzbd", false, "Show SABnzbd queue information")
+	motdCmd.Flags().BoolVar(&showNzbget, "nzbget", false, "Show NZBGet queue information")
 	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
 	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
 	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")

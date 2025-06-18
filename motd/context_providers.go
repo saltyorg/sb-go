@@ -275,3 +275,35 @@ func GetJellyfinInfoWithContext(ctx context.Context) string {
 		return "" // Return an empty string on timeout to hide this section
 	}
 }
+
+// GetSabnzbdInfoWithContext provides Sabnzbd info with context/timeout support
+func GetSabnzbdInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetSabnzbdInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return an empty string on timeout to hide this section
+	}
+}
+
+// GetNzbgetInfoWithContext provides NZBGet info with context/timeout support
+func GetNzbgetInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetNzbgetInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return an empty string on timeout to hide this section
+	}
+}

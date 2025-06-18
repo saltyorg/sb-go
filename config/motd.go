@@ -20,6 +20,8 @@ type MOTDConfig struct {
 	Plex     []PlexInstance     `yaml:"plex"`
 	Jellyfin []JellyfinInstance `yaml:"jellyfin"`
 	Emby     []EmbyInstance     `yaml:"emby"`
+	Sabnzbd  []AppInstance      `yaml:"sabnzbd"`
+	Nzbget   []NzbgetInstance   `yaml:"nzbget"`
 }
 
 // AppInstance represents an app instance in the MOTD configuration
@@ -52,6 +54,15 @@ type EmbyInstance struct {
 	URL     string `yaml:"url" validate:"omitempty,url"`
 	Token   string `yaml:"token" validate:"required_with=URL"`
 	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+}
+
+// NzbgetInstance represents an NZBGet server instance in the MOTD configuration
+type NzbgetInstance struct {
+	Name     string `yaml:"name"`
+	URL      string `yaml:"url" validate:"omitempty,url"`
+	User     string `yaml:"user" validate:"required_with=URL"`
+	Password string `yaml:"password" validate:"required_with=URL"`
+	Timeout  int    `yaml:"timeout" validate:"omitempty,gt=0"`
 }
 
 // LoadConfig loads the MOTD configuration from the specified file path
@@ -273,6 +284,36 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 				debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
 				return err
 			}
+		}
+	}
+
+	// Additional validation for Sabnzbd instances
+	for _, instance := range config.Sabnzbd {
+		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Sabnzbd instance: %+v\n", instance)
+		if instance.URL != "" && instance.APIKey == "" {
+			err := fmt.Errorf("sabnzbd instance '%s' has URL but no API key", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+		if instance.APIKey != "" && instance.URL == "" {
+			err := fmt.Errorf("sabnzbd instance '%s' has API key but no URL", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+	}
+
+	// Additional validation for Nzbget instances
+	for _, instance := range config.Nzbget {
+		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Nzbget instance: %+v\n", instance)
+		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
+			err := fmt.Errorf("nzbget instance '%s' has URL but is missing user or password", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
+			err := fmt.Errorf("nzbget instance '%s' has user/password but no URL", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
 		}
 	}
 	debugPrintf("DEBUG: validateMOTDNestedConfigs - nested validation successful\n")
