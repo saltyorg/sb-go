@@ -114,3 +114,26 @@ func GenerateBanner(title, font, boxType string) string {
 
 	return string(output)
 }
+
+// GenerateBannerFromFile processes the content of a file with toilet
+func GenerateBannerFromFile(content string, toiletArgs string) string {
+	if _, err := exec.LookPath("toilet"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: toilet command not found. Cannot process banner file.\n")
+		return content // Fallback to raw content if toilet isn't installed
+	}
+
+	args := strings.Fields(toiletArgs)
+	cmd := exec.Command("toilet", args...)
+
+	// Pipe the file content to the command's stdin
+	cmd.Stdin = strings.NewReader(content)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating banner from file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Command output: %s\n", string(output))
+		return content // Fallback to raw content on error
+	}
+
+	return string(output)
+}

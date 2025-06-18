@@ -12,29 +12,30 @@ import (
 
 // Display flags and options
 var (
-	showDistribution   bool
-	showKernel         bool
-	showUptime         bool
-	showCpuAverages    bool
-	showMemory         bool
-	showDisk           bool
-	showLastLogin      bool
-	showSessions       bool
-	showProcesses      bool
-	showAptStatus      bool
-	showRebootRequired bool
-	showDocker         bool
-	showCPU            bool
-	showQueues         bool
-	showPlex           bool
-	showEmby           bool
-	showJellyfin       bool
-	showAll            bool
-	bannerTitle        string
-	bannerType         string
-	bannerFont         string
-	bannerFile         string
-	verbosity          int
+	showDistribution     bool
+	showKernel           bool
+	showUptime           bool
+	showCpuAverages      bool
+	showMemory           bool
+	showDisk             bool
+	showLastLogin        bool
+	showSessions         bool
+	showProcesses        bool
+	showAptStatus        bool
+	showRebootRequired   bool
+	showDocker           bool
+	showCPU              bool
+	showQueues           bool
+	showPlex             bool
+	showEmby             bool
+	showJellyfin         bool
+	showAll              bool
+	bannerTitle          string
+	bannerType           string
+	bannerFont           string
+	bannerFile           string
+	bannerFileToiletArgs string
+	verbosity            int
 )
 
 // motdCmd represents the motd command
@@ -157,7 +158,17 @@ func displayMotd() {
 			fmt.Printf("Error: could not read banner file '%s': %v\n", bannerFile, err)
 			os.Exit(1)
 		}
-		fmt.Println(string(content))
+
+		var banner string
+		// If toilet args are provided, process the file content through toilet.
+		if bannerFileToiletArgs != "" {
+			banner = motd.GenerateBannerFromFile(string(content), bannerFileToiletArgs)
+		} else {
+			// Otherwise, just use the raw file content.
+			banner = string(content)
+		}
+		fmt.Println(banner)
+
 	} else if bannerTitle != "" {
 		// Otherwise, generate banner if title is provided
 		banner := motd.GenerateBanner(bannerTitle, bannerFont, bannerType)
@@ -294,4 +305,5 @@ func init() {
 	motdCmd.Flags().StringVar(&bannerType, "type", "peek", "Banner type for boxes (use 'none' to omit box)")
 	motdCmd.Flags().StringVar(&bannerFont, "font", "ivrit", "Font for toilet cli")
 	motdCmd.Flags().StringVar(&bannerFile, "banner-file", "", "Path to a file containing a custom banner to display")
+	motdCmd.Flags().StringVar(&bannerFileToiletArgs, "banner-file-toilet", "", "A string of arguments for toilet when using --banner-file")
 }
