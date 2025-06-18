@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -11,25 +13,62 @@ import (
 
 // MOTDConfig represents the MOTD configuration structure
 type MOTDConfig struct {
-	Sonarr  []MOTDAppInstance  `yaml:"sonarr"`
-	Radarr  []MOTDAppInstance  `yaml:"radarr"`
-	Lidarr  []MOTDAppInstance  `yaml:"lidarr"`
-	Readarr []MOTDAppInstance  `yaml:"readarr"`
-	Plex    []MOTDPlexInstance `yaml:"plex"`
+	Sonarr   []AppInstance      `yaml:"sonarr"`
+	Radarr   []AppInstance      `yaml:"radarr"`
+	Lidarr   []AppInstance      `yaml:"lidarr"`
+	Readarr  []AppInstance      `yaml:"readarr"`
+	Plex     []PlexInstance     `yaml:"plex"`
+	Jellyfin []JellyfinInstance `yaml:"jellyfin"`
+	Emby     []EmbyInstance     `yaml:"emby"`
 }
 
-// MOTDAppInstance represents an app instance in the MOTD configuration
-type MOTDAppInstance struct {
-	Name   string `yaml:"name"`
-	URL    string `yaml:"url" validate:"omitempty,url"`
-	APIKey string `yaml:"apikey" validate:"required_with=URL"`
+// AppInstance represents an app instance in the MOTD configuration
+type AppInstance struct {
+	Name    string `yaml:"name"`
+	URL     string `yaml:"url" validate:"omitempty,url"`
+	APIKey  string `yaml:"apikey" validate:"required_with=URL"`
+	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
 }
 
-// MOTDPlexInstance represents a Plex server instance in the MOTD configuration
-type MOTDPlexInstance struct {
-	Name  string `yaml:"name"`
-	URL   string `yaml:"url" validate:"omitempty,url"`
-	Token string `yaml:"token" validate:"required_with=URL"`
+// PlexInstance represents a Plex server instance in the MOTD configuration
+type PlexInstance struct {
+	Name    string `yaml:"name"`
+	URL     string `yaml:"url" validate:"omitempty,url"`
+	Token   string `yaml:"token" validate:"required_with=URL"`
+	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+}
+
+// JellyfinInstance represents a Jellyfin server instance in the MOTD configuration
+type JellyfinInstance struct {
+	Name    string `yaml:"name"`
+	URL     string `yaml:"url" validate:"omitempty,url"`
+	Token   string `yaml:"token" validate:"required_with=URL"`
+	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+}
+
+// EmbyInstance represents an Emby server instance in the MOTD configuration
+type EmbyInstance struct {
+	Name    string `yaml:"name"`
+	URL     string `yaml:"url" validate:"omitempty,url"`
+	Token   string `yaml:"token" validate:"required_with=URL"`
+	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+}
+
+// LoadConfig loads the MOTD configuration from the specified file path
+func LoadConfig(configPath string) (*MOTDConfig, error) {
+	// Read the configuration file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the YAML configuration
+	var config MOTDConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	return &config, nil
 }
 
 // ValidateMOTDConfig validates the MOTD configuration
@@ -68,6 +107,10 @@ func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]interface{}) err
 					return err
 				case "required_with":
 					err := fmt.Errorf("field '%s' is required when %s is provided", fieldPath, e.Param())
+					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
+					return err
+				case "gt":
+					err := fmt.Errorf("field '%s' must be greater than %s", fieldPath, e.Param())
 					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
 					return err
 				default:
@@ -187,6 +230,51 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		}
 	}
 
+	// Additional validation for Jellyfin instances
+	for _, instance := range config.Jellyfin {
+		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Jellyfin instance: %+v\n", instance)
+		if instance.URL != "" && instance.Token == "" {
+			err := fmt.Errorf("jellyfin instance '%s' has URL but no token", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+		if instance.Token != "" && instance.URL == "" {
+			err := fmt.Errorf("jellyfin instance '%s' has token but no URL", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+		if instance.URL != "" {
+			_, err := url.Parse(instance.URL)
+			if err != nil {
+				err := fmt.Errorf("invalid URL for Jellyfin instance '%s': %v", instance.Name, err)
+				debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+				return err
+			}
+		}
+	}
+
+	// Additional validation for Emby instances
+	for _, instance := range config.Emby {
+		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Emby instance: %+v\n", instance)
+		if instance.URL != "" && instance.Token == "" {
+			err := fmt.Errorf("emby instance '%s' has URL but no token", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+		if instance.Token != "" && instance.URL == "" {
+			err := fmt.Errorf("emby instance '%s' has token but no URL", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+		if instance.URL != "" {
+			_, err := url.Parse(instance.URL)
+			if err != nil {
+				err := fmt.Errorf("invalid URL for Emby instance '%s': %v", instance.Name, err)
+				debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+				return err
+			}
+		}
+	}
 	debugPrintf("DEBUG: validateMOTDNestedConfigs - nested validation successful\n")
 	return nil
 }

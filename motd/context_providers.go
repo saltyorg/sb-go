@@ -224,7 +224,7 @@ func GetQueueInfoWithContext(ctx context.Context) string {
 	case result := <-ch:
 		return result
 	case <-ctx.Done():
-		return "" // Return empty string on timeout to hide this section
+		return "" // Return an empty string on timeout to hide this section
 	}
 }
 
@@ -240,6 +240,38 @@ func GetPlexInfoWithContext(ctx context.Context) string {
 	case result := <-ch:
 		return result
 	case <-ctx.Done():
-		return "" // Return empty string on timeout to hide this section
+		return "" // Return an empty string on timeout to hide this section
+	}
+}
+
+// GetEmbyInfoWithContext provides Emby info with context/timeout support
+func GetEmbyInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetEmbyInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return an empty string on timeout to hide this section
+	}
+}
+
+// GetJellyfinInfoWithContext provides Jellyfin info with context/timeout support
+func GetJellyfinInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetJellyfinInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return an empty string on timeout to hide this section
 	}
 }

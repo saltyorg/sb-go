@@ -10,12 +10,12 @@ import (
 
 // AvailableBannerTypes contains all valid box types for the boxes command
 var AvailableBannerTypes = []string{
-	"ada-box", "ada-cmt", "boxquote", "boy", "c", "c-cmt", "c-cmt2", "c-cmt3", "caml",
-	"capgirl", "dog", "cat", "peek", "diamonds", "cc", "ccel", "columns", "girl",
-	"headline", "html", "html-cmt", "ian_jones", "java-cmt", "javadoc", "lisp-cmt",
-	"mouse", "netdata", "nuke", "parchment", "pound-cmt", "right", "santa", "scroll",
-	"shell", "simple", "spring", "stark1", "stark2", "stone", "sunset", "tjc",
-	"underline", "unicornsay", "unicornthink", "vim-cmt", "whirly", "xes",
+	"ada-box", "ada-cmt", "bear", "boxquote", "boy", "c", "c-cmt", "c-cmt2", "caml", "capgirl", "cat", "cc",
+	"columns", "diamonds", "dog", "f90-box", "f90-cmt", "face", "fence", "girl", "headline", "html", "html-cmt",
+	"ian_jones", "important", "important2", "important3", "java-cmt", "javadoc", "jstone", "lisp-cmt", "mouse",
+	"normand", "nuke", "parchment", "peek", "pound-cmt", "right", "santa", "scroll", "scroll-akn", "shell",
+	"simple", "spring", "stark1", "stark2", "stone", "sunset", "tex-box", "tex-cmt", "twisted", "underline",
+	"unicornsay", "unicornthink", "vim-box", "vim-cmt", "weave", "whirly", "xes",
 }
 
 // IsValidFont checks if the given font exists in the figlet directory
@@ -27,7 +27,7 @@ func IsValidFont(font string) bool {
 
 	fontDir := "/usr/share/figlet"
 
-	// First check in font directory
+	// First check in the font directory
 	validExtensions := []string{".flf", ".tlf"}
 	for _, ext := range validExtensions {
 		fontPath := filepath.Join(fontDir, font+ext)
@@ -36,7 +36,7 @@ func IsValidFont(font string) bool {
 		}
 	}
 
-	// Then check in current directory
+	// Then check in the current directory
 	for _, ext := range validExtensions {
 		fontPath := font + ext
 		if _, err := os.Stat(fontPath); err == nil {

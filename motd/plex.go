@@ -9,14 +9,9 @@ import (
 	"os"
 	"strings"
 	"time"
-)
 
-// PlexInstance represents a single Plex server instance configuration
-type PlexInstance struct {
-	Name  string `yaml:"name"`  // Optional friendly name
-	URL   string `yaml:"url"`   // Base URL for the Plex server
-	Token string `yaml:"token"` // X-Plex-Token for authentication
-}
+	"github.com/saltyorg/sb-go/config"
+)
 
 // PlexStreamInfo contains information about Plex streams
 type PlexStreamInfo struct {
@@ -91,7 +86,7 @@ func GetPlexInfo() string {
 	}
 
 	// Load the configuration
-	config, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		if Verbose {
 			fmt.Printf("DEBUG: Error loading config: %v\n", err)
@@ -101,7 +96,7 @@ func GetPlexInfo() string {
 	}
 
 	// Check if Plex section exists in the config
-	plexInstances := config.Plex
+	plexInstances := cfg.Plex
 	if len(plexInstances) == 0 {
 		if Verbose {
 			fmt.Printf("DEBUG: No Plex instances found in config\n")
@@ -126,11 +121,10 @@ func GetPlexInfo() string {
 		info, err := getPlexStreamInfo(instance)
 		if err != nil {
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting Plex stream info for %s: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Error getting Plex stream info for %s, hiding entry: %v\n", instance.Name, err)
 			}
-			info.Error = err
+			continue
 		}
-
 		streamInfos = append(streamInfos, info)
 	}
 
@@ -145,7 +139,7 @@ func GetPlexInfo() string {
 }
 
 // getPlexStreamInfo fetches streaming information from a single Plex server
-func getPlexStreamInfo(instance PlexInstance) (PlexStreamInfo, error) {
+func getPlexStreamInfo(instance config.PlexInstance) (PlexStreamInfo, error) {
 	result := PlexStreamInfo{
 		Name: instance.Name,
 	}
@@ -173,9 +167,15 @@ func getPlexStreamInfo(instance PlexInstance) (PlexStreamInfo, error) {
 
 	sessionURL := baseURL.ResolveReference(sessionsPath).String()
 
-	// Create HTTP client with timeout
+	// Set timeout, defaulting to 1 second
+	timeout := 1 * time.Second
+	if instance.Timeout > 0 {
+		timeout = time.Duration(instance.Timeout) * time.Second
+	}
+
+	// Create HTTP client with custom timeout
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: timeout,
 	}
 
 	// Create request
@@ -250,12 +250,6 @@ func formatPlexOutput(infos []PlexStreamInfo) string {
 	if len(infos) == 1 {
 		info := infos[0]
 
-		// If there was an error fetching data
-		if info.Error != nil {
-			output.WriteString(RedStyle.Render(fmt.Sprintf("Error: %v", info.Error)))
-			return output.String()
-		}
-
 		// No active streams
 		if info.ActiveStreams == 0 {
 			output.WriteString("No active streams")
@@ -323,12 +317,6 @@ func formatPlexOutput(infos []PlexStreamInfo) string {
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
 
 		appNameColored := GreenStyle.Render(paddedName)
-
-		// If there was an error fetching data
-		if info.Error != nil {
-			output.WriteString(fmt.Sprintf("%s%s", appNameColored, RedStyle.Render(fmt.Sprintf("Error: %v", info.Error))))
-			continue
-		}
 
 		// No active streams
 		if info.ActiveStreams == 0 {

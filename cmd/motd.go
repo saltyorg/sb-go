@@ -27,10 +27,13 @@ var (
 	showCPU            bool
 	showQueues         bool
 	showPlex           bool
+	showEmby           bool
+	showJellyfin       bool
 	showAll            bool
 	bannerTitle        string
 	bannerType         string
 	bannerFont         string
+	bannerFile         string
 	verbosity          int
 )
 
@@ -59,11 +62,13 @@ last login, user sessions, process information, and system update status based o
 			showCPU = true
 			showQueues = true
 			showPlex = true
+			showEmby = true
+			showJellyfin = true
 		}
 
 		// Check if at least one flag is enabled
 		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
-			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses &&
+			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses && !showJellyfin && !showEmby &&
 			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues &&
 			!showPlex {
 			fmt.Println("Error: No information selected to display.")
@@ -83,6 +88,8 @@ last login, user sessions, process information, and system update status based o
 			fmt.Println("  --cpu-info   Show CPU model and core count")
 			fmt.Println("  --queues     Show download queue information from Sonarr, Radarr, etc.")
 			fmt.Println("  --plex       Show Plex streaming information")
+			fmt.Println("  --emby       Show Emby streaming information")
+			fmt.Println("  --jellyfin   Show Jellyfin streaming information")
 			fmt.Println("  --all        Show all information")
 			os.Exit(1)
 		}
@@ -143,8 +150,16 @@ last login, user sessions, process information, and system update status based o
 }
 
 func displayMotd() {
-	// Display banner if title is provided
-	if bannerTitle != "" {
+	// Display banner from file if provided. This takes precedence.
+	if bannerFile != "" {
+		content, err := os.ReadFile(bannerFile)
+		if err != nil {
+			fmt.Printf("Error: could not read banner file '%s': %v\n", bannerFile, err)
+			os.Exit(1)
+		}
+		fmt.Println(string(content))
+	} else if bannerTitle != "" {
+		// Otherwise, generate banner if title is provided
 		banner := motd.GenerateBanner(bannerTitle, bannerFont, bannerType)
 		fmt.Println(banner)
 	}
@@ -166,6 +181,8 @@ func displayMotd() {
 		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 13},
 		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 14},
 		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 15},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 16},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 17},
 	}
 
 	// Filter sources based on enabled flags
@@ -186,6 +203,8 @@ func displayMotd() {
 		"Docker:":          showDocker,
 		"Download Queues:": showQueues,
 		"Plex:":            showPlex,
+		"Emby:":            showEmby,
+		"Jellyfin:":        showJellyfin,
 	}
 
 	// Simply use all enabled sources
@@ -261,6 +280,8 @@ func init() {
 	motdCmd.Flags().BoolVar(&showCPU, "cpu-info", false, "Show CPU model and core count information")
 	motdCmd.Flags().BoolVar(&showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
 	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
+	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
+	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")
 
 	// Add a flag to show all information
 	motdCmd.Flags().BoolVar(&showAll, "all", false, "Show all information")
@@ -270,6 +291,7 @@ func init() {
 
 	// Add banner options
 	motdCmd.Flags().StringVar(&bannerTitle, "title", "Saltbox", "Text to display in the banner")
-	motdCmd.Flags().StringVar(&bannerType, "type", "dog", "Banner type for boxes (use 'none' for no box)")
-	motdCmd.Flags().StringVar(&bannerFont, "font", "ivrit", "Font for toilet")
+	motdCmd.Flags().StringVar(&bannerType, "type", "peek", "Banner type for boxes (use 'none' to omit box)")
+	motdCmd.Flags().StringVar(&bannerFont, "font", "ivrit", "Font for toilet cli")
+	motdCmd.Flags().StringVar(&bannerFile, "banner-file", "", "Path to a file containing a custom banner to display")
 }

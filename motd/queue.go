@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/saltyorg/sb-go/config"
 	"golift.io/starr"
 	"golift.io/starr/lidarr"
 	"golift.io/starr/radarr"
@@ -47,7 +48,7 @@ func GetQueueInfo() string {
 	}
 
 	// Load the configuration
-	config, err := LoadConfig(configPath)
+	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
 		if Verbose {
 			fmt.Printf("DEBUG: Error loading config: %v\n", err)
@@ -58,7 +59,7 @@ func GetQueueInfo() string {
 
 	if Verbose {
 		fmt.Printf("DEBUG: Loaded config - Sonarr: %d instances, Radarr: %d instances, Lidarr: %d instances, Readarr: %d instances\n",
-			len(config.Sonarr), len(config.Radarr), len(config.Lidarr), len(config.Readarr))
+			len(cfg.Sonarr), len(cfg.Radarr), len(cfg.Lidarr), len(cfg.Readarr))
 	}
 
 	// Create wait group to fetch all queues concurrently
@@ -69,7 +70,7 @@ func GetQueueInfo() string {
 	var allQueues []QueueInfo
 
 	// Fetch Sonarr queues concurrently
-	for i, instance := range config.Sonarr {
+	for i, instance := range cfg.Sonarr {
 		if instance.URL == "" || instance.APIKey == "" {
 			if Verbose {
 				fmt.Printf("DEBUG: Skipping Sonarr instance %d due to missing URL or API key\n", i)
@@ -78,7 +79,7 @@ func GetQueueInfo() string {
 		}
 
 		wg.Add(1)
-		go func(idx int, inst AppInstance) {
+		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
 
 			if Verbose {
@@ -88,7 +89,7 @@ func GetQueueInfo() string {
 			queue, err := getSonarrQueueDetailed(inst)
 			if err != nil {
 				if Verbose {
-					fmt.Printf("DEBUG: Error getting detailed Sonarr queue for instance %d: %v\n", idx, err)
+					fmt.Printf("DEBUG: Error getting detailed Sonarr queue for instance %d, hiding entry: %v\n", idx, err)
 				}
 				return
 			}
@@ -104,7 +105,7 @@ func GetQueueInfo() string {
 	}
 
 	// Fetch Radarr queues concurrently
-	for i, instance := range config.Radarr {
+	for i, instance := range cfg.Radarr {
 		if instance.URL == "" || instance.APIKey == "" {
 			if Verbose {
 				fmt.Printf("DEBUG: Skipping Radarr instance %d due to missing URL or API key\n", i)
@@ -113,7 +114,7 @@ func GetQueueInfo() string {
 		}
 
 		wg.Add(1)
-		go func(idx int, inst AppInstance) {
+		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
 
 			if Verbose {
@@ -123,7 +124,7 @@ func GetQueueInfo() string {
 			queue, err := getRadarrQueueDetailed(inst)
 			if err != nil {
 				if Verbose {
-					fmt.Printf("DEBUG: Error getting detailed Radarr queue for instance %d: %v\n", idx, err)
+					fmt.Printf("DEBUG: Error getting detailed Radarr queue for instance %d, hiding entry: %v\n", idx, err)
 				}
 				return
 			}
@@ -139,7 +140,7 @@ func GetQueueInfo() string {
 	}
 
 	// Fetch Lidarr queues concurrently
-	for i, instance := range config.Lidarr {
+	for i, instance := range cfg.Lidarr {
 		if instance.URL == "" || instance.APIKey == "" {
 			if Verbose {
 				fmt.Printf("DEBUG: Skipping Lidarr instance %d due to missing URL or API key\n", i)
@@ -148,7 +149,7 @@ func GetQueueInfo() string {
 		}
 
 		wg.Add(1)
-		go func(idx int, inst AppInstance) {
+		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
 
 			if Verbose {
@@ -158,7 +159,7 @@ func GetQueueInfo() string {
 			queue, err := getLidarrQueueDetailed(inst)
 			if err != nil {
 				if Verbose {
-					fmt.Printf("DEBUG: Error getting detailed Lidarr queue for instance %d: %v\n", idx, err)
+					fmt.Printf("DEBUG: Error getting detailed Lidarr queue for instance %d, hiding entry: %v\n", idx, err)
 				}
 				return
 			}
@@ -174,7 +175,7 @@ func GetQueueInfo() string {
 	}
 
 	// Fetch Readarr queues concurrently
-	for i, instance := range config.Readarr {
+	for i, instance := range cfg.Readarr {
 		if instance.URL == "" || instance.APIKey == "" {
 			if Verbose {
 				fmt.Printf("DEBUG: Skipping Readarr instance %d due to missing URL or API key\n", i)
@@ -183,7 +184,7 @@ func GetQueueInfo() string {
 		}
 
 		wg.Add(1)
-		go func(idx int, inst AppInstance) {
+		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
 
 			if Verbose {
@@ -193,7 +194,7 @@ func GetQueueInfo() string {
 			queue, err := getReadarrQueueDetailed(inst)
 			if err != nil {
 				if Verbose {
-					fmt.Printf("DEBUG: Error getting detailed Readarr queue for instance %d: %v\n", idx, err)
+					fmt.Printf("DEBUG: Error getting detailed Readarr queue for instance %d, hiding entry: %v\n", idx, err)
 				}
 				return
 			}
@@ -237,33 +238,48 @@ func GetQueueInfo() string {
 }
 
 // getSonarrQueueDetailed gets the detailed queue for a Sonarr instance
-func getSonarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
+func getSonarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 	if Verbose {
 		fmt.Printf("DEBUG: Creating Sonarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	// Create a starr.Config
-	c := starr.New(instance.APIKey, instance.URL, 10*time.Second)
+	// Set timeout, defaulting to 1 second
+	timeout := 1 * time.Second
+	if instance.Timeout > 0 {
+		timeout = time.Duration(instance.Timeout) * time.Second
+	}
 
-	// Create a Sonarr client
+	// Create a starr.Config with custom timeout
+	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := sonarr.New(c)
 
 	if Verbose {
 		fmt.Printf("DEBUG: Fetching Sonarr queue for %s\n", instance.Name)
 	}
 
-	// Get the queue - get all records with pagination
 	var allQueueItems []sonarr.QueueRecord
 	pageSize := 100
 	page := 1
 	for {
-		queue, err := client.GetQueue(page, pageSize)
+		var queue *sonarr.Queue
+		var err error
+		queue, err = client.GetQueue(page, pageSize)
+
 		if err != nil {
 			if Verbose {
 				fmt.Printf("DEBUG: Error fetching Sonarr queue page %d: %v\n", page, err)
 			}
 			return QueueInfo{}, err
 		}
+
+		// Check for nil queue to prevent dereference
+		if queue == nil {
+			if Verbose {
+				fmt.Printf("DEBUG: Received nil queue from Sonarr API for page %d, stopping pagination.\n", page)
+			}
+			break
+		}
+
 		for _, record := range queue.Records {
 			allQueueItems = append(allQueueItems, *record)
 		}
@@ -277,7 +293,6 @@ func getSonarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Received Sonarr queue with %d total records\n", len(allQueueItems))
 	}
 
-	// Process the queue items
 	info := QueueInfo{
 		Name:  instance.Name,
 		Items: make([]QueueItem, len(allQueueItems)),
@@ -290,33 +305,46 @@ func getSonarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
 }
 
 // getRadarrQueueDetailed gets the detailed queue for a Radarr instance
-func getRadarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
+func getRadarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 	if Verbose {
 		fmt.Printf("DEBUG: Creating Radarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	// Create a starr.Config
-	c := starr.New(instance.APIKey, instance.URL, 10*time.Second)
+	timeout := 1 * time.Second
+	if instance.Timeout > 0 {
+		timeout = time.Duration(instance.Timeout) * time.Second
+	}
 
-	// Create a Radarr client
+	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := radarr.New(c)
 
 	if Verbose {
 		fmt.Printf("DEBUG: Fetching Radarr queue for %s\n", instance.Name)
 	}
 
-	// Get the queue with pagination
 	var allQueueItems []radarr.QueueRecord
 	pageSize := 100
 	page := 1
 	for {
-		queue, err := client.GetQueue(page, pageSize)
+		var queue *radarr.Queue
+		var err error
+		queue, err = client.GetQueue(page, pageSize)
+
 		if err != nil {
 			if Verbose {
 				fmt.Printf("DEBUG: Error fetching Radarr queue page %d: %v\n", page, err)
 			}
 			return QueueInfo{}, err
 		}
+
+		// Check for nil queue to prevent dereference
+		if queue == nil {
+			if Verbose {
+				fmt.Printf("DEBUG: Received nil queue from Radarr API for page %d, stopping pagination.\n", page)
+			}
+			break
+		}
+
 		for _, record := range queue.Records {
 			allQueueItems = append(allQueueItems, *record)
 		}
@@ -330,7 +358,6 @@ func getRadarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Received Radarr queue with %d total records\n", len(allQueueItems))
 	}
 
-	// Process the queue items
 	info := QueueInfo{
 		Name:  instance.Name,
 		Items: make([]QueueItem, len(allQueueItems)),
@@ -343,33 +370,46 @@ func getRadarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
 }
 
 // getLidarrQueueDetailed gets the detailed queue for a Lidarr instance
-func getLidarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
+func getLidarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 	if Verbose {
 		fmt.Printf("DEBUG: Creating Lidarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	// Create a starr.Config
-	c := starr.New(instance.APIKey, instance.URL, 10*time.Second)
+	timeout := 1 * time.Second
+	if instance.Timeout > 0 {
+		timeout = time.Duration(instance.Timeout) * time.Second
+	}
 
-	// Create a Lidarr client
+	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := lidarr.New(c)
 
 	if Verbose {
 		fmt.Printf("DEBUG: Fetching Lidarr queue for %s\n", instance.Name)
 	}
 
-	// Get the queue with pagination
 	var allQueueItems []lidarr.QueueRecord
 	pageSize := 100
 	page := 1
 	for {
-		queue, err := client.GetQueue(page, pageSize)
+		var queue *lidarr.Queue
+		var err error
+		queue, err = client.GetQueue(page, pageSize)
+
 		if err != nil {
 			if Verbose {
 				fmt.Printf("DEBUG: Error fetching Lidarr queue page %d: %v\n", page, err)
 			}
 			return QueueInfo{}, err
 		}
+
+		// Check for nil queue to prevent dereference
+		if queue == nil {
+			if Verbose {
+				fmt.Printf("DEBUG: Received nil queue from Lidarr API for page %d, stopping pagination.\n", page)
+			}
+			break
+		}
+
 		for _, record := range queue.Records {
 			allQueueItems = append(allQueueItems, *record)
 		}
@@ -383,7 +423,6 @@ func getLidarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Received Lidarr queue with %d total records\n", len(allQueueItems))
 	}
 
-	// Process the queue items
 	info := QueueInfo{
 		Name:  instance.Name,
 		Items: make([]QueueItem, len(allQueueItems)),
@@ -396,33 +435,46 @@ func getLidarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
 }
 
 // getReadarrQueueDetailed gets the detailed queue for a Readarr instance
-func getReadarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
+func getReadarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 	if Verbose {
 		fmt.Printf("DEBUG: Creating Readarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	// Create a starr.Config
-	c := starr.New(instance.APIKey, instance.URL, 10*time.Second)
+	timeout := 1 * time.Second
+	if instance.Timeout > 0 {
+		timeout = time.Duration(instance.Timeout) * time.Second
+	}
 
-	// Create a Readarr client
+	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := readarr.New(c)
 
 	if Verbose {
 		fmt.Printf("DEBUG: Fetching Readarr queue for %s\n", instance.Name)
 	}
 
-	// Get the queue with pagination
 	var allQueueItems []readarr.QueueRecord
 	pageSize := 100
 	page := 1
 	for {
-		queue, err := client.GetQueue(page, pageSize)
+		var queue *readarr.Queue
+		var err error
+		queue, err = client.GetQueue(page, pageSize)
+
 		if err != nil {
 			if Verbose {
 				fmt.Printf("DEBUG: Error fetching Readarr queue page %d: %v\n", page, err)
 			}
 			return QueueInfo{}, err
 		}
+
+		// Check for nil queue to prevent dereference
+		if queue == nil {
+			if Verbose {
+				fmt.Printf("DEBUG: Received nil queue from Readarr API for page %d, stopping pagination.\n", page)
+			}
+			break
+		}
+
 		for _, record := range queue.Records {
 			allQueueItems = append(allQueueItems, *record)
 		}
@@ -436,7 +488,6 @@ func getReadarrQueueDetailed(instance AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Received Readarr queue with %d total records\n", len(allQueueItems))
 	}
 
-	// Process the queue items
 	info := QueueInfo{
 		Name:  instance.Name,
 		Items: make([]QueueItem, len(allQueueItems)),
