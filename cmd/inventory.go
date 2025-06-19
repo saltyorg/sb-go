@@ -27,7 +27,7 @@ func init() {
 func handleInventory() error {
 	filePath := "/srv/git/saltbox/inventories/host_vars/localhost.yml"
 	defaultEditor := "nano"
-	approvedEditors := []string{"nano", "vim", "vi", "emacs", "gedit", "code"}
+	approvedEditors := []string{"nano", "vim", "vi", "emacs", "gedit", "code", "micro"}
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return fmt.Errorf("error: the inventory file 'localhost.yml' does not yet exist")
