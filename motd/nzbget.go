@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
+	"github.com/saltyorg/sb-go/constants"
 )
 
 // NzbgetInfo holds processed information for an NZBGet instance
@@ -51,7 +52,7 @@ type listGroupsResponse struct {
 
 // GetNzbgetInfo fetches and formats NZBGet queue information
 func GetNzbgetInfo() string {
-	configPath := "/srv/git/saltbox/motd.yml"
+	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if Verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
@@ -100,7 +101,7 @@ func GetNzbgetInfo() string {
 }
 
 // callNzbgetAPI is a helper to perform JSON-RPC calls
-func callNzbgetAPI(instance config.NzbgetInstance, method string, target interface{}) error {
+func callNzbgetAPI(instance config.UserPassAppInstance, method string, target interface{}) error {
 	timeout := 1 * time.Second
 	if instance.Timeout > 0 {
 		timeout = time.Duration(instance.Timeout) * time.Second
@@ -145,7 +146,7 @@ func callNzbgetAPI(instance config.NzbgetInstance, method string, target interfa
 }
 
 // getNzbgetQueueInfo fetches queue information from a single NZBGet server
-func getNzbgetQueueInfo(instance config.NzbgetInstance) (NzbgetInfo, error) {
+func getNzbgetQueueInfo(instance config.UserPassAppInstance) (NzbgetInfo, error) {
 	result := NzbgetInfo{Name: instance.Name}
 	if result.Name == "" {
 		result.Name = "NZBGet"
@@ -240,18 +241,4 @@ func formatNzbgetSummary(info NzbgetInfo) string {
 
 	speed := ValueStyle.Render(fmt.Sprintf("%s/s", formatBytes(int64(info.DownloadSpeed))))
 	return fmt.Sprintf("Downloading at %s, %s", speed, queueSummary)
-}
-
-// formatBytes converts bytes to a human-readable string (KB, MB, GB, etc.)
-func formatBytes(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }

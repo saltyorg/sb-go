@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
+	"github.com/saltyorg/sb-go/constants"
 )
 
 // PlexStreamInfo contains information about Plex streams
@@ -72,7 +73,7 @@ type PlexSession struct {
 // GetPlexInfo fetches and formats Plex streaming information
 func GetPlexInfo() string {
 	// Check if the configuration file exists
-	configPath := "/srv/git/saltbox/motd.yml"
+	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if Verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)

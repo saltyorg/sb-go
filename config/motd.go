@@ -13,15 +13,16 @@ import (
 
 // MOTDConfig represents the MOTD configuration structure
 type MOTDConfig struct {
-	Sonarr   []AppInstance      `yaml:"sonarr"`
-	Radarr   []AppInstance      `yaml:"radarr"`
-	Lidarr   []AppInstance      `yaml:"lidarr"`
-	Readarr  []AppInstance      `yaml:"readarr"`
-	Plex     []PlexInstance     `yaml:"plex"`
-	Jellyfin []JellyfinInstance `yaml:"jellyfin"`
-	Emby     []EmbyInstance     `yaml:"emby"`
-	Sabnzbd  []AppInstance      `yaml:"sabnzbd"`
-	Nzbget   []NzbgetInstance   `yaml:"nzbget"`
+	Sonarr      []AppInstance         `yaml:"sonarr"`
+	Radarr      []AppInstance         `yaml:"radarr"`
+	Lidarr      []AppInstance         `yaml:"lidarr"`
+	Readarr     []AppInstance         `yaml:"readarr"`
+	Plex        []PlexInstance        `yaml:"plex"`
+	Jellyfin    []JellyfinInstance    `yaml:"jellyfin"`
+	Emby        []EmbyInstance        `yaml:"emby"`
+	Sabnzbd     []AppInstance         `yaml:"sabnzbd"`
+	Nzbget      []UserPassAppInstance `yaml:"nzbget"`
+	Qbittorrent []UserPassAppInstance `yaml:"qbittorrent"`
 }
 
 // AppInstance represents an app instance in the MOTD configuration
@@ -56,8 +57,8 @@ type EmbyInstance struct {
 	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
 }
 
-// NzbgetInstance represents an NZBGet server instance in the MOTD configuration
-type NzbgetInstance struct {
+// UserPassAppInstance represents an app instance requiring user/pass auth in the MOTD configuration
+type UserPassAppInstance struct {
 	Name     string `yaml:"name"`
 	URL      string `yaml:"url" validate:"omitempty,url"`
 	User     string `yaml:"user" validate:"required_with=URL"`
@@ -312,6 +313,21 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		}
 		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
 			err := fmt.Errorf("nzbget instance '%s' has user/password but no URL", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+	}
+
+	// Additional validation for Qbittorrent instances
+	for _, instance := range config.Qbittorrent {
+		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Qbittorrent instance: %+v\n", instance)
+		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
+			err := fmt.Errorf("qbittorrent instance '%s' has URL but is missing user or password", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
+			err := fmt.Errorf("qbittorrent instance '%s' has user/password but no URL", instance.Name)
 			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
 			return err
 		}

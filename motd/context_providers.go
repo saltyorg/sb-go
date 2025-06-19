@@ -307,3 +307,19 @@ func GetNzbgetInfoWithContext(ctx context.Context) string {
 		return "" // Return an empty string on timeout to hide this section
 	}
 }
+
+// GetQbittorrentInfoWithContext provides qBittorrent info with context/timeout support
+func GetQbittorrentInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetQbittorrentInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return an empty string on timeout to hide this section
+	}
+}

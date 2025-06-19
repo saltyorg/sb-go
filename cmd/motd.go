@@ -28,6 +28,7 @@ var (
 	showQueues           bool
 	showSabnzbd          bool
 	showNzbget           bool
+	showQbittorrent      bool
 	showPlex             bool
 	showEmby             bool
 	showJellyfin         bool
@@ -66,6 +67,7 @@ last login, user sessions, process information, and system update status based o
 			showQueues = true
 			showSabnzbd = true
 			showNzbget = true
+			showQbittorrent = true
 			showPlex = true
 			showEmby = true
 			showJellyfin = true
@@ -75,29 +77,30 @@ last login, user sessions, process information, and system update status based o
 		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
 			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses && !showJellyfin && !showEmby &&
 			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues &&
-			!showPlex && !showSabnzbd && !showNzbget {
+			!showPlex && !showSabnzbd && !showNzbget && !showQbittorrent {
 			fmt.Println("Error: No information selected to display.")
 			fmt.Println("Please use at least one of the following flags:")
-			fmt.Println("  --distro     Show distribution information")
-			fmt.Println("  --kernel     Show kernel information")
-			fmt.Println("  --uptime     Show uptime information")
-			fmt.Println("  --cpu        Show CPU load averages")
-			fmt.Println("  --memory     Show memory usage")
-			fmt.Println("  --disk       Show disk usage for all partitions")
-			fmt.Println("  --login      Show last login information")
-			fmt.Println("  --sessions   Show active user sessions")
-			fmt.Println("  --processes  Show process count")
-			fmt.Println("  --apt        Show apt package status")
-			fmt.Println("  --reboot     Show if reboot is required")
-			fmt.Println("  --docker     Show Docker container information")
-			fmt.Println("  --cpu-info   Show CPU model and core count")
-			fmt.Println("  --queues     Show download queue information from Sonarr, Radarr, etc.")
-			fmt.Println("  --sabnzbd    Show Sabnzbd queue information")
-			fmt.Println("  --nzbget     Show NZBGet queue information")
-			fmt.Println("  --plex       Show Plex streaming information")
-			fmt.Println("  --emby       Show Emby streaming information")
-			fmt.Println("  --jellyfin   Show Jellyfin streaming information")
-			fmt.Println("  --all        Show all information")
+			fmt.Println("  --distro       Show distribution information")
+			fmt.Println("  --kernel       Show kernel information")
+			fmt.Println("  --uptime       Show uptime information")
+			fmt.Println("  --cpu          Show CPU load averages")
+			fmt.Println("  --memory       Show memory usage")
+			fmt.Println("  --disk         Show disk usage for all partitions")
+			fmt.Println("  --login        Show last login information")
+			fmt.Println("  --sessions     Show active user sessions")
+			fmt.Println("  --processes    Show process count")
+			fmt.Println("  --apt          Show apt package status")
+			fmt.Println("  --reboot       Show if reboot is required")
+			fmt.Println("  --docker       Show Docker container information")
+			fmt.Println("  --cpu-info     Show CPU model and core count")
+			fmt.Println("  --queues       Show download queue information from Sonarr, Radarr, etc.")
+			fmt.Println("  --sabnzbd      Show Sabnzbd queue information")
+			fmt.Println("  --nzbget       Show NZBGet queue information")
+			fmt.Println("  --qbittorrent  Show qBittorrent queue information")
+			fmt.Println("  --plex         Show Plex streaming information")
+			fmt.Println("  --emby         Show Emby streaming information")
+			fmt.Println("  --jellyfin     Show Jellyfin streaming information")
+			fmt.Println("  --all          Show all information")
 			os.Exit(1)
 		}
 
@@ -199,9 +202,10 @@ func displayMotd() {
 		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 14},
 		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 15},
 		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 16},
-		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 17},
-		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 18},
-		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 19},
+		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 17},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 18},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 19},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 20},
 	}
 
 	// Filter sources based on enabled flags
@@ -223,6 +227,7 @@ func displayMotd() {
 		"Download Queues:": showQueues,
 		"SABnzbd:":         showSabnzbd,
 		"NZBGet:":          showNzbget,
+		"qBittorrent:":     showQbittorrent,
 		"Plex:":            showPlex,
 		"Emby:":            showEmby,
 		"Jellyfin:":        showJellyfin,
@@ -302,6 +307,7 @@ func init() {
 	motdCmd.Flags().BoolVar(&showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
 	motdCmd.Flags().BoolVar(&showSabnzbd, "sabnzbd", false, "Show SABnzbd queue information")
 	motdCmd.Flags().BoolVar(&showNzbget, "nzbget", false, "Show NZBGet queue information")
+	motdCmd.Flags().BoolVar(&showQbittorrent, "qbittorrent", false, "Show qBittorrent queue information")
 	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
 	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
 	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")

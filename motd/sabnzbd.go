@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
+	"github.com/saltyorg/sb-go/constants"
 )
 
 // SabnzbdInfo holds the processed information for an SABnzbd instance
@@ -39,7 +40,7 @@ type SabnzbdQueue struct {
 
 // GetSabnzbdInfo fetches and formats SABnzbd queue information
 func GetSabnzbdInfo() string {
-	configPath := "/srv/git/saltbox/motd.yml"
+	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if Verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
