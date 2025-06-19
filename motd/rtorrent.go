@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/autobrr/go-rtorrent"
+	"github.com/saltydk/go-rtorrent"
 	"github.com/saltyorg/sb-go/config"
 	"github.com/saltyorg/sb-go/constants"
 )
@@ -19,6 +19,7 @@ type rtorrentInfo struct {
 	DownloadingCount int
 	SeedingCount     int
 	StoppedCount     int
+	ErrorCount       int
 	DownloadSpeed    int
 	UploadSpeed      int
 	Error            error
@@ -123,6 +124,12 @@ func getRtorrentStats(instance config.UserPassAppInstance) (rtorrentInfo, error)
 
 	// Categorize torrents by state
 	for _, t := range torrents {
+		// If the torrent has a non-empty message, consider it an error
+		if t.Message != "" {
+			result.ErrorCount++
+			continue // Skip to the next torrent
+		}
+
 		isActive, err := client.IsActive(ctx, t)
 		if err != nil {
 			// Skip torrent if we can't determine its state
@@ -174,7 +181,7 @@ func formatRtorrentOutput(infos []rtorrentInfo) string {
 
 // formatRtorrentSummary is a helper to format the summary for a single instance.
 func formatRtorrentSummary(info rtorrentInfo) string {
-	if info.DownloadingCount == 0 && info.SeedingCount == 0 && info.StoppedCount == 0 {
+	if info.DownloadingCount == 0 && info.SeedingCount == 0 && info.StoppedCount == 0 && info.ErrorCount == 0 {
 		return "No torrents present"
 	}
 
@@ -184,6 +191,7 @@ func formatRtorrentSummary(info rtorrentInfo) string {
 	downloading := ValueStyle.Render(fmt.Sprintf("%d", info.DownloadingCount))
 	seeding := ValueStyle.Render(fmt.Sprintf("%d", info.SeedingCount))
 	stopped := ValueStyle.Render(fmt.Sprintf("%d", info.StoppedCount))
+	errored := ValueStyle.Render(fmt.Sprintf("%d", info.ErrorCount))
 
 	var parts []string
 	parts = append(parts, fmt.Sprintf("↓%s ↑%s", dlSpeed, upSpeed))
@@ -192,6 +200,10 @@ func formatRtorrentSummary(info rtorrentInfo) string {
 
 	if info.StoppedCount > 0 {
 		parts = append(parts, RedStyle.Render(fmt.Sprintf("%s Stopped", stopped)))
+	}
+
+	if info.ErrorCount > 0 {
+		parts = append(parts, RedStyle.Render(fmt.Sprintf("%s Error", errored)))
 	}
 
 	return strings.Join(parts, " | ")

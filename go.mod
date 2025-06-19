@@ -7,7 +7,6 @@ require (
 	github.com/agnivade/levenshtein v1.2.1
 	github.com/aquasecurity/table v1.10.0
 	github.com/autobrr/go-qbittorrent v1.14.0
-	github.com/autobrr/go-rtorrent v1.12.0
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.5
@@ -17,6 +16,7 @@ require (
 	github.com/docker/go-connections v0.5.0
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/rhysd/go-github-selfupdate v1.2.3
+	github.com/saltydk/go-rtorrent v1.0.1
 	github.com/sj14/jellyfin-go v0.3.3
 	github.com/spf13/cobra v1.9.1
 	golang.org/x/crypto v0.39.0
