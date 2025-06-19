@@ -23,6 +23,7 @@ type MOTDConfig struct {
 	Sabnzbd     []AppInstance         `yaml:"sabnzbd"`
 	Nzbget      []UserPassAppInstance `yaml:"nzbget"`
 	Qbittorrent []UserPassAppInstance `yaml:"qbittorrent"`
+	Rtorrent    []UserPassAppInstance `yaml:"rtorrent"`
 }
 
 // AppInstance represents an app instance in the MOTD configuration
@@ -332,6 +333,18 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 			return err
 		}
 	}
+
+	for _, instance := range config.Rtorrent {
+		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating rTorrent instance: %+v\n", instance)
+		// It is valid to have a URL without user/pass for rTorrent,
+		// but not the other way around.
+		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
+			err := fmt.Errorf("rtorrent instance '%s' has user/password but no URL", instance.Name)
+			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			return err
+		}
+	}
+
 	debugPrintf("DEBUG: validateMOTDNestedConfigs - nested validation successful\n")
 	return nil
 }

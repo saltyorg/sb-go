@@ -29,6 +29,7 @@ var (
 	showSabnzbd          bool
 	showNzbget           bool
 	showQbittorrent      bool
+	showRtorrent         bool
 	showPlex             bool
 	showEmby             bool
 	showJellyfin         bool
@@ -68,6 +69,7 @@ last login, user sessions, process information, and system update status based o
 			showSabnzbd = true
 			showNzbget = true
 			showQbittorrent = true
+			showRtorrent = true
 			showPlex = true
 			showEmby = true
 			showJellyfin = true
@@ -77,7 +79,7 @@ last login, user sessions, process information, and system update status based o
 		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
 			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses && !showJellyfin && !showEmby &&
 			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues &&
-			!showPlex && !showSabnzbd && !showNzbget && !showQbittorrent {
+			!showPlex && !showSabnzbd && !showNzbget && !showQbittorrent && !showRtorrent {
 			fmt.Println("Error: No information selected to display.")
 			fmt.Println("Please use at least one of the following flags:")
 			fmt.Println("  --distro       Show distribution information")
@@ -97,6 +99,7 @@ last login, user sessions, process information, and system update status based o
 			fmt.Println("  --sabnzbd      Show Sabnzbd queue information")
 			fmt.Println("  --nzbget       Show NZBGet queue information")
 			fmt.Println("  --qbittorrent  Show qBittorrent queue information")
+			fmt.Println("  --rtorrent     Show rTorrent queue information")
 			fmt.Println("  --plex         Show Plex streaming information")
 			fmt.Println("  --emby         Show Emby streaming information")
 			fmt.Println("  --jellyfin     Show Jellyfin streaming information")
@@ -203,9 +206,10 @@ func displayMotd() {
 		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 15},
 		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 16},
 		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 17},
-		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 18},
-		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 19},
-		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 20},
+		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 18},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 19},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 20},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 21},
 	}
 
 	// Filter sources based on enabled flags
@@ -228,6 +232,7 @@ func displayMotd() {
 		"SABnzbd:":         showSabnzbd,
 		"NZBGet:":          showNzbget,
 		"qBittorrent:":     showQbittorrent,
+		"rTorrent:":        showRtorrent,
 		"Plex:":            showPlex,
 		"Emby:":            showEmby,
 		"Jellyfin:":        showJellyfin,
@@ -308,6 +313,7 @@ func init() {
 	motdCmd.Flags().BoolVar(&showSabnzbd, "sabnzbd", false, "Show SABnzbd queue information")
 	motdCmd.Flags().BoolVar(&showNzbget, "nzbget", false, "Show NZBGet queue information")
 	motdCmd.Flags().BoolVar(&showQbittorrent, "qbittorrent", false, "Show qBittorrent queue information")
+	motdCmd.Flags().BoolVar(&showRtorrent, "rtorrent", false, "Show rTorrent queue information")
 	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
 	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
 	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")

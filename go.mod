@@ -7,6 +7,7 @@ require (
 	github.com/agnivade/levenshtein v1.2.1
 	github.com/aquasecurity/table v1.10.0
 	github.com/autobrr/go-qbittorrent v1.14.0
+	github.com/autobrr/go-rtorrent v1.12.0
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.5
