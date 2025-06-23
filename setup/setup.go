@@ -396,20 +396,22 @@ func InstallPipDependencies() {
 	}
 }
 
-// CopyAnsibleBinaries copies Ansible binaries from the virtual environment to /usr/local/bin.
-func CopyAnsibleBinaries() {
-	if err := spinners.RunTaskWithSpinner("Copying Ansible binaries to /usr/local/bin", func() error {
-		ansibleBinDir := filepath.Join(constants.AnsibleVenvPath, "venv", "bin")
+// CopyRequiredBinaries copies select binaries from the virtual environment to /usr/local/bin.
+func CopyRequiredBinaries() {
+	if err := spinners.RunTaskWithSpinner("Copying required binaries to /usr/local/bin", func() error {
+		venvBinDir := filepath.Join(constants.AnsibleVenvPath, "venv", "bin")
 		destDir := "/usr/local/bin"
-		files, err := os.ReadDir(ansibleBinDir)
+		files, err := os.ReadDir(venvBinDir)
 		if err != nil {
-			return fmt.Errorf("error reading Ansible bin directory: %w", err) // Wrap error
+			return fmt.Errorf("error reading virtual environment bin directory: %w", err) // Wrap error
 		}
 
 		for _, file := range files {
-			if strings.HasPrefix(file.Name(), "ansible") {
-				srcPath := filepath.Join(ansibleBinDir, file.Name())
-				destPath := filepath.Join(destDir, file.Name())
+			fileName := file.Name()
+			// Check for ansible, certbot, or apprise binaries
+			if strings.HasPrefix(fileName, "ansible") || strings.HasPrefix(fileName, "certbot") || strings.HasPrefix(fileName, "apprise") {
+				srcPath := filepath.Join(venvBinDir, fileName)
+				destPath := filepath.Join(destDir, fileName)
 
 				// Open source file
 				srcFile, err := os.Open(srcPath)
@@ -420,30 +422,30 @@ func CopyAnsibleBinaries() {
 				// Create destination file
 				destFile, err := os.Create(destPath)
 				if err != nil {
-					srcFile.Close()                                                            // Close srcFile before exiting
-					return fmt.Errorf("error creating destination file %s: %w", destPath, err) // Wrap error
+					srcFile.Close() // Close srcFile before exiting
+					return fmt.Errorf("error creating destination file %s: %w", destPath, err)
 				}
 
 				// Set permissions on destination file
 				if err := os.Chmod(destPath, 0755); err != nil {
 					srcFile.Close()
 					destFile.Close()
-					return fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err) //Wrap
+					return fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err)
 				}
 
 				// Copy contents
 				_, err = io.Copy(destFile, srcFile)
 				srcFile.Close()  // Close srcFile *after* the copy
-				destFile.Close() //close destFile *after* copy
+				destFile.Close() // Close destFile *after* copy
 
 				if err != nil {
-					return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err) // Wrap error
+					return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)
 				}
 			}
 		}
 		return nil
 	}); err != nil {
-		fmt.Println("Error copying Ansible binaries:", err)
+		fmt.Println("Error copying required binaries:", err)
 		os.Exit(1)
 	}
 }

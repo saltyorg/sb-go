@@ -87,7 +87,7 @@ var setupCmd = &cobra.Command{
 		setup.InstallPipDependencies()
 
 		// Copy ansible* files to /usr/local/bin
-		setup.CopyAnsibleBinaries()
+		setup.CopyRequiredBinaries()
 
 		if verbose {
 			fmt.Println("Initial setup tasks completed")
