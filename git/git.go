@@ -61,7 +61,7 @@ func CloneRepository(repoURL, destPath, branch string, verbose bool) error {
 
 // FetchAndReset performs a git fetch and reset to a specified branch.
 func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]string) error {
-	// Get current branch name
+	// Get the current branch name
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = repoPath
 	output, err := cmd.CombinedOutput()

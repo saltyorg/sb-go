@@ -56,7 +56,7 @@ type RestoreServiceConfig struct {
 type RsyncConfig struct {
 	Destination string      `yaml:"destination" validate:"required"`
 	Enable      AnsibleBool `yaml:"enable" validate:"required,ansiblebool"`
-	Port        string      `yaml:"port" validate:"required"` // Keep as string
+	Port        string      `yaml:"port" validate:"required"`
 }
 
 // ValidateBackupConfig validates the BackupConfig struct.

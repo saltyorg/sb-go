@@ -31,10 +31,7 @@ var selfUpdateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(selfUpdateCmd)
-
-	// Add debug flag
 	selfUpdateCmd.Flags().BoolVarP(&debug, "verbose", "v", false, "Enable verbose debug output")
-	// Add auto-accept flag
 	selfUpdateCmd.Flags().BoolVarP(&autoAccept, "yes", "y", false, "Automatically accept update without confirmation")
 }
 
@@ -60,8 +57,6 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 		fmt.Printf("Debug: Current git commit: %s\n", runtime.GitCommit)
 		fmt.Printf("Debug: Looking for updates in repository: saltyorg/sb-go\n")
 		fmt.Printf("Debug: Auto-update mode: %t\n", autoUpdate)
-
-		// Enable detailed logging in the selfupdate package if possible
 		//selfupdate.EnableLog()
 	}
 
@@ -72,7 +67,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 		fmt.Println("Debug: Checking for latest release from GitHub")
 	}
 
-	// First check if an update is available without applying it
+	// First, check if an update is available without applying it
 	latest, found, err := selfupdate.DetectLatest("saltyorg/sb-go")
 	if err != nil {
 		if verbose {
@@ -121,7 +116,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 	}
 	_ = spinners.RunInfoSpinner(fmt.Sprintf("Successfully updated sb CLI to version: %s", result.Version))
 
-	// Print optional message if provided
+	// Print an optional message if provided
 	if optionalMessage != "" {
 		fmt.Println()
 		_ = spinners.RunInfoSpinner(optionalMessage)

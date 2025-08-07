@@ -88,7 +88,7 @@ var restartCmd = &cobra.Command{
 				_ = spinners.RunInfoSpinner(fmt.Sprintf("Stopping containers. Job ID: %s", stopJobResp.JobID))
 			}
 
-			// Wait for stop job to complete
+			// Wait for the stop job to complete
 			success, err := waitForJobCompletion(stopJobResp.JobID)
 			if err != nil {
 				return fmt.Errorf("error while stopping containers: %v", err)
@@ -101,7 +101,7 @@ var restartCmd = &cobra.Command{
 			return nil
 		}
 
-		// Create start containers task
+		// Create a start containers task
 		startContainersTask := func() error {
 			// Now start containers
 			startResp, err := http.Post(fmt.Sprintf("%s/start", constants.DockerControllerAPIURL), "application/json", nil)
@@ -125,7 +125,7 @@ var restartCmd = &cobra.Command{
 				_ = spinners.RunInfoSpinner(fmt.Sprintf("Starting containers. Job ID: %s", startJobResp.JobID))
 			}
 
-			// Wait for start job to complete
+			// Wait for the start job to complete
 			success, err := waitForJobCompletion(startJobResp.JobID)
 			if err != nil {
 				return fmt.Errorf("error while starting containers: %v", err)

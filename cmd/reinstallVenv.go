@@ -21,7 +21,6 @@ var reinstallVenvCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(reinstallVenvCmd)
-	// Add the -v flag as a persistent flag to the config command.
 	reinstallVenvCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }
 
@@ -41,7 +40,7 @@ func handleReinstallVenv(verbose bool) error {
 		return fmt.Errorf("error getting saltbox user: %w", err)
 	}
 
-	// Manage Ansible venv with force recreate flag set to true
+	// Manage Ansible venv with the force recreate flag set to true
 	// This function already has internal spinners
 	if err := venv.ManageAnsibleVenv(true, saltboxUser, verbose); err != nil {
 		return fmt.Errorf("error managing Ansible venv: %w", err)

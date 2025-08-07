@@ -8,7 +8,7 @@ import (
 )
 
 // Cache is a thread-safe structure for storing and persisting cached data.
-// It maintains an in-memory map (data) protected by a read-write mutex (mu),
+// It maintains an in-memory map (data) protected by a read-write mutex (mu)
 // and saves the cache contents to a file (file) for persistence.
 type Cache struct {
 	data map[string]interface{}
@@ -21,7 +21,7 @@ type Cache struct {
 // After initialization, it attempts to load any existing cache data from the file.
 // Returns the Cache instance or an error if loading the cache fails.
 func NewCache() (*Cache, error) {
-	filePath := constants.SaltboxCacheFile // Fixed file path from constants.
+	filePath := constants.SaltboxCacheFile
 	c := &Cache{
 		data: make(map[string]interface{}),
 		file: filePath,
@@ -65,7 +65,7 @@ func (c *Cache) CheckCache(repoPath string, tags []string) (bool, []string) {
 		return true, []string{}
 	}
 
-	// Build a set of cached tags for quick lookup.
+	// Build a set of cached tags for a quick lookup.
 	cachedTagSet := make(map[string]bool)
 	for _, tag := range cachedTags {
 		if strTag, ok := tag.(string); ok {

@@ -47,7 +47,7 @@ var startCmd = &cobra.Command{
 			return
 		}
 
-		// Create start container task
+		// Create a start container task
 		startContainersTask := func() error {
 			// Call the API to start containers
 			resp, err := http.Post(fmt.Sprintf("%s/start", constants.DockerControllerAPIURL), "application/json", nil)

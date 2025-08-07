@@ -27,7 +27,6 @@ var updateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(updateCmd)
-	// Add the -v flag as a persistent flag to the config command.
 	updateCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }
 
@@ -74,7 +73,7 @@ func updateSaltbox(verbose bool) error {
 		return fmt.Errorf("error managing Ansible venv: %w", err)
 	}
 
-	// Setup custom commands for git
+	// Set up custom commands for git
 	customCommands := [][]string{
 		{
 			"cp",
@@ -99,7 +98,7 @@ func updateSaltbox(verbose bool) error {
 		return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
 	}
 
-	// Get new commit hash
+	// Get commit hash after fetch and reset
 	newCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
 	if err != nil {
 		return fmt.Errorf("error getting new commit hash: %w", err)
@@ -136,7 +135,7 @@ func updateSandbox(verbose bool) error {
 		return fmt.Errorf("error getting saltbox user: %w", err)
 	}
 
-	// Setup custom commands for git
+	// Set up custom commands for git
 	customCommands := [][]string{
 		{
 			"cp",
@@ -167,7 +166,7 @@ func updateSandbox(verbose bool) error {
 		return fmt.Errorf("error running ansible playbook: %w", err)
 	}
 
-	// Get new commit hash
+	// Get commit hash after fetch and reset
 	newCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
 	if err != nil {
 		return fmt.Errorf("error getting new commit hash: %w", err)

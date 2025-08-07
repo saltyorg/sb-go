@@ -209,7 +209,7 @@ func formatValidationError(err error, config *SettingsConfig) error {
 				fieldPath, e.Tag(), e.Value(), e.Param())
 
 			// Check if this is a remote-related error
-			remoteMatch := regexp.MustCompile(`Rclone\.Remotes\[(\d+)\]`).FindStringSubmatch(fieldPath)
+			remoteMatch := regexp.MustCompile(`Rclone\.Remotes\[(\d+)]`).FindStringSubmatch(fieldPath)
 
 			// Convert struct field names to YAML field names for better user understanding
 			yamlFieldPath := convertToYAMLFieldPath(fieldPath)
@@ -258,10 +258,10 @@ func formatValidationError(err error, config *SettingsConfig) error {
 
 		// Write remote-specific errors grouped by remote
 		if len(remoteErrors) > 0 {
-			for remoteIdentifier, errors := range remoteErrors {
+			for remoteIdentifier, singleRemoteErrors := range remoteErrors {
 				sb.WriteString(fmt.Sprintf("\nErrors for %s:\n", remoteIdentifier))
 
-				for _, errMsg := range errors {
+				for _, errMsg := range singleRemoteErrors {
 					sb.WriteString("  - " + errMsg + "\n")
 				}
 			}
@@ -325,7 +325,7 @@ func formatRemoteValidationError(err error, remoteName string, remoteIndex int) 
 // convertToYAMLFieldPath converts internal struct field names to their YAML equivalents
 func convertToYAMLFieldPath(fieldPath string) string {
 	// First, handle rclone.remotes path pattern
-	remotePathPattern := regexp.MustCompile(`Rclone\.Remotes\[(\d+)\]`)
+	remotePathPattern := regexp.MustCompile(`Rclone\.Remotes\[(\d+)]`)
 	fieldPath = remotePathPattern.ReplaceAllString(fieldPath, "rclone.remotes[$1]")
 
 	// Extract the actual YAML path structure from the field path

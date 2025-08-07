@@ -88,7 +88,6 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 		}
 	}
 
-	// Add a single info print if cache is going to be updated.
 	needsCacheUpdate := false
 	if !noCache {
 		// Check if either cache is missing or has an empty 'tags' list
@@ -188,8 +187,8 @@ func runPlaybook(repoPath, playbookPath string, tags []string, ansibleBinaryPath
 func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) []string {
 	var suggestions []string
 
-	// Ensure cache exists and is populated.
-	validTags := getValidTags(repoPath, cacheInstance, verbosity) // Pass verbosity
+	// Ensure the cache exists and is populated.
+	validTags := getValidTags(repoPath, cacheInstance, verbosity)
 
 	if verbosity > 0 {
 		fmt.Printf("DEBUG: Valid tags for %s (after getValidTags): %v\n", repoPath, validTags)
@@ -199,7 +198,7 @@ func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, o
 	if repoPath == constants.SandboxRepoPath {
 		otherRepoPath = constants.SaltboxRepoPath
 	}
-	otherValidTags := getValidTags(otherRepoPath, cacheInstance, verbosity) // Pass verbosity
+	otherValidTags := getValidTags(otherRepoPath, cacheInstance, verbosity)
 	if verbosity > 0 {
 		fmt.Printf("DEBUG: Valid tags for other repo %s (after getValidTags): %v\n", otherRepoPath, otherValidTags)
 	}
@@ -217,7 +216,7 @@ func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, o
 		}
 		found := false
 
-		// 1. Check for exact match in the current repository
+		// 1. Check for an exact match in the current repository
 		for _, validTag := range validTags {
 			if providedTag == validTag {
 				found = true
@@ -231,7 +230,7 @@ func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, o
 			continue // Tag is valid, no suggestion needed
 		}
 
-		// 2. Check for exact match in the *other* repository (strongest suggestion)
+		// 2. Check for an exact match in the *other* repository (the strongest suggestion)
 		for _, otherValidTag := range otherValidTags {
 			if providedTag == otherValidTag {
 				suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s, but '%s%s' exists in %s. Use that instead.", currentPrefix, providedTag, repoName, otherPrefix, providedTag, otherRepoName))
@@ -284,7 +283,7 @@ func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, o
 		}
 		if bestMatchOther != "" {
 			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s. Did you mean '%s%s' (from %s)?", currentPrefix, providedTag, repoName, otherPrefix, bestMatchOther, otherRepoName))
-			if verbosity > 0 { // Check verbosity
+			if verbosity > 0 {
 				fmt.Printf("DEBUG: Suggesting '%s%s' for '%s%s' from other repo\n", otherPrefix, bestMatchOther, currentPrefix, providedTag)
 			}
 			continue
@@ -335,7 +334,7 @@ func getValidTags(repoPath string, cacheInstance *cache.Cache, verbosity int) []
 						cachedTagsStrings = append(cachedTagsStrings, strTag)
 					}
 				}
-				//If we got here, the cache is valid. Return
+				// If we got here, the cache is valid. Return
 				if verbosity > 0 {
 					fmt.Printf("DEBUG: Cache valid. Returning %v\n", cachedTagsStrings)
 				}
@@ -359,7 +358,7 @@ func getValidTags(repoPath string, cacheInstance *cache.Cache, verbosity int) []
 		fmt.Printf("DEBUG: Error updating cache for %s: %v\n", repoPath, err)
 	}
 
-	//Retrieve again
+	// Retrieve again
 	repoCache, ok = cacheInstance.GetRepoCache(repoPath)
 
 	// If *still* not ok, then return empty.
@@ -428,7 +427,7 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosit
 			}
 			return false
 		}
-		// Optionally, you could iterate through cachedTagsSlice here to ensure all elements are strings
+
 		if verbosity > 0 {
 			fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is a non-empty list for %s\n", repoPath)
 		}

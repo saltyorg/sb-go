@@ -34,7 +34,7 @@ func (a *AppriseConfig) UnmarshalYAML(value *yaml.Node) error {
 	// Handle nil or empty values explicitly
 	if value == nil || value.Kind == yaml.ScalarNode && value.Value == "" {
 		debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML - nil or empty value detected, setting to empty string\n")
-		*a = AppriseConfig("")
+		*a = ""
 		return nil
 	}
 
@@ -437,12 +437,12 @@ func validateDockerHub(username, token string) error {
 		var respBody map[string]interface{}
 		if json.NewDecoder(res.Body).Decode(&respBody) == nil { //Decode and check for errors
 			debugPrintf("DEBUG: validateDockerHub - decoded response body: %+v\n", respBody)
-			if message, ok := respBody["message"].(string); ok { //Check if message exists in the body
+			if message, ok := respBody["message"].(string); ok { //Check if a message exists in the body
 				err = fmt.Errorf("docker hub authentication failed (HTTP %d): %s", res.StatusCode, message)
 				debugPrintf("DEBUG: validateDockerHub - %v\n", err)
 				return err
 			}
-			if details, ok := respBody["details"].(string); ok { //Check if details exists in the body
+			if details, ok := respBody["details"].(string); ok { //Check if details exist in the body
 				err = fmt.Errorf("docker hub authentication failed (HTTP %d): %s", res.StatusCode, details)
 				debugPrintf("DEBUG: validateDockerHub - %v\n", err)
 				return err

@@ -21,13 +21,12 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 		fmt.Println("--- Managing Ansible Virtual Environment (Verbose) ---")
 		fmt.Printf("Force Recreate: %t, Saltbox User: %s\n", forceRecreate, saltboxUser)
 
-		// Check Python version
+		// Check the Python version
 		fmt.Println("Checking Python version...")
 		var err error
-		pythonMissing, err = checkPythonVersion(ansibleVenvPath, venvPythonPath) // Correct!
+		pythonMissing, err = checkPythonVersion(ansibleVenvPath, venvPythonPath)
 		if err != nil {
-			fmt.Errorf("error checking python version: %w", err)
-			return err
+			return fmt.Errorf("error checking python version: %w", err)
 		}
 		fmt.Printf("Python Missing: %t\n", pythonMissing)
 
@@ -49,57 +48,50 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 		// Detect OS release
 		fmt.Println("Detecting OS release...")
 		var release string
-		release, err = detectOSRelease() // Correct!
+		release, err = detectOSRelease()
 		if err != nil {
-			fmt.Errorf("error detecting OS release: %w", err)
-			return err
+			return fmt.Errorf("error detecting OS release: %w", err)
 		}
 		fmt.Printf("Detected OS Release: %s\n", release)
 
 		if recreate {
 			// Remove existing venv
 			fmt.Println("Removing existing venv...")
-			if err := removeExistingVenv(ansibleVenvPath); err != nil { // Correct!
-				fmt.Errorf("error removing existing venv: %w", err)
-				return err
+			if err := removeExistingVenv(ansibleVenvPath); err != nil {
+				return fmt.Errorf("error removing existing venv: %w", err)
 			}
 		}
 
 		if _, err := os.Stat(ansibleVenvPath); os.IsNotExist(err) {
 			// Create venv
 			fmt.Println("Creating virtual environment...")
-			if err := createVirtualEnv(ansibleVenvPath, release, verbose); err != nil { // Correct!
-				fmt.Errorf("error creating virtual environment: %w", err)
-				return err
+			if err := createVirtualEnv(ansibleVenvPath, release, verbose); err != nil {
+				return fmt.Errorf("error creating virtual environment: %w", err)
 			}
 		}
 
 		// Upgrade pip
 		fmt.Println("Upgrading pip...")
-		if err := upgradePip(ansibleVenvPath, verbose); err != nil { // Correct!
-			fmt.Errorf("error upgrading pip: %w", err)
-			return err
+		if err := upgradePip(ansibleVenvPath, verbose); err != nil {
+			return fmt.Errorf("error upgrading pip: %w", err)
 		}
 
 		// Install requirements
 		fmt.Println("Installing pip requirements...")
-		if err := installRequirements(ansibleVenvPath, verbose); err != nil { // Correct!
-			fmt.Errorf("error installing pip requirements: %w", err)
-			return err
+		if err := installRequirements(ansibleVenvPath, verbose); err != nil {
+			return fmt.Errorf("error installing pip requirements: %w", err)
 		}
 
 		// Copy binaries
 		fmt.Println("Copying binaries...")
-		if err := copyBinaries(ansibleVenvPath, verbose); err != nil { // Correct!
-			fmt.Errorf("error copying binaries: %w", err)
-			return err
+		if err := copyBinaries(ansibleVenvPath, verbose); err != nil {
+			return fmt.Errorf("error copying binaries: %w", err)
 		}
 
 		// Set ownership
 		fmt.Printf("Setting ownership to user: %s...\n", saltboxUser)
-		if err := setOwnership(ansibleVenvPath, saltboxUser, verbose); err != nil { // Correct!
-			fmt.Errorf("error setting ownership: %w", err)
-			return err
+		if err := setOwnership(ansibleVenvPath, saltboxUser, verbose); err != nil {
+			return fmt.Errorf("error setting ownership: %w", err)
 		}
 
 		if recreate {
@@ -111,7 +103,7 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 		fmt.Println("--- Ansible Virtual Environment Management (Verbose) Complete ---")
 
 	} else {
-		// Check Python version
+		// Check the Python version
 		if err := spinners.RunTaskWithSpinner("Checking Python version", func() error {
 			var err error
 			pythonMissing, err = checkPythonVersion(ansibleVenvPath, venvPythonPath)

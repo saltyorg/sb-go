@@ -42,7 +42,7 @@ Example usage:
 		}
 
 		role := args[0]
-		// Get file path for the role
+		// Get a file path for the role
 		filePath := getFilePath(role)
 
 		// Parse key-value pairs
@@ -52,7 +52,7 @@ Example usage:
 		case "load":
 			// Check if a specific instance was requested
 			if len(args) > 1 {
-				// Load specific instance
+				// Load a specific instance
 				instance := args[1]
 				facts, err := loadFacts(filePath, instance, keys)
 				if err != nil {
@@ -68,7 +68,7 @@ Example usage:
 				// Display facts for the specific instance
 				fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
 
-				// Sort keys for consistent output
+				// Sort keys for a consistent output
 				sortedKeys := make([]string, 0, len(facts))
 				for key := range facts {
 					sortedKeys = append(sortedKeys, key)
@@ -103,7 +103,7 @@ Example usage:
 				// Display facts for all instances
 				fmt.Printf("Facts for role '%s':\n", role)
 
-				// Sort instance names for consistent output
+				// Sort instance names for a consistent output
 				instanceNames := make([]string, 0, len(instances))
 				for instance := range instances {
 					instanceNames = append(instanceNames, instance)
@@ -123,7 +123,7 @@ Example usage:
 					facts := instances[instance]
 					fmt.Printf("\nInstance: %s\n", instance)
 
-					// Sort keys for consistent output
+					// Sort keys for a consistent output
 					keys := make([]string, 0, len(facts))
 					for key := range facts {
 						keys = append(keys, key)
@@ -176,7 +176,7 @@ Example usage:
 			// Display saved facts
 			fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
 
-			// Sort keys for consistent output
+			// Sort keys for a consistent output
 			sortedKeys := make([]string, 0, len(facts))
 			for key := range facts {
 				sortedKeys = append(sortedKeys, key)
@@ -378,7 +378,7 @@ func saveFacts(filePath, instance string, keys map[string]string, saltboxUser st
 	// Create a new ini file config
 	cfg := ini.Empty()
 
-	// If file exists, load it
+	// If a file exists, load it
 	fileExists := false
 	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
 		fileExists = true
@@ -403,7 +403,7 @@ func saveFacts(filePath, instance string, keys map[string]string, saltboxUser st
 
 	// Update keys and track changes
 	for key, value := range keys {
-		// Check if key exists and has same value
+		// Check if the key exists and has the same value
 		if section.HasKey(key) {
 			existingValue := section.Key(key).Value()
 			if existingValue != value {
@@ -428,9 +428,9 @@ func saveFacts(filePath, instance string, keys map[string]string, saltboxUser st
 		}
 	}
 
-	// Save file if changes were made
+	// Save the file if changes were made
 	if changed {
-		// Create directory if it doesn't exist
+		// Create the directory if it doesn't exist
 		dir := filepath.Dir(filePath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return facts, false, fmt.Errorf("failed to create directory: %v", err)
@@ -493,7 +493,7 @@ func deleteFacts(filePath, deleteType, instance string, keys map[string]string, 
 		return false, fmt.Errorf("failed to load ini file: %v", err)
 	}
 
-	// If instance doesn't exist, no change
+	// If the instance doesn't exist, no change
 	if !cfg.HasSection(instance) {
 		return false, nil
 	}

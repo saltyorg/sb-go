@@ -61,11 +61,11 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 	return nil
 }
 
-// PrepareAnsibleListTags configures the command for listing tags from an Ansible playbook,
+// PrepareAnsibleListTags configures the command for listing tags from an Ansible playbook
 // and returns a parser function to extract the tags from the command output.
 // It builds the command using repoPath, playbookPath, and extraSkipTags. Additionally, if a cache is provided,
 // the function checks whether cached tags can be used by comparing the repository's commit hash.
-// If the repoPath corresponds to a specific known path (i.e. saltbox_mod), a fixed command configuration is used.
+// If the repoPath corresponds to a specific known path (i.e., saltbox_mod), a fixed command configuration is used.
 // The function returns an exec.Cmd (or nil if cached tags are available), a function to parse the command output,
 // and an error if any configuration or cache retrieval fails.
 func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (*exec.Cmd, func(string) ([]string, error), error) {
@@ -97,7 +97,7 @@ func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache 
 		return cmd, parseOutput, nil
 	}
 
-	// Check if cache is available and valid by comparing the stored commit hash with the current one.
+	// Check if the cache is available and valid by comparing the stored commit hash with the current one.
 	repoCache, ok := cache.GetRepoCache(repoPath)
 	if ok {
 		if commit, commitOK := repoCache["commit"].(string); commitOK {
@@ -190,7 +190,7 @@ func RunAndCacheAnsibleTags(repoPath, playbookPath, extraSkipTags string, cache 
 		return true, nil // Cache was rebuilt with new tag information
 	}
 
-	return false, nil // Should not reach here, but return false by default
+	return false, nil // Should not reach here but return false by default
 }
 
 // RunAnsibleListTags executes the ansible-playbook command to list tags for the specified playbook,

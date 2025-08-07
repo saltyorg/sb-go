@@ -27,6 +27,5 @@ var reinstallFactsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(reinstallFactsCmd)
-	// Add the -v flag as a persistent flag to the config command.
 	reinstallFactsCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }

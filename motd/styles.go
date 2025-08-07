@@ -5,6 +5,8 @@ import (
 )
 
 // Use styles from the global styles package
+//
+//goland:noinspection GoUnusedGlobalVariable
 var (
 	// DefaultStyle inherits from the global default
 	DefaultStyle = styles.DefaultStyle

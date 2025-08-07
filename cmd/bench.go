@@ -38,7 +38,7 @@ func runBenchmark() error {
 		}
 	}
 
-	// Ensure cleanup happens when function returns normally
+	// Ensure cleanup happens when the function returns normally
 	defer cleanup()
 
 	// Create HTTP client

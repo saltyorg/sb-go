@@ -89,7 +89,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					newService := i.name
 					m.activeView = "logs"
 
-					// Initialize viewport if necessary
+					// Initialize the viewport if necessary
 					if !m.viewportInitialized {
 						// Split view layout
 						listWidth := m.width / 4
@@ -162,13 +162,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	// Always show split view
+	// Always show a split view
 	listView := lipgloss.NewStyle().
 		Width(m.list.Width()).
 		Height(m.height).
 		Render(m.list.View())
 
-	// If viewport isn't initialized yet, show empty space
+	// If the viewport isn't initialized yet, show an empty space
 	var logsView string
 	if m.viewportInitialized {
 		logsView = lipgloss.NewStyle().
@@ -256,7 +256,7 @@ func handleLogs() error {
 		items[i] = serviceItem{name: service}
 	}
 
-	// Create list with styling
+	// Create a list with styling
 	listDelegate := list.NewDefaultDelegate()
 	listDelegate.ShowDescription = false
 

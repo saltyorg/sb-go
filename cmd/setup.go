@@ -23,10 +23,10 @@ var setupCmd = &cobra.Command{
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(verbose)
 
-		// Check for existing Saltbox installation and prompt for confirmation.
+		// Check if Saltbox installation was already installed and prompt for confirmation.
 		if _, err := os.Stat(constants.SaltboxRepoPath); err == nil {
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("\n%s folder already exists. Continuing may reset your installation. Are you sure you want to continue? (yes/no): ", constants.SaltboxRepoPath) // Use constant here
+			fmt.Printf("\n%s folder already exists. Continuing may reset your installation. Are you sure you want to continue? (yes/no): ", constants.SaltboxRepoPath)
 			response, _ := reader.ReadString('\n')
 			response = strings.TrimSpace(strings.ToLower(response))
 
@@ -71,16 +71,16 @@ var setupCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Perform initial setup tasks (moved to setup package)
+		// Perform initial setup tasks
 		setup.InitialSetup(verbose)
 
-		// Configure the locale (moved to setup package)
+		// Configure the locale
 		setup.ConfigureLocale()
 
-		// Setup Python venv (moved to setup package)
+		// Setup Python venv
 		setup.PythonVenv(verbose)
 
-		// Setup Saltbox Repo (moved to setup package)
+		// Setup Saltbox Repo
 		setup.SaltboxRepo(verbose)
 
 		// Install pip3 Dependencies
@@ -102,6 +102,5 @@ var setupCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(setupCmd)
-	// Add the -v flag as a persistent flag to the config command.
 	setupCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 }

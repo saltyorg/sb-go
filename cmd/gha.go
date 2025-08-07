@@ -20,13 +20,13 @@ var ghaCmd = &cobra.Command{
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(true)
 
-		// Perform initial setup tasks (moved to setup package)
+		// Perform initial setup tasks
 		setup.InitialSetup(true)
 
-		// Configure the locale (moved to setup package)
+		// Configure the locale
 		setup.ConfigureLocale()
 
-		// Setup Python venv (moved to setup package)
+		// Setup Python venv
 		setup.PythonVenv(true)
 
 		if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {

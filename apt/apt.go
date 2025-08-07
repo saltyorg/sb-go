@@ -33,7 +33,7 @@ func InstallPackage(packages []string, verbose bool) func() error {
 
 		var stdoutBuf, stderrBuf bytes.Buffer
 
-		// Configure output based on verbose flag.
+		// Configure output based on a verbose flag.
 		if verbose {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -65,7 +65,7 @@ func InstallPackage(packages []string, verbose bool) func() error {
 				packageList, err)
 		}
 
-		// On successful installation, print a success message if verbose.
+		// On a successful installation, print a success message if verbose.
 		if verbose {
 			packageList := strings.Join(packages, ", ")
 			fmt.Printf("Packages '%s' installed successfully.\n", packageList)
@@ -78,7 +78,7 @@ func InstallPackage(packages []string, verbose bool) func() error {
 // UpdatePackageLists returns a function that updates the system's apt package lists.
 // When executed, it runs the "sudo apt-get update" command with the non-interactive environment.
 // The verbose flag determines whether the command output is streamed to the console or captured in buffers.
-// If the command fails, a detailed error message is returned including the exit code and (when not verbose)
+// If the command fails, a detailed error message is returned, including the exit code and (when not verbose)
 // the stderr output.
 func UpdatePackageLists(verbose bool) func() error {
 	return func() error {
@@ -90,7 +90,7 @@ func UpdatePackageLists(verbose bool) func() error {
 
 		var stdoutBuf, stderrBuf bytes.Buffer
 
-		// Configure output based on verbose flag.
+		// Configure output based on a verbose flag.
 		if verbose {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -247,7 +247,7 @@ func AddPPA(ppa string, verbose bool) func() error {
 			return fmt.Errorf("failed to add PPA '%s': %w", ppa, err)
 		}
 
-		// Print success message if in verbose mode.
+		// Print a success message if in verbose mode.
 		if verbose {
 			fmt.Printf("PPA '%s' added successfully.\n", ppa)
 		}

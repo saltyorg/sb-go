@@ -151,7 +151,6 @@ If no configuration is specified, an interactive menu will be shown.`,
 			return
 		}
 
-		// Handle specific config file editing based on the argument
 		switch args[0] {
 		case "accounts":
 			openEditor(constants.SaltboxAccountsPath)

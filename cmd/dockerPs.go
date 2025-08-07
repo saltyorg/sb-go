@@ -55,7 +55,7 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 			deduplicatedInternalPorts := deduplicate(internalPorts)
 			externalPorts := getExternalPortBindings(containerInspect.NetworkSettings.Ports)
 
-			containerName := cs.Names[0][1:] // Remove leading slash
+			containerName := cs.Names[0][1:] // Remove the leading slash
 
 			var statusText string
 			var statusStyle lipgloss.Style
@@ -79,7 +79,6 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 
 			coloredStatus := statusStyle.Render(statusText)
 
-			// Only add to list if it has ports, or we want to show all containers
 			if len(deduplicatedInternalPorts) > 0 || len(externalPorts) > 0 {
 				containers = append(containers, containerInfo{
 					name:          containerName,
