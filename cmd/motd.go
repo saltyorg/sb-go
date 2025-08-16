@@ -163,7 +163,7 @@ last login, user sessions, process information, and system update status based o
 }
 
 func displayMotd() {
-	// Display banner from file if provided. This takes precedence.
+	// Display a banner from a file if provided. This takes precedence.
 	if bannerFile != "" {
 		content, err := os.ReadFile(bannerFile)
 		if err != nil {

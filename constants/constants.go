@@ -17,6 +17,8 @@ const (
 	SaltboxHetznerVLANPath      = "/srv/git/saltbox/hetzner_vlan.yml"
 	SaltboxSettingsPath         = "/srv/git/saltbox/settings.yml"
 	SaltboxMOTDPath             = "/srv/git/saltbox/motd.yml"
+	SaltboxFactsPath            = "/opt/saltbox"
+	SaltboxInventoryPath        = "/srv/git/saltbox/inventories/host_vars/localhost.yml"
 	SandboxRepoPath             = "/opt/sandbox"
 	SaltboxModRepoPath          = "/opt/saltbox_mod"
 	SaltboxCacheFile            = "/srv/git/saltbox/cache.json"

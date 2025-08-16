@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/saltyorg/sb-go/cache"
+	"github.com/saltyorg/sb-go/constants"
 	"github.com/saltyorg/sb-go/git"
 	"os"
 	"os/exec"
@@ -91,8 +92,8 @@ func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache 
 	}
 
 	// If repoPath matches the specific saltbox_mod repository, use a predetermined command configuration.
-	if repoPath == "/opt/saltbox_mod" { // Assuming this is the saltbox_mod repo path
-		cmd := exec.Command("/usr/local/bin/ansible-playbook", playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
+	if repoPath == constants.SaltboxModRepoPath {
+		cmd := exec.Command(constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
 		cmd.Dir = repoPath
 		return cmd, parseOutput, nil
 	}
@@ -125,7 +126,7 @@ func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache 
 	}
 
 	// No valid cache found; build the command to list tags.
-	cmd := exec.Command("/usr/local/bin/ansible-playbook", playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
+	cmd := exec.Command(constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
 	cmd.Dir = repoPath
 	return cmd, parseOutput, nil
 }

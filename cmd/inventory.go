@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"github.com/saltyorg/sb-go/constants"
 	"os"
 	"os/exec"
 	"strings"
@@ -25,11 +26,10 @@ func init() {
 }
 
 func handleInventory() error {
-	filePath := "/srv/git/saltbox/inventories/host_vars/localhost.yml"
 	defaultEditor := "nano"
 	approvedEditors := []string{"nano", "vim", "vi", "emacs", "gedit", "code", "micro"}
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	if _, err := os.Stat(constants.SaltboxInventoryPath); os.IsNotExist(err) {
 		return fmt.Errorf("error: the inventory file 'localhost.yml' does not yet exist")
 	}
 
@@ -48,7 +48,7 @@ func handleInventory() error {
 
 	if !isApproved {
 		if editor == defaultEditor {
-			return runEditor(defaultEditor, filePath)
+			return runEditor(defaultEditor, constants.SaltboxInventoryPath)
 		}
 
 		fmt.Printf("The EDITOR variable is set to an unrecognized value: %s\n", editor)
@@ -58,14 +58,14 @@ func handleInventory() error {
 		}
 
 		if confirm {
-			return runEditor(editor, filePath)
+			return runEditor(editor, constants.SaltboxInventoryPath)
 		}
 
 		fmt.Printf("Using default editor: %s\n", defaultEditor)
-		return runEditor(defaultEditor, filePath)
+		return runEditor(defaultEditor, constants.SaltboxInventoryPath)
 	}
 
-	return runEditor(editor, filePath)
+	return runEditor(editor, constants.SaltboxInventoryPath)
 }
 
 func runEditor(editor, filePath string) error {

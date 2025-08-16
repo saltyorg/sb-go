@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/saltyorg/sb-go/constants"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -269,7 +270,7 @@ func getKeyNames(keys map[string]string) []string {
 
 // getFilePath returns the configuration file path for a role
 func getFilePath(role string) string {
-	return filepath.Join("/opt/saltbox", role+".ini")
+	return filepath.Join(constants.SaltboxFactsPath, role+".ini")
 }
 
 // parseKeyValues parses key=value string slices into a map
