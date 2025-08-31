@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -885,6 +886,92 @@ func GetDiskInfo() string {
 			output.WriteString(fmt.Sprintf("\n%s", DefaultStyle.Render(infoLine)))
 			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
 		}
+	}
+
+	return output.String()
+}
+
+// GetTraefikInfo returns information about Traefik router status
+func GetTraefikInfo() string {
+	var output strings.Builder
+
+	// Check if Docker service is running
+	statusOutput := ExecCommand("systemctl", "is-active", "docker")
+	if statusOutput != "active" {
+		return DefaultStyle.Render("Docker service is not running")
+	}
+
+	// Check if Traefik container is running
+	containerStatus := ExecCommand("docker", "ps", "--filter", "name=^traefik$", "--format", "{{.Names}}")
+	if containerStatus == "Not available" || containerStatus == "" {
+		return DefaultStyle.Render("Traefik container is not running")
+	}
+
+	// Check if Traefik API is accessible
+	routersOutput := ExecCommand("curl", "-s", "--connect-timeout", "3", "http://traefik:8080/api/http/routers")
+	if routersOutput == "Not available" || strings.Contains(routersOutput, "Connection refused") || strings.Contains(routersOutput, "curl:") {
+		return DefaultStyle.Render("Traefik container is running but API is not accessible")
+	}
+
+	// If we get here, the API call succeeded, but check if it's valid JSON
+	if strings.TrimSpace(routersOutput) == "" || routersOutput == "[]" {
+		return DefaultStyle.Render("Traefik is running with no routers configured")
+	}
+
+	// Parse JSON properly
+	type Router struct {
+		Name   string   `json:"name"`
+		Status string   `json:"status"`
+		Error  []string `json:"error,omitempty"`
+	}
+
+	var routers []Router
+	if err := json.Unmarshal([]byte(routersOutput), &routers); err != nil {
+		return DefaultStyle.Render("Failed to parse Traefik router response")
+	}
+
+	totalRouters := len(routers)
+	if totalRouters == 0 {
+		return DefaultStyle.Render("Traefik is running with no routers configured")
+	}
+
+	var problemRouters []string
+	healthyRouters := 0
+
+	for _, router := range routers {
+		if len(router.Error) > 0 {
+			problemRouters = append(problemRouters, fmt.Sprintf("%s: %s",
+				DefaultStyle.Render(router.Name),
+				RedStyle.Render(router.Error[0])))
+		} else if router.Status == "disabled" {
+			problemRouters = append(problemRouters, fmt.Sprintf("%s: %s",
+				DefaultStyle.Render(router.Name),
+				RedStyle.Render("router is disabled")))
+		} else {
+			healthyRouters++
+		}
+	}
+
+	// Create summary line
+	if len(problemRouters) > 0 {
+		coloredTotalCount := YellowStyle.Render(fmt.Sprintf("%d", totalRouters))
+		coloredHealthyCount := ValueStyle.Render(fmt.Sprintf("%d", healthyRouters))
+		coloredProblemCount := YellowStyle.Render(fmt.Sprintf("%d", len(problemRouters)))
+
+		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%s routers (%s active, %s need attention)",
+			coloredTotalCount, coloredHealthyCount, coloredProblemCount)))
+
+		// Add each problematic router on its own line
+		for _, problem := range problemRouters {
+			output.WriteString(fmt.Sprintf("\n%s", problem))
+		}
+	} else {
+		// All routers are healthy
+		coloredTotalCount := ValueStyle.Render(fmt.Sprintf("%d", totalRouters))
+		coloredHealthyCount := ValueStyle.Render(fmt.Sprintf("%d", healthyRouters))
+
+		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%s routers (%s active)",
+			coloredTotalCount, coloredHealthyCount)))
 	}
 
 	return output.String()

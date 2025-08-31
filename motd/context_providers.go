@@ -339,3 +339,19 @@ func GetRtorrentInfoWithContext(ctx context.Context) string {
 		return "" // Return an empty string on timeout to hide this section
 	}
 }
+
+// GetTraefikInfoWithContext provides Traefik router status info with context/timeout support
+func GetTraefikInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetTraefikInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return an empty string on timeout to hide this section
+	}
+}

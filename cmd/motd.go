@@ -33,6 +33,7 @@ var (
 	showPlex             bool
 	showEmby             bool
 	showJellyfin         bool
+	showTraefik          bool
 	showAll              bool
 	bannerTitle          string
 	bannerType           string
@@ -73,13 +74,14 @@ last login, user sessions, process information, and system update status based o
 			showPlex = true
 			showEmby = true
 			showJellyfin = true
+			showTraefik = true
 		}
 
 		// Check if at least one flag is enabled
 		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
 			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses && !showJellyfin && !showEmby &&
 			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues &&
-			!showPlex && !showSabnzbd && !showNzbget && !showQbittorrent && !showRtorrent {
+			!showPlex && !showSabnzbd && !showNzbget && !showQbittorrent && !showRtorrent && !showTraefik {
 			fmt.Println("Error: No information selected to display.")
 			fmt.Println("Please use at least one of the following flags:")
 			fmt.Println("  --distro       Show distribution information")
@@ -103,6 +105,7 @@ last login, user sessions, process information, and system update status based o
 			fmt.Println("  --plex         Show Plex streaming information")
 			fmt.Println("  --emby         Show Emby streaming information")
 			fmt.Println("  --jellyfin     Show Jellyfin streaming information")
+			fmt.Println("  --traefik      Show Traefik router status information")
 			fmt.Println("  --all          Show all information")
 			os.Exit(1)
 		}
@@ -202,14 +205,15 @@ func displayMotd() {
 		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 11},
 		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 12},
 		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 13},
-		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 14},
-		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 15},
-		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 16},
-		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 17},
-		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 18},
-		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 19},
-		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 20},
-		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 21},
+		{Key: "Traefik:", Provider: motd.GetTraefikInfoWithContext, Timeout: 10 * time.Second, Order: 14},
+		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 15},
+		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 16},
+		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 17},
+		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 18},
+		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 19},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 20},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 21},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 22},
 	}
 
 	// Filter sources based on enabled flags
@@ -236,6 +240,7 @@ func displayMotd() {
 		"Plex:":            showPlex,
 		"Emby:":            showEmby,
 		"Jellyfin:":        showJellyfin,
+		"Traefik:":         showTraefik,
 	}
 
 	// Simply use all enabled sources
@@ -317,6 +322,7 @@ func init() {
 	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
 	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
 	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")
+	motdCmd.Flags().BoolVar(&showTraefik, "traefik", false, "Show Traefik router status information")
 
 	// Add a flag to show all information
 	motdCmd.Flags().BoolVar(&showAll, "all", false, "Show all information")
