@@ -12,34 +12,34 @@ import (
 
 // Display flags and options
 var (
-	showDistribution     bool
-	showKernel           bool
-	showUptime           bool
-	showCpuAverages      bool
-	showMemory           bool
-	showDisk             bool
-	showLastLogin        bool
-	showSessions         bool
-	showProcesses        bool
+	showAll              bool
 	showAptStatus        bool
-	showRebootRequired   bool
-	showDocker           bool
 	showCPU              bool
-	showQueues           bool
-	showSabnzbd          bool
-	showNzbget           bool
-	showQbittorrent      bool
-	showRtorrent         bool
-	showPlex             bool
+	showCpuAverages      bool
+	showDisk             bool
+	showDistribution     bool
+	showDocker           bool
 	showEmby             bool
 	showJellyfin         bool
+	showKernel           bool
+	showLastLogin        bool
+	showMemory           bool
+	showNzbget           bool
+	showPlex             bool
+	showProcesses        bool
+	showQbittorrent      bool
+	showQueues           bool
+	showRebootRequired   bool
+	showRtorrent         bool
+	showSabnzbd          bool
+	showSessions         bool
 	showTraefik          bool
-	showAll              bool
-	bannerTitle          string
-	bannerType           string
-	bannerFont           string
+	showUptime           bool
 	bannerFile           string
 	bannerFileToiletArgs string
+	bannerFont           string
+	bannerTitle          string
+	bannerType           string
 	verbosity            int
 )
 
@@ -53,60 +53,61 @@ last login, user sessions, process information, and system update status based o
 	Run: func(cmd *cobra.Command, args []string) {
 		// If --all flag is used, enable everything
 		if showAll {
-			showDistribution = true
-			showKernel = true
-			showUptime = true
-			showCpuAverages = true
-			showMemory = true
-			showDisk = true
-			showLastLogin = true
-			showSessions = true
-			showProcesses = true
 			showAptStatus = true
-			showRebootRequired = true
-			showDocker = true
 			showCPU = true
-			showQueues = true
-			showSabnzbd = true
-			showNzbget = true
-			showQbittorrent = true
-			showRtorrent = true
-			showPlex = true
+			showCpuAverages = true
+			showDisk = true
+			showDistribution = true
+			showDocker = true
 			showEmby = true
 			showJellyfin = true
+			showKernel = true
+			showLastLogin = true
+			showMemory = true
+			showNzbget = true
+			showPlex = true
+			showProcesses = true
+			showQbittorrent = true
+			showQueues = true
+			showRebootRequired = true
+			showRtorrent = true
+			showSabnzbd = true
+			showSessions = true
 			showTraefik = true
+			showUptime = true
 		}
 
 		// Check if at least one flag is enabled
-		if !showDistribution && !showKernel && !showUptime && !showCpuAverages &&
-			!showMemory && !showDisk && !showLastLogin && !showSessions && !showProcesses && !showJellyfin && !showEmby &&
-			!showAptStatus && !showRebootRequired && !showDocker && !showCPU && !showQueues &&
-			!showPlex && !showSabnzbd && !showNzbget && !showQbittorrent && !showRtorrent && !showTraefik {
+		if !showAptStatus && !showCPU && !showCpuAverages && !showDisk && !showDistribution &&
+			!showDocker && !showEmby && !showJellyfin && !showKernel && !showLastLogin &&
+			!showMemory && !showNzbget && !showPlex && !showProcesses && !showQbittorrent &&
+			!showQueues && !showRebootRequired && !showRtorrent && !showSabnzbd && !showSessions &&
+			!showTraefik && !showUptime {
 			fmt.Println("Error: No information selected to display.")
 			fmt.Println("Please use at least one of the following flags:")
-			fmt.Println("  --distro       Show distribution information")
-			fmt.Println("  --kernel       Show kernel information")
-			fmt.Println("  --uptime       Show uptime information")
-			fmt.Println("  --cpu          Show CPU load averages")
-			fmt.Println("  --memory       Show memory usage")
-			fmt.Println("  --disk         Show disk usage for all partitions")
-			fmt.Println("  --login        Show last login information")
-			fmt.Println("  --sessions     Show active user sessions")
-			fmt.Println("  --processes    Show process count")
+			fmt.Println("  --all          Show all information")
 			fmt.Println("  --apt          Show apt package status")
-			fmt.Println("  --reboot       Show if reboot is required")
-			fmt.Println("  --docker       Show Docker container information")
+			fmt.Println("  --cpu          Show CPU load averages")
 			fmt.Println("  --cpu-info     Show CPU model and core count")
-			fmt.Println("  --queues       Show download queue information from Sonarr, Radarr, etc.")
-			fmt.Println("  --sabnzbd      Show Sabnzbd queue information")
-			fmt.Println("  --nzbget       Show NZBGet queue information")
-			fmt.Println("  --qbittorrent  Show qBittorrent queue information")
-			fmt.Println("  --rtorrent     Show rTorrent queue information")
-			fmt.Println("  --plex         Show Plex streaming information")
+			fmt.Println("  --disk         Show disk usage for all partitions")
+			fmt.Println("  --distro       Show distribution information")
+			fmt.Println("  --docker       Show Docker container information")
 			fmt.Println("  --emby         Show Emby streaming information")
 			fmt.Println("  --jellyfin     Show Jellyfin streaming information")
+			fmt.Println("  --kernel       Show kernel information")
+			fmt.Println("  --login        Show last login information")
+			fmt.Println("  --memory       Show memory usage")
+			fmt.Println("  --nzbget       Show NZBGet queue information")
+			fmt.Println("  --plex         Show Plex streaming information")
+			fmt.Println("  --processes    Show process count")
+			fmt.Println("  --qbittorrent  Show qBittorrent queue information")
+			fmt.Println("  --queues       Show download queue information from Sonarr, Radarr, etc.")
+			fmt.Println("  --reboot       Show if reboot is required")
+			fmt.Println("  --rtorrent     Show rTorrent queue information")
+			fmt.Println("  --sabnzbd      Show Sabnzbd queue information")
+			fmt.Println("  --sessions     Show active user sessions")
 			fmt.Println("  --traefik      Show Traefik router status information")
-			fmt.Println("  --all          Show all information")
+			fmt.Println("  --uptime       Show uptime information")
 			os.Exit(1)
 		}
 
@@ -301,31 +302,29 @@ func init() {
 	rootCmd.AddCommand(motdCmd)
 
 	// Define flags for enabling/disabling components (all default to false - opt-in)
-	motdCmd.Flags().BoolVar(&showDistribution, "distro", false, "Show distribution information")
-	motdCmd.Flags().BoolVar(&showKernel, "kernel", false, "Show kernel information")
-	motdCmd.Flags().BoolVar(&showUptime, "uptime", false, "Show uptime information")
-	motdCmd.Flags().BoolVar(&showCpuAverages, "cpu", false, "Show CPU load averages")
-	motdCmd.Flags().BoolVar(&showMemory, "memory", false, "Show memory usage")
-	motdCmd.Flags().BoolVar(&showDisk, "disk", false, "Show disk usage for all partitions")
-	motdCmd.Flags().BoolVar(&showLastLogin, "login", false, "Show last login information")
-	motdCmd.Flags().BoolVar(&showSessions, "sessions", false, "Show active user sessions")
-	motdCmd.Flags().BoolVar(&showProcesses, "processes", false, "Show process count")
+	motdCmd.Flags().BoolVar(&showAll, "all", false, "Show all information")
 	motdCmd.Flags().BoolVar(&showAptStatus, "apt", false, "Show apt package status")
-	motdCmd.Flags().BoolVar(&showRebootRequired, "reboot", false, "Show if reboot is required")
-	motdCmd.Flags().BoolVar(&showDocker, "docker", false, "Show Docker container information")
+	motdCmd.Flags().BoolVar(&showCpuAverages, "cpu", false, "Show CPU load averages")
 	motdCmd.Flags().BoolVar(&showCPU, "cpu-info", false, "Show CPU model and core count information")
-	motdCmd.Flags().BoolVar(&showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
-	motdCmd.Flags().BoolVar(&showSabnzbd, "sabnzbd", false, "Show SABnzbd queue information")
-	motdCmd.Flags().BoolVar(&showNzbget, "nzbget", false, "Show NZBGet queue information")
-	motdCmd.Flags().BoolVar(&showQbittorrent, "qbittorrent", false, "Show qBittorrent queue information")
-	motdCmd.Flags().BoolVar(&showRtorrent, "rtorrent", false, "Show rTorrent queue information")
-	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
+	motdCmd.Flags().BoolVar(&showDisk, "disk", false, "Show disk usage for all partitions")
+	motdCmd.Flags().BoolVar(&showDistribution, "distro", false, "Show distribution information")
+	motdCmd.Flags().BoolVar(&showDocker, "docker", false, "Show Docker container information")
 	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
 	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")
+	motdCmd.Flags().BoolVar(&showKernel, "kernel", false, "Show kernel information")
+	motdCmd.Flags().BoolVar(&showLastLogin, "login", false, "Show last login information")
+	motdCmd.Flags().BoolVar(&showMemory, "memory", false, "Show memory usage")
+	motdCmd.Flags().BoolVar(&showNzbget, "nzbget", false, "Show NZBGet queue information")
+	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
+	motdCmd.Flags().BoolVar(&showProcesses, "processes", false, "Show process count")
+	motdCmd.Flags().BoolVar(&showQbittorrent, "qbittorrent", false, "Show qBittorrent queue information")
+	motdCmd.Flags().BoolVar(&showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
+	motdCmd.Flags().BoolVar(&showRebootRequired, "reboot", false, "Show if reboot is required")
+	motdCmd.Flags().BoolVar(&showRtorrent, "rtorrent", false, "Show rTorrent queue information")
+	motdCmd.Flags().BoolVar(&showSabnzbd, "sabnzbd", false, "Show SABnzbd queue information")
+	motdCmd.Flags().BoolVar(&showSessions, "sessions", false, "Show active user sessions")
 	motdCmd.Flags().BoolVar(&showTraefik, "traefik", false, "Show Traefik router status information")
-
-	// Add a flag to show all information
-	motdCmd.Flags().BoolVar(&showAll, "all", false, "Show all information")
+	motdCmd.Flags().BoolVar(&showUptime, "uptime", false, "Show uptime information")
 
 	// Add verbosity flag
 	motdCmd.Flags().CountVarP(&verbosity, "verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
