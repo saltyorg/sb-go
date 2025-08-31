@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
@@ -63,21 +64,48 @@ func GetEmbyInfo() string {
 		return ""
 	}
 
+	// Create wait group and mutex for async processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var streamInfos []EmbyStreamInfo
-	for _, instance := range embyInstances {
+
+	// Process each Emby instance concurrently
+	for i, instance := range embyInstances {
 		if instance.URL == "" || instance.Token == "" {
+			if Verbose {
+				fmt.Printf("DEBUG: Skipping Emby instance %d due to missing URL or token\n", i)
+			}
 			continue
 		}
 
-		info, err := getEmbyStreamInfo(instance)
-		if err != nil {
+		wg.Add(1)
+		go func(idx int, inst config.EmbyInstance) {
+			defer wg.Done()
+
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting Emby stream info for %s, hiding entry: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Processing Emby instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
-			continue // Skip this instance on error
-		}
-		streamInfos = append(streamInfos, info)
+
+			info, err := getEmbyStreamInfo(inst)
+			if err != nil {
+				if Verbose {
+					fmt.Printf("DEBUG: Error getting Emby stream info for %s, hiding entry: %v\n", inst.Name, err)
+				}
+				return
+			}
+
+			if Verbose {
+				fmt.Printf("DEBUG: Successfully retrieved Emby stream info for instance %d: %d active streams\n", idx, info.ActiveStreams)
+			}
+
+			mu.Lock()
+			streamInfos = append(streamInfos, info)
+			mu.Unlock()
+		}(i, instance)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if len(streamInfos) == 0 {
 		return ""

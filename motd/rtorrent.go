@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/saltydk/go-rtorrent"
@@ -52,21 +53,48 @@ func GetRtorrentInfo() string {
 		return ""
 	}
 
+	// Create wait group and mutex for async processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var queueInfos []rtorrentInfo
-	for _, instance := range rtorrentInstances {
-		if instance.URL == "" {
-			continue
-		}
 
-		info, err := getRtorrentStats(instance)
-		if err != nil {
+	// Process each rTorrent instance concurrently
+	for i, instance := range rtorrentInstances {
+		if instance.URL == "" {
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting rTorrent info for %s, hiding entry: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Skipping rTorrent instance %d due to missing URL\n", i)
 			}
 			continue
 		}
-		queueInfos = append(queueInfos, info)
+
+		wg.Add(1)
+		go func(idx int, inst config.UserPassAppInstance) {
+			defer wg.Done()
+
+			if Verbose {
+				fmt.Printf("DEBUG: Processing rTorrent instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
+			}
+
+			info, err := getRtorrentStats(inst)
+			if err != nil {
+				if Verbose {
+					fmt.Printf("DEBUG: Error getting rTorrent info for %s, hiding entry: %v\n", inst.Name, err)
+				}
+				return
+			}
+
+			if Verbose {
+				fmt.Printf("DEBUG: Successfully retrieved rTorrent info for instance %d: %d downloading, %d seeding\n", idx, info.DownloadingCount, info.SeedingCount)
+			}
+
+			mu.Lock()
+			queueInfos = append(queueInfos, info)
+			mu.Unlock()
+		}(i, instance)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if len(queueInfos) == 0 {
 		return ""

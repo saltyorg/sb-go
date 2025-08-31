@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
@@ -77,21 +78,48 @@ func GetNzbgetInfo() string {
 		return ""
 	}
 
+	// Create wait group and mutex for async processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var queueInfos []NzbgetInfo
-	for _, instance := range nzbgetInstances {
-		if instance.URL == "" || instance.User == "" || instance.Password == "" {
-			continue
-		}
 
-		info, err := getNzbgetQueueInfo(instance)
-		if err != nil {
+	// Process each NZBGet instance concurrently
+	for i, instance := range nzbgetInstances {
+		if instance.URL == "" || instance.User == "" || instance.Password == "" {
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting NZBGet info for %s, hiding entry: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Skipping NZBGet instance %d due to missing URL, user, or password\n", i)
 			}
 			continue
 		}
-		queueInfos = append(queueInfos, info)
+
+		wg.Add(1)
+		go func(idx int, inst config.UserPassAppInstance) {
+			defer wg.Done()
+
+			if Verbose {
+				fmt.Printf("DEBUG: Processing NZBGet instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
+			}
+
+			info, err := getNzbgetQueueInfo(inst)
+			if err != nil {
+				if Verbose {
+					fmt.Printf("DEBUG: Error getting NZBGet info for %s, hiding entry: %v\n", inst.Name, err)
+				}
+				return
+			}
+
+			if Verbose {
+				fmt.Printf("DEBUG: Successfully retrieved NZBGet info for instance %d: %d items in queue\n", idx, info.QueueCount)
+			}
+
+			mu.Lock()
+			queueInfos = append(queueInfos, info)
+			mu.Unlock()
+		}(i, instance)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if len(queueInfos) == 0 {
 		return ""

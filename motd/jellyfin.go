@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
@@ -50,21 +51,48 @@ func GetJellyfinInfo() string {
 		return ""
 	}
 
+	// Create wait group and mutex for async processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var streamInfos []JellyfinStreamInfo
-	for _, instance := range jellyfinInstances {
+
+	// Process each Jellyfin instance concurrently
+	for i, instance := range jellyfinInstances {
 		if instance.URL == "" || instance.Token == "" {
+			if Verbose {
+				fmt.Printf("DEBUG: Skipping Jellyfin instance %d due to missing URL or token\n", i)
+			}
 			continue
 		}
 
-		info, err := getJellyfinStreamInfo(instance)
-		if err != nil {
+		wg.Add(1)
+		go func(idx int, inst config.JellyfinInstance) {
+			defer wg.Done()
+
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting Jellyfin stream info for %s, hiding entry: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Processing Jellyfin instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
-			continue // Skip this instance on error
-		}
-		streamInfos = append(streamInfos, info)
+
+			info, err := getJellyfinStreamInfo(inst)
+			if err != nil {
+				if Verbose {
+					fmt.Printf("DEBUG: Error getting Jellyfin stream info for %s, hiding entry: %v\n", inst.Name, err)
+				}
+				return
+			}
+
+			if Verbose {
+				fmt.Printf("DEBUG: Successfully retrieved Jellyfin stream info for instance %d: %d active streams\n", idx, info.ActiveStreams)
+			}
+
+			mu.Lock()
+			streamInfos = append(streamInfos, info)
+			mu.Unlock()
+		}(i, instance)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if len(streamInfos) == 0 {
 		return ""

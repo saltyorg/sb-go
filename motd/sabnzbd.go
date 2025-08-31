@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
@@ -65,21 +66,48 @@ func GetSabnzbdInfo() string {
 		return ""
 	}
 
+	// Create wait group and mutex for async processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var queueInfos []SabnzbdInfo
-	for _, instance := range sabnzbdInstances {
+
+	// Process each SABnzbd instance concurrently
+	for i, instance := range sabnzbdInstances {
 		if instance.URL == "" || instance.APIKey == "" {
+			if Verbose {
+				fmt.Printf("DEBUG: Skipping SABnzbd instance %d due to missing URL or API key\n", i)
+			}
 			continue
 		}
 
-		info, err := getSabnzbdQueueInfo(instance)
-		if err != nil {
+		wg.Add(1)
+		go func(idx int, inst config.AppInstance) {
+			defer wg.Done()
+
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting SABnzbd info for %s, hiding entry: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Processing SABnzbd instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
-			continue // Skip this instance on error
-		}
-		queueInfos = append(queueInfos, info)
+
+			info, err := getSabnzbdQueueInfo(inst)
+			if err != nil {
+				if Verbose {
+					fmt.Printf("DEBUG: Error getting SABnzbd info for %s, hiding entry: %v\n", inst.Name, err)
+				}
+				return
+			}
+
+			if Verbose {
+				fmt.Printf("DEBUG: Successfully retrieved SABnzbd info for instance %d: %d items in queue\n", idx, info.QueueCount)
+			}
+
+			mu.Lock()
+			queueInfos = append(queueInfos, info)
+			mu.Unlock()
+		}(i, instance)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if len(queueInfos) == 0 {
 		return ""

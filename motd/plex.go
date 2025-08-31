@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
@@ -109,9 +110,13 @@ func GetPlexInfo() string {
 		fmt.Printf("DEBUG: Found %d Plex instance(s) in config\n", len(plexInstances))
 	}
 
+	// Create channels and wait group for async processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var streamInfos []PlexStreamInfo
-	// Process each Plex instance
-	for _, instance := range plexInstances {
+
+	// Process each Plex instance concurrently
+	for i, instance := range plexInstances {
 		if instance.URL == "" || instance.Token == "" {
 			if Verbose {
 				fmt.Printf("DEBUG: Skipping Plex instance %s due to missing URL or token\n", instance.Name)
@@ -119,15 +124,34 @@ func GetPlexInfo() string {
 			continue
 		}
 
-		info, err := getPlexStreamInfo(instance)
-		if err != nil {
+		wg.Add(1)
+		go func(idx int, inst config.PlexInstance) {
+			defer wg.Done()
+
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting Plex stream info for %s, hiding entry: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Processing Plex instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
-			continue
-		}
-		streamInfos = append(streamInfos, info)
+
+			info, err := getPlexStreamInfo(inst)
+			if err != nil {
+				if Verbose {
+					fmt.Printf("DEBUG: Error getting Plex stream info for %s, hiding entry: %v\n", inst.Name, err)
+				}
+				return
+			}
+
+			if Verbose {
+				fmt.Printf("DEBUG: Successfully retrieved Plex stream info for instance %d: %d active streams\n", idx, info.ActiveStreams)
+			}
+
+			mu.Lock()
+			streamInfos = append(streamInfos, info)
+			mu.Unlock()
+		}(i, instance)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if len(streamInfos) == 0 {
 		if Verbose {

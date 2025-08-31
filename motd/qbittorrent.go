@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/autobrr/go-qbittorrent"
@@ -51,21 +52,48 @@ func GetQbittorrentInfo() string {
 		return ""
 	}
 
+	// Create wait group and mutex for async processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var queueInfos []qbittorrentInfo
-	for _, instance := range qbittorrentInstances {
-		if instance.URL == "" || instance.User == "" || instance.Password == "" {
-			continue
-		}
 
-		info, err := getQbittorrentStats(instance)
-		if err != nil {
+	// Process each qBittorrent instance concurrently
+	for i, instance := range qbittorrentInstances {
+		if instance.URL == "" || instance.User == "" || instance.Password == "" {
 			if Verbose {
-				fmt.Printf("DEBUG: Error getting qBittorrent info for %s, hiding entry: %v\n", instance.Name, err)
+				fmt.Printf("DEBUG: Skipping qBittorrent instance %d due to missing URL, user, or password\n", i)
 			}
 			continue
 		}
-		queueInfos = append(queueInfos, info)
+
+		wg.Add(1)
+		go func(idx int, inst config.UserPassAppInstance) {
+			defer wg.Done()
+
+			if Verbose {
+				fmt.Printf("DEBUG: Processing qBittorrent instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
+			}
+
+			info, err := getQbittorrentStats(inst)
+			if err != nil {
+				if Verbose {
+					fmt.Printf("DEBUG: Error getting qBittorrent info for %s, hiding entry: %v\n", inst.Name, err)
+				}
+				return
+			}
+
+			if Verbose {
+				fmt.Printf("DEBUG: Successfully retrieved qBittorrent info for instance %d: %d downloading, %d seeding\n", idx, info.DownloadingCount, info.SeedingCount)
+			}
+
+			mu.Lock()
+			queueInfos = append(queueInfos, info)
+			mu.Unlock()
+		}(i, instance)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	if len(queueInfos) == 0 {
 		return ""
