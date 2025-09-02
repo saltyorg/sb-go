@@ -39,13 +39,6 @@ var setupCmd = &cobra.Command{
 			}
 		}
 
-		if err := spinners.RunTaskWithSpinner("Checking for existing Cloudbox installation", func() error {
-			return utils.CheckCloudboxInstalled()
-		}); err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
 		if err := spinners.RunTaskWithSpinner("Checking Ubuntu version", func() error {
 			return utils.CheckUbuntuSupport()
 		}); err != nil {
