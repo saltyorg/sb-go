@@ -113,7 +113,7 @@ func runBubbleTeaList() {
 		},
 	}
 
-	// Initialize list with proper dimensions
+	// Initialize a list with proper dimensions
 	delegate := list.NewDefaultDelegate()
 	m := ConfigSelectorModel{list: list.New(configItems, delegate, 30, 10)} // Set width and height
 	m.list.SetShowTitle(false)

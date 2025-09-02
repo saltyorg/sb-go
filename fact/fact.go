@@ -75,7 +75,7 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
 			}
 			latestVersion = latestRelease.TagName
 			return nil
-		}, 3, 1*time.Second) // 3 retries with 1 second base delay
+		}, 3, 1*time.Second) // 3 retries with 1-second base delay
 	}); err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
 					return fmt.Errorf("error setting file permissions: %w", err)
 				}
 				return nil
-			}, 3, 2*time.Second) // 3 retries with 2 second base delay for downloads
+			}, 3, 2*time.Second) // 3 retries with 2-second base delay for downloads
 		}); err != nil {
 			return err
 		}

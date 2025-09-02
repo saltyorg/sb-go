@@ -93,11 +93,11 @@ func GetPlexInfo() string {
 		if Verbose {
 			fmt.Printf("DEBUG: Error loading config: %v\n", err)
 		}
-		// If there's an error loading the config, return empty string to skip this section
+		// If there's an error loading the config, return an empty string to skip this section
 		return ""
 	}
 
-	// Check if Plex section exists in the config
+	// Check if a Plex section exists in the config
 	plexInstances := cfg.Plex
 	if len(plexInstances) == 0 {
 		if Verbose {
@@ -173,13 +173,13 @@ func getPlexStreamInfo(instance config.PlexInstance) (PlexStreamInfo, error) {
 		result.Name = "Plex"
 	}
 
-	// Ensure URL ends with a slash
+	// Ensure the URL ends with a slash
 	serverURL := instance.URL
 	if !strings.HasSuffix(serverURL, "/") {
 		serverURL += "/"
 	}
 
-	// Build the sessions endpoint URL with proper path joining
+	// Build the sessions endpoint URL with the proper path joining
 	baseURL, err := url.Parse(serverURL)
 	if err != nil {
 		return result, fmt.Errorf("invalid URL: %w", err)

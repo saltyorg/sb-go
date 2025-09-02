@@ -64,7 +64,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Always use split view layout
+		// Always use a split view layout
 		listWidth := msg.Width / 4
 		logsWidth := msg.Width - listWidth
 

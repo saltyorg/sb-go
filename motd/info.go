@@ -12,7 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// GetDistribution returns the Ubuntu distribution version with codename
+// GetDistribution returns the Ubuntu distribution version with a codename
 func GetDistribution() string {
 	distroInfo := ExecCommand("lsb_release", "-ds")
 	codename := ExecCommand("lsb_release", "-cs")
@@ -80,7 +80,7 @@ func GetCpuAverages() string {
 
 // GetLastLogin returns the last login information
 func GetLastLogin() string {
-	// Try last command to get the most recent login
+	// Try the last command to get the most recent login
 	lastOutput := ExecCommand("last", "-1")
 	if lastOutput != "Not available" && lastOutput != "" {
 		// First check if "still logged in" is present
@@ -315,7 +315,7 @@ func GetAptStatus() string {
 			}
 		}
 
-		// If we found no updates but the file exists, check if it explicitly says system is up to date
+		// If we found no updates but the file exists, check if it explicitly says that the system is up to date
 		for _, line := range lines {
 			if strings.Contains(line, "up to date") || strings.Contains(line, "Up to date") {
 				return "System is up to date"
@@ -404,7 +404,7 @@ func GetAptStatus() string {
 // Returns empty string if no reboot is required, which will hide the field entirely
 func GetRebootRequired() string {
 	// Method 1: Go native implementation
-	// Check if the reboot-required file exists
+	// Checks if the reboot-required file exists
 	rebootFile := "/var/run/reboot-required"
 	_, err := os.Stat(rebootFile)
 	if err == nil {
@@ -448,7 +448,7 @@ func GetRebootRequired() string {
 		return strings.TrimSpace(output)
 	}
 
-	// Return empty string if no reboot is required
+	// Return an empty string if no reboot is required
 	return ""
 }
 
@@ -492,7 +492,7 @@ func GetCpuInfo() string {
 		}
 	}
 
-	// Calculate number of physical CPUs
+	// Calculate the number of physical CPUs
 	numPhysicalCPUs := len(physicalIds)
 	if numPhysicalCPUs == 0 {
 		numPhysicalCPUs = 1 // Default to 1 if we can't determine
@@ -515,7 +515,7 @@ func GetCpuInfo() string {
 				cpuCoresStr,
 				ValueStyle.Render(fmt.Sprintf("%d", numPhysicalCPUs)))
 		} else {
-			// Simple output for single CPU
+			// Simple output for a single CPU
 			return fmt.Sprintf("%s (%s cores)",
 				DefaultStyle.Render(modelName),
 				cpuCoresStr)
@@ -567,15 +567,15 @@ func GetGpuInfo() string {
 
 	// List of GPU vendors/models to exclude (IPMI, server management, etc.)
 	excludedGPUs := []string{
-		"ASPEED",           // ASPEED BMC/IPMI controllers
-		"Matrox MGA",       // Matrox G200/G400 series (server management)
-		"Cirrus Logic",     // Cirrus Logic CL-GD series (legacy/server)
-		"XGI",              // XGI Volari series (legacy)
-		"Silicon Motion",   // SM750/SM712 (embedded/server)
-		"Hisilicon",        // HiSilicon Hi171x series (server BMC)
-		"ServerEngines",    // ServerEngines Pilot series
-		"Nuvoton",          // Nuvoton WPCM450 (server management)
-		"Pilot",            // Pilot series BMC controllers
+		"ASPEED",         // ASPEED BMC/IPMI controllers
+		"Matrox MGA",     // Matrox G200/G400 series (server management)
+		"Cirrus Logic",   // Cirrus Logic CL-GD series (legacy/server)
+		"XGI",            // XGI Volari series (legacy)
+		"Silicon Motion", // SM750/SM712 (embedded/server)
+		"Hisilicon",      // HiSilicon Hi171x series (server BMC)
+		"ServerEngines",  // ServerEngines Pilot series
+		"Nuvoton",        // Nuvoton WPCM450 (server management)
+		"Pilot",          // Pilot series BMC controllers
 	}
 
 	// Use lspci to detect GPUs (works for NVIDIA, AMD, Intel, etc.)
@@ -590,7 +590,7 @@ func GetGpuInfo() string {
 				// Extract GPU name after the colon, skipping the PCI address
 				parts := strings.SplitN(line, ":", 3)
 				var gpuInfo string
-				
+
 				if len(parts) >= 3 {
 					// Skip the PCI address (first part) and device type (second part)
 					gpuInfo = strings.TrimSpace(parts[2])
@@ -662,7 +662,7 @@ func GetMemoryInfo() string {
 	// Check if we have the required fields
 	if memTotal, ok := memInfo["MemTotal"]; ok {
 		var memAvailable, memFree, memCached uint64
-		memUsed := memTotal // Start with total, then subtract
+		memUsed := memTotal // Start with the total, then subtract
 
 		if free, ok := memInfo["MemFree"]; ok {
 			memFree = free
@@ -753,7 +753,7 @@ func GetDockerInfo() string {
 		statusText := parts[1]
 		stateText := parts[2]
 
-		// Determine container state based on the state field directly
+		// Determine the container state based on the state field directly
 		isProblematic := false
 		status := ""
 
@@ -816,7 +816,7 @@ func GetDockerInfo() string {
 		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%s containers (%s running, %s need attention)",
 			coloredTotalCount, coloredRunningCount, coloredProblemCount)))
 	} else {
-		// Color the counts - normal ValueStyle when all is good
+		// Color counts - normal ValueStyle when all is good
 		coloredTotalCount := ValueStyle.Render(fmt.Sprintf("%d", totalCount))
 		coloredRunningCount := ValueStyle.Render(fmt.Sprintf("%d", runningCount))
 
@@ -900,7 +900,7 @@ func GetDiskInfo() string {
 		usedWidth := (usagePercent * barWidth) / 100
 		unusedWidth := barWidth - usedWidth
 
-		// Choose color based on usage threshold
+		// Choose a color based on a usage threshold
 		var usedBarStyle lipgloss.Style
 		var percentStyle lipgloss.Style
 
@@ -923,7 +923,7 @@ func GetDiskInfo() string {
 		// Create the complete bar
 		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
 
-		// Add to partitions slice
+		// Add to partition slice
 		partitions = append(partitions, partitionInfo{
 			mountPoint:   mountPoint,
 			usagePercent: usagePercent,
@@ -949,12 +949,12 @@ func GetDiskInfo() string {
 
 		// For the first partition, add it directly to the output
 		if i == 0 {
-			// Format using original format with wide fixed spacing and mountpoint
+			// Format using the original format with wide fixed spacing and mountpoint
 			infoLine := fmt.Sprintf("%-30s%s used out of %s", p.mountPoint, coloredPercent, coloredSize)
 			output.WriteString(DefaultStyle.Render(infoLine))
 			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
 		} else {
-			// For subsequent partitions, add line breaks before
+			// For later partitions, add line breaks before
 			infoLine := fmt.Sprintf("%-30s%s used out of %s", p.mountPoint, coloredPercent, coloredSize)
 			output.WriteString(fmt.Sprintf("\n%s", DefaultStyle.Render(infoLine)))
 			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
@@ -1025,7 +1025,7 @@ func GetTraefikInfo() string {
 		}
 	}
 
-	// Create summary line
+	// Create a summary line
 	if len(problemRouters) > 0 {
 		coloredTotalCount := YellowStyle.Render(fmt.Sprintf("%d", totalRouters))
 		coloredHealthyCount := ValueStyle.Render(fmt.Sprintf("%d", healthyRouters))

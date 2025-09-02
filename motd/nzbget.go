@@ -78,7 +78,7 @@ func GetNzbgetInfo() string {
 		return ""
 	}
 
-	// Create wait group and mutex for async processing
+	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var queueInfos []NzbgetInfo

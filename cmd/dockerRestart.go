@@ -49,7 +49,7 @@ var restartCmd = &cobra.Command{
 			return
 		}
 
-		// Create stop containers task
+		// Create a stop containers task
 		stopContainersTask := func() error {
 			// Build query parameters
 			stopURL := fmt.Sprintf("%s/stop", constants.DockerControllerAPIURL)

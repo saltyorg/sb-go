@@ -243,7 +243,7 @@ func setFileOwnershipAndPermissions(filePath, saltboxUser string) error {
 	} else {
 		fmt.Printf("Warning: Failed to lookup user %s: %v\n", saltboxUser, err)
 	}
-	
+
 	return nil
 }
 
@@ -282,7 +282,7 @@ func loadAllInstances(filePath string) (map[string]map[string]string, error) {
 
 	// Check if the file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return allInstances, nil // Return empty map if file doesn't exist
+		return allInstances, nil // Return an empty map if the file doesn't exist
 	}
 
 	// Load the ini file
@@ -326,7 +326,7 @@ func loadFacts(filePath, instance string, defaults map[string]string) (map[strin
 
 	// Check if the file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return facts, nil // Return defaults if file doesn't exist
+		return facts, nil // Return defaults if the file doesn't exist
 	}
 
 	// Load the ini file
@@ -337,7 +337,7 @@ func loadFacts(filePath, instance string, defaults map[string]string) (map[strin
 
 	// Check if the instance section exists
 	if !cfg.HasSection(instance) {
-		return facts, nil // Return defaults if section doesn't exist
+		return facts, nil // Return defaults if the section doesn't exist
 	}
 
 	// Get the section for the instance

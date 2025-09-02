@@ -129,7 +129,7 @@ func ConfigureLocale() {
 		_ = spinners.RunInfoSpinner(fmt.Sprintf("Attempting to set locale with update-locale failed: %v", err))
 	}
 
-	// Check /etc/default/locale (more reliable than `locale` command)
+	// Check /etc/default/locale (more reliable than the `locale` command)
 	localeFileContent, err := os.ReadFile("/etc/default/locale")
 	if err != nil && !os.IsNotExist(err) {
 		// Use a warning spinner for file read errors (but don't exit).
@@ -169,7 +169,7 @@ func ConfigureLocale() {
 			_ = spinners.RunWarningSpinner("Warning: LANG not set correctly in /etc/default/locale")
 		}
 	} else {
-		// Use an info spinner, to be consistent with other successful steps
+		// Use an info spinner to be consistent with other successful steps
 		_ = spinners.RunInfoSpinner(fmt.Sprintf("Locales LC_ALL and LANG both set to %s", targetLocale))
 	}
 }
@@ -183,7 +183,7 @@ func PythonVenv(verbose bool) {
 	nobleRegex := regexp.MustCompile(`^noble$`)
 
 	if jammyRegex.MatchString(versionCodename) {
-		_ = spinners.RunInfoSpinner("Ubuntu Jammy (or similar) detected, deploying venv with Python 3.12.")
+		_ = spinners.RunInfoSpinner("Ubuntu Jammy detected, deploying venv with Python 3.12.")
 
 		// Add deadsnakes PPA
 		if err := spinners.RunTaskWithSpinner("Adding deadsnakes PPA", func() error {
@@ -214,7 +214,7 @@ func PythonVenv(verbose bool) {
 		}
 
 	} else if nobleRegex.MatchString(versionCodename) {
-		_ = spinners.RunInfoSpinner("Ubuntu Noble (or similar) detected, deploying venv with Python 3.12.")
+		_ = spinners.RunInfoSpinner("Ubuntu Noble detected, deploying venv with Python 3.12.")
 
 		// Create venv (using system python3)
 		if err := spinners.RunTaskWithSpinner("Creating venv", func() error {

@@ -15,7 +15,7 @@ type InfoSource struct {
 	Key      string        // The label for the information (e.g., "Distribution:")
 	Provider interface{}   // The function that retrieves the information (can be string or []string)
 	Timeout  time.Duration // How long to wait before timing out
-	Order    int           // Display order for consistent output
+	Order    int           // Display order for a consistent output
 }
 
 // Result stores the output of a single information function
@@ -71,7 +71,7 @@ func GetSystemInfo(sources []InfoSource) []Result {
 		results = append(results, r)
 	}
 
-	// Sort results by order to maintain consistent display order
+	// Sort results to maintain a consistent display order
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Order < results[j].Order
 	})

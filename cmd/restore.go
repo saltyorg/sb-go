@@ -98,7 +98,7 @@ func (m *restoreModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Did the user press enter while the submit button was focused?
 			if s == "enter" && m.focusIndex == len(m.inputs) {
-				// Validate passwords match before proceeding.
+				// Validate a password match before proceeding.
 				if m.inputs[1].Value() == m.inputs[2].Value() && m.inputs[1].Value() != "" {
 					// Store values before quitting
 					m.user = m.inputs[0].Value()
@@ -136,7 +136,7 @@ func (m *restoreModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.inputs[i].TextStyle = focusedStyle
 					continue
 				}
-				// Remove focused state
+				// Remove the focused state
 				m.inputs[i].Blur()
 				m.inputs[i].PromptStyle = noStyle
 				m.inputs[i].TextStyle = noStyle
@@ -190,7 +190,7 @@ func (m *restoreModel) View() string {
 		b.WriteString(helpStyle.Render(fmt.Sprintf("Error: %v", m.err)))
 		b.WriteRune('\n')
 	}
-	//Remove cursor mode section
+	//Remove the cursor mode section
 	return b.String()
 }
 
@@ -300,7 +300,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 		}
 		if err := downloadFile(url, outFile); err != nil {
 			fmt.Println(" [FAIL]")
-			// Don't return immediately, continue to next file
+			// Don't return immediately, continue to the next file
 			continue
 		}
 
@@ -308,7 +308,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 		f, err := os.Open(outFile)
 		if err != nil {
 			fmt.Println(" [FAIL]")
-			// Don't return, continue to next file
+			// Don't return, continue to the next file
 			continue
 		}
 		n, err := f.Read(header)
@@ -326,7 +326,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 			// Download was ok. Don't increment here.
 		} else {
 			fmt.Println(" [FAIL]")
-			// Header not found.  Don't return; try next file
+			// Header not found.  Don't return; try the next file
 			continue
 		}
 
@@ -339,10 +339,10 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 			}
 			continue
 		}
-		// Don't print here, wait for decryption result.
+		// Don't print here, wait for a decryption result.
 
 		if err := decryptFile(encryptedFilePath, decryptedFilePath, password, verbose); err != nil {
-			// Decryption failed. Print fail and continue to next file.
+			// Decryption failed. Print fail and continue to the next file.
 			fmt.Printf("%-20.20s [FAIL]\n", file)
 			var paddingErr *paddingError
 			if errors.As(err, &paddingErr) {
@@ -350,7 +350,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 			} else {
 				fmt.Printf("  (Technical error: %v)\n", err) // More detailed error
 			}
-			continue // Continue to next file
+			continue // Continue to the next file
 		}
 
 		if verbose {
@@ -359,11 +359,10 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 		err = os.Remove(encryptedFilePath)
 		if err != nil {
 			fmt.Printf("%-20.20s [FAIL] - Could not remove encrypted file: %v\n", file, err)
-			//  return 0, fmt.Errorf("failed to delete encrypted file %s: %w", encryptedFilePath, err)  //Don't exit!
 			continue
 		}
-		fmt.Printf("%-20.20s [DONE]\n", file) // Print here, after successful decryption and removal
-		successfulDownloads++                 //Increment success counter.
+		fmt.Printf("%-20.20s [DONE]\n", file)
+		successfulDownloads++
 
 		sourcePath := filepath.Join(folder, file)
 		destPath := filepath.Join(dir, file)
@@ -379,15 +378,12 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 			continue // Continue to the next file
 		}
 
-		//fmt.Printf("%-20.20s", file) // Removed printing here
 		if err := os.Rename(sourcePath, destPath); err != nil {
-			fmt.Printf("Failed to move %s: [FAIL]\n", file) // Moved print here
-			//return 0, fmt.Errorf("failed to move file %s to %s: %w", sourcePath, destPath, err) //Don't return
+			fmt.Printf("Failed to move %s: [FAIL]\n", file)
 			continue
 		}
-		// No need to print here, we print after successful decryption.
 	}
-	return successfulDownloads, nil // Return the count
+	return successfulDownloads, nil
 }
 
 func validateURL(url string, verbose bool) bool {

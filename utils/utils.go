@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -60,28 +59,6 @@ func GetSaltboxUser() (string, error) {
 	}
 
 	return userName, nil
-}
-
-// CheckCloudboxInstalled checks if Cloudbox is already installed.
-func CheckCloudboxInstalled() error {
-	// develop
-	if _, err := os.Stat("/srv/git/cloudbox"); !os.IsNotExist(err) {
-		return fmt.Errorf("==== Cloudbox Install Detected ====\nCloudbox installed. Exiting...\n==== Cloudbox Install Detected ====")
-	}
-
-	// master
-	homeDirs, err := filepath.Glob("/home/*/*/")
-	if err != nil {
-		return fmt.Errorf("error listing home directories: %w", err)
-	}
-
-	for _, dir := range homeDirs {
-		base := filepath.Base(filepath.Dir(dir))
-		if base == "cloudbox" {
-			return fmt.Errorf("==== Cloudbox Install Detected ====\nCloudbox installed. Exiting...\n==== Cloudbox Install Detected ====")
-		}
-	}
-	return nil // No Cloudbox installation found
 }
 
 // CheckUbuntuSupport checks if the current Ubuntu version is supported.

@@ -53,7 +53,7 @@ func GetQueueInfo() string {
 		if Verbose {
 			fmt.Printf("DEBUG: Error loading config: %v\n", err)
 		}
-		// If there's an error loading the config, return empty string to skip this section
+		// If there's an error loading the config, return an empty string to skip this section
 		return ""
 	}
 
@@ -62,7 +62,7 @@ func GetQueueInfo() string {
 			len(cfg.Sonarr), len(cfg.Radarr), len(cfg.Lidarr), len(cfg.Readarr))
 	}
 
-	// Create wait group to fetch all queues concurrently
+	// Create a wait group to fetch all queues concurrently
 	var wg sync.WaitGroup
 
 	// Use a mutex to protect the shared slice
@@ -249,7 +249,7 @@ func getSonarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 		timeout = time.Duration(instance.Timeout) * time.Second
 	}
 
-	// Create a starr.Config with custom timeout
+	// Create a starr.Config with a custom timeout
 	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := sonarr.New(c)
 

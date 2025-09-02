@@ -52,7 +52,7 @@ func GetQbittorrentInfo() string {
 		return ""
 	}
 
-	// Create wait group and mutex for async processing
+	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var queueInfos []qbittorrentInfo
@@ -132,7 +132,7 @@ func getQbittorrentStats(instance config.UserPassAppInstance) (qbittorrentInfo, 
 		return result, fmt.Errorf("could not sync main data: %w", err)
 	}
 
-	// Populate speeds from server state
+	// Populate speeds from the server state
 	result.DownloadSpeed = mainData.ServerState.DlInfoSpeed
 	result.UploadSpeed = mainData.ServerState.UpInfoSpeed
 
