@@ -561,6 +561,79 @@ func GetCpuInfo() string {
 	return DefaultStyle.Render("Not available")
 }
 
+// GetGpuInfo returns information about the GPU(s) in the system
+func GetGpuInfo() string {
+	var gpus []string
+
+	// List of GPU vendors/models to exclude (IPMI, server management, etc.)
+	excludedGPUs := []string{
+		"ASPEED",           // ASPEED BMC/IPMI controllers
+		"Matrox MGA",       // Matrox G200/G400 series (server management)
+		"Cirrus Logic",     // Cirrus Logic CL-GD series (legacy/server)
+		"XGI",              // XGI Volari series (legacy)
+		"Silicon Motion",   // SM750/SM712 (embedded/server)
+		"Hisilicon",        // HiSilicon Hi171x series (server BMC)
+		"ServerEngines",    // ServerEngines Pilot series
+		"Nuvoton",          // Nuvoton WPCM450 (server management)
+		"Pilot",            // Pilot series BMC controllers
+	}
+
+	// Use lspci to detect GPUs (works for NVIDIA, AMD, Intel, etc.)
+	lspciOutput := ExecCommand("lspci")
+	if lspciOutput != "Not available" {
+		lines := strings.Split(lspciOutput, "\n")
+		for _, line := range lines {
+			// Look for VGA compatible controller or 3D controller
+			if strings.Contains(line, "VGA compatible controller") ||
+				strings.Contains(line, "3D controller") ||
+				strings.Contains(line, "Display controller") {
+				// Extract GPU name after the colon, skipping the PCI address
+				parts := strings.SplitN(line, ":", 3)
+				var gpuInfo string
+				
+				if len(parts) >= 3 {
+					// Skip the PCI address (first part) and device type (second part)
+					gpuInfo = strings.TrimSpace(parts[2])
+				} else if len(parts) >= 2 {
+					// Fallback: clean up device type descriptors from the second part
+					gpuInfo = strings.TrimSpace(parts[1])
+					gpuInfo = strings.ReplaceAll(gpuInfo, "VGA compatible controller:", "")
+					gpuInfo = strings.ReplaceAll(gpuInfo, "3D controller:", "")
+					gpuInfo = strings.ReplaceAll(gpuInfo, "Display controller:", "")
+					gpuInfo = strings.TrimSpace(gpuInfo)
+				}
+
+				if gpuInfo != "" {
+					// Check if this GPU should be excluded
+					shouldExclude := false
+					for _, excluded := range excludedGPUs {
+						if strings.Contains(strings.ToUpper(gpuInfo), strings.ToUpper(excluded)) {
+							shouldExclude = true
+							break
+						}
+					}
+
+					if !shouldExclude {
+						gpus = append(gpus, DefaultStyle.Render(gpuInfo))
+					}
+				}
+			}
+		}
+	}
+
+	// Return empty string if no GPUs found to hide the section
+	if len(gpus) == 0 {
+		return ""
+	}
+
+	if len(gpus) == 1 {
+		return gpus[0]
+	}
+
+	// Multiple GPUs - show each on a clean line
+	return strings.Join(gpus, "\n")
+}
+
 // GetMemoryInfo returns the system memory usage in a simple text format
 func GetMemoryInfo() string {
 	// Try to read from /proc/meminfo first

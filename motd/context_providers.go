@@ -164,6 +164,22 @@ func GetCpuInfoWithContext(ctx context.Context) string {
 	}
 }
 
+// GetGpuInfoWithContext provides GPU info with context/timeout support
+func GetGpuInfoWithContext(ctx context.Context) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		ch <- GetGpuInfo()
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return DefaultStyle.Render("GPU info timed out")
+	}
+}
+
 // GetMemoryInfoWithContext provides memory usage info with context/timeout support
 func GetMemoryInfoWithContext(ctx context.Context) string {
 	ch := make(chan string, 1)

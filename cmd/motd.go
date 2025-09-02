@@ -20,6 +20,7 @@ var (
 	showDistribution     bool
 	showDocker           bool
 	showEmby             bool
+	showGPU              bool
 	showJellyfin         bool
 	showKernel           bool
 	showLastLogin        bool
@@ -60,6 +61,7 @@ last login, user sessions, process information, and system update status based o
 			showDistribution = true
 			showDocker = true
 			showEmby = true
+			showGPU = true
 			showJellyfin = true
 			showKernel = true
 			showLastLogin = true
@@ -79,7 +81,7 @@ last login, user sessions, process information, and system update status based o
 
 		// Check if at least one flag is enabled
 		if !showAptStatus && !showCPU && !showCpuAverages && !showDisk && !showDistribution &&
-			!showDocker && !showEmby && !showJellyfin && !showKernel && !showLastLogin &&
+			!showDocker && !showEmby && !showGPU && !showJellyfin && !showKernel && !showLastLogin &&
 			!showMemory && !showNzbget && !showPlex && !showProcesses && !showQbittorrent &&
 			!showQueues && !showRebootRequired && !showRtorrent && !showSabnzbd && !showSessions &&
 			!showTraefik && !showUptime {
@@ -93,6 +95,7 @@ last login, user sessions, process information, and system update status based o
 			fmt.Println("  --distro       Show distribution information")
 			fmt.Println("  --docker       Show Docker container information")
 			fmt.Println("  --emby         Show Emby streaming information")
+			fmt.Println("  --gpu          Show GPU information")
 			fmt.Println("  --jellyfin     Show Jellyfin streaming information")
 			fmt.Println("  --kernel       Show kernel information")
 			fmt.Println("  --login        Show last login information")
@@ -199,22 +202,23 @@ func displayMotd() {
 		{Key: "Load Averages:", Provider: motd.GetCpuAveragesWithContext, Timeout: 1 * time.Second, Order: 4},
 		{Key: "Processes:", Provider: motd.GetProcessCountWithContext, Timeout: 2 * time.Second, Order: 5},
 		{Key: "CPU:", Provider: motd.GetCpuInfoWithContext, Timeout: 2 * time.Second, Order: 6},
-		{Key: "Memory Usage:", Provider: motd.GetMemoryInfoWithContext, Timeout: 2 * time.Second, Order: 7},
-		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Timeout: 5 * time.Second, Order: 8},
-		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Timeout: 2 * time.Second, Order: 9},
-		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 10},
-		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 11},
-		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 12},
-		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 13},
-		{Key: "Traefik:", Provider: motd.GetTraefikInfoWithContext, Timeout: 10 * time.Second, Order: 14},
-		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 15},
-		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 16},
-		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 17},
-		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 18},
-		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 19},
-		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 20},
-		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 21},
-		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 22},
+		{Key: "GPU:", Provider: motd.GetGpuInfoWithContext, Timeout: 3 * time.Second, Order: 7},
+		{Key: "Memory Usage:", Provider: motd.GetMemoryInfoWithContext, Timeout: 2 * time.Second, Order: 8},
+		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Timeout: 5 * time.Second, Order: 9},
+		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Timeout: 2 * time.Second, Order: 10},
+		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 11},
+		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 12},
+		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 13},
+		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 14},
+		{Key: "Traefik:", Provider: motd.GetTraefikInfoWithContext, Timeout: 10 * time.Second, Order: 15},
+		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 16},
+		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 17},
+		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 18},
+		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 19},
+		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 20},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 21},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 22},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 23},
 	}
 
 	// Filter sources based on enabled flags
@@ -226,6 +230,7 @@ func displayMotd() {
 		"Load Averages:":   showCpuAverages,
 		"Processes:":       showProcesses,
 		"CPU:":             showCPU,
+		"GPU:":             showGPU,
 		"Memory Usage:":    showMemory,
 		"Package Status:":  showAptStatus,
 		"Reboot Status:":   showRebootRequired,
@@ -310,6 +315,7 @@ func init() {
 	motdCmd.Flags().BoolVar(&showDistribution, "distro", false, "Show distribution information")
 	motdCmd.Flags().BoolVar(&showDocker, "docker", false, "Show Docker container information")
 	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
+	motdCmd.Flags().BoolVar(&showGPU, "gpu", false, "Show GPU information")
 	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")
 	motdCmd.Flags().BoolVar(&showKernel, "kernel", false, "Show kernel information")
 	motdCmd.Flags().BoolVar(&showLastLogin, "login", false, "Show last login information")
