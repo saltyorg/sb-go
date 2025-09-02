@@ -9,10 +9,38 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/saltyorg/sb-go/spinners"
 )
+
+// retryWithBackoff executes a function with exponential backoff retry logic
+func retryWithBackoff(operation func() error, maxRetries int, baseDelay time.Duration) error {
+	var lastErr error
+	
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Calculate delay with exponential backoff (2^attempt * baseDelay)
+			delay := time.Duration(1<<uint(attempt-1)) * baseDelay
+			if delay > 30*time.Second {
+				delay = 30*time.Second // Cap maximum delay at 30 seconds
+			}
+			time.Sleep(delay)
+		}
+		
+		if err := operation(); err != nil {
+			lastErr = err
+			if attempt < maxRetries {
+				continue // Try again
+			}
+		} else {
+			return nil // Success
+		}
+	}
+	
+	return fmt.Errorf("operation failed after %d attempts: %w", maxRetries+1, lastErr)
+}
 
 // DownloadAndInstallSaltboxFact downloads and installs the latest saltbox.fact file.
 func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
@@ -22,30 +50,32 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
 
 	var latestVersion string
 
-	// Fetch the latest release info from GitHub
+	// Fetch the latest release info from GitHub with retry logic
 	if err := spinners.RunTaskWithSpinner("Fetching latest saltbox.fact release info", func() error {
-		response, err := http.Get(apiURL)
-		if err != nil {
-			return fmt.Errorf("error fetching latest release info: %w", err)
-		}
-		defer func() {
-			if err := response.Body.Close(); err != nil {
-				fmt.Println("Error closing response body:", err)
+		return retryWithBackoff(func() error {
+			response, err := http.Get(apiURL)
+			if err != nil {
+				return fmt.Errorf("error fetching latest release info: %w", err)
 			}
-		}()
+			defer func() {
+				if err := response.Body.Close(); err != nil {
+					fmt.Println("Error closing response body:", err)
+				}
+			}()
 
-		if response.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected status code: %d", response.StatusCode)
-		}
+			if response.StatusCode != http.StatusOK {
+				return fmt.Errorf("unexpected status code: %d", response.StatusCode)
+			}
 
-		var latestRelease struct {
-			TagName string `json:"tag_name"`
-		}
-		if err := json.NewDecoder(response.Body).Decode(&latestRelease); err != nil {
-			return fmt.Errorf("failed to parse release info: %w", err)
-		}
-		latestVersion = latestRelease.TagName
-		return nil
+			var latestRelease struct {
+				TagName string `json:"tag_name"`
+			}
+			if err := json.NewDecoder(response.Body).Decode(&latestRelease); err != nil {
+				return fmt.Errorf("failed to parse release info: %w", err)
+			}
+			latestVersion = latestRelease.TagName
+			return nil
+		}, 3, 1*time.Second) // 3 retries with 1 second base delay
 	}); err != nil {
 		return err
 	}
@@ -129,47 +159,49 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
 		}
 
 		if err := spinners.RunTaskWithSpinner(taskMessage, func() error {
-			response, err := http.Get(downloadURL)
-			if err != nil {
-				return fmt.Errorf("error downloading saltbox.fact: %w", err)
-			}
-			defer func() {
-				if err := response.Body.Close(); err != nil {
-					fmt.Println("Error closing response body:", err)
+			return retryWithBackoff(func() error {
+				response, err := http.Get(downloadURL)
+				if err != nil {
+					return fmt.Errorf("error downloading saltbox.fact: %w", err)
 				}
-			}()
+				defer func() {
+					if err := response.Body.Close(); err != nil {
+						fmt.Println("Error closing response body:", err)
+					}
+				}()
 
-			if response.StatusCode != http.StatusOK {
-				return fmt.Errorf("unexpected status code: %d", response.StatusCode)
-			}
-
-			// Ensure the directory exists
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-				return fmt.Errorf("error creating directory: %w", err)
-			}
-
-			// Write the content to the file
-			file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
-			if err != nil {
-				return fmt.Errorf("error opening file: %w", err)
-			}
-			defer func() {
-				if err := file.Close(); err != nil {
-					fmt.Println("Error closing file:", err)
+				if response.StatusCode != http.StatusOK {
+					return fmt.Errorf("unexpected status code: %d", response.StatusCode)
 				}
-			}()
 
-			_, err = io.Copy(file, response.Body)
-			if err != nil {
-				return fmt.Errorf("error writing file: %w", err)
-			}
+				// Ensure the directory exists
+				if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+					return fmt.Errorf("error creating directory: %w", err)
+				}
 
-			// Make the file executable
-			err = os.Chmod(targetPath, 0755)
-			if err != nil {
-				return fmt.Errorf("error setting file permissions: %w", err)
-			}
-			return nil
+				// Write the content to the file
+				file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+				if err != nil {
+					return fmt.Errorf("error opening file: %w", err)
+				}
+				defer func() {
+					if err := file.Close(); err != nil {
+						fmt.Println("Error closing file:", err)
+					}
+				}()
+
+				_, err = io.Copy(file, response.Body)
+				if err != nil {
+					return fmt.Errorf("error writing file: %w", err)
+				}
+
+				// Make the file executable
+				err = os.Chmod(targetPath, 0755)
+				if err != nil {
+					return fmt.Errorf("error setting file permissions: %w", err)
+				}
+				return nil
+			}, 3, 2*time.Second) // 3 retries with 2 second base delay for downloads
 		}); err != nil {
 			return err
 		}
