@@ -5,6 +5,8 @@ import (
 )
 
 // Text colors
+//
+//goland:noinspection ALL
 const (
 	// Base ANSI colors
 	ColorBlack   = "0"
@@ -36,6 +38,8 @@ const (
 )
 
 // Global style definitions
+//
+//goland:noinspection GoUnusedGlobalVariable
 var (
 	// Base styles - can be used as starting points
 	DefaultStyle = lipgloss.NewStyle()

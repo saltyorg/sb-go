@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/saltyorg/sb-go/cmd"
 	"github.com/saltyorg/sb-go/ubuntu"
 	"github.com/saltyorg/sb-go/utils"
-	"os"
 )
 
 func main() {

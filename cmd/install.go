@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/saltyorg/sb-go/utils"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/saltyorg/sb-go/utils"
 
 	"github.com/agnivade/levenshtein"
 	"github.com/saltyorg/sb-go/ansible"

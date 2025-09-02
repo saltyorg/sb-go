@@ -3,9 +3,10 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"github.com/saltyorg/sb-go/spinners"
 	"os"
 	"strings"
+
+	"github.com/saltyorg/sb-go/spinners"
 
 	"github.com/blang/semver"
 	"github.com/rhysd/go-github-selfupdate/selfupdate"

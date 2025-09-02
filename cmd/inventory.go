@@ -3,10 +3,11 @@ package cmd
 import (
 	"bufio"
 	"fmt"
-	"github.com/saltyorg/sb-go/constants"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/saltyorg/sb-go/constants"
 
 	"github.com/spf13/cobra"
 )

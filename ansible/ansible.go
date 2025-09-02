@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/saltyorg/sb-go/cache"
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/git"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/saltyorg/sb-go/cache"
+	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/git"
 )
 
 // RunAnsiblePlaybook executes an Ansible playbook using the specified binary and arguments.

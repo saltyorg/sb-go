@@ -16,7 +16,6 @@ import (
 	"github.com/saltyorg/sb-go/git"
 	"github.com/saltyorg/sb-go/spinners"
 	"github.com/saltyorg/sb-go/ubuntu"
-	"github.com/saltyorg/sb-go/utils"
 )
 
 // InitialSetup performs the initial setup tasks.
@@ -88,7 +87,7 @@ func InitialSetup(verbose bool) {
 		packages := []string{
 			"locales", "nano", "wget", "jq", "file", "gpg-agent",
 			"build-essential", "libssl-dev", "libffi-dev", "python3-dev",
-			"python3-testresources", "python3-apt", "python3-venv",
+			"python3-testresources", "python3-apt", "python3-venv", "python3-pip",
 		}
 		installPackages := apt.InstallPackage(packages, verbose)
 		return installPackages()
@@ -204,16 +203,6 @@ func PythonVenv(verbose bool) {
 			os.Exit(1)
 		}
 
-		// Ensure pip and setuptools are present in system python
-		if err := spinners.RunTaskWithSpinner("Ensuring pip is present", func() error {
-			ensurePip := exec.Command("python3.12", "-m", "ensurepip")
-			ensurePip.Dir = constants.AnsibleVenvPath //Set working directory
-			return ensurePip.Run()
-		}); err != nil {
-			//Don't exit here
-			_ = spinners.RunWarningSpinner(fmt.Sprintf("Warning: Ensuring pip failed: %v", err))
-		}
-
 		// Create venv
 		if err := spinners.RunTaskWithSpinner("Creating venv", func() error {
 			createVenv := exec.Command("python3.12", "-m", "venv", "venv")
@@ -224,25 +213,8 @@ func PythonVenv(verbose bool) {
 			os.Exit(1)
 		}
 
-		// Install pip using get-pip.py (for Jammy)
-		if err := spinners.RunTaskWithSpinner("Installing pip", func() error {
-			return utils.InstallPip(verbose)
-		}); err != nil {
-			fmt.Println("Error installing pip", err) //Consistent error handling
-			os.Exit(1)
-		}
-
 	} else if nobleRegex.MatchString(versionCodename) {
 		_ = spinners.RunInfoSpinner("Ubuntu Noble (or similar) detected, deploying venv with Python 3.12.")
-
-		// Install python3-pip (needed for Noble)
-		if err := spinners.RunTaskWithSpinner("Installing python3-pip", func() error {
-			installPipPackage := apt.InstallPackage([]string{"python3-pip"}, verbose)
-			return installPipPackage()
-		}); err != nil {
-			fmt.Println("Error installing python3-pip:", err)
-			os.Exit(1)
-		}
 
 		// Create venv (using system python3)
 		if err := spinners.RunTaskWithSpinner("Creating venv", func() error {
@@ -276,7 +248,7 @@ func PythonVenv(verbose bool) {
 }
 
 // SaltboxRepo checks out the master branch of the Saltbox GitHub repository.
-// Resets existing git repository folder if present.
+// Resets the existing git repository folder if present.
 // Runs submodule update.
 func SaltboxRepo(verbose bool, branch string) {
 	saltboxPath := constants.SaltboxRepoPath

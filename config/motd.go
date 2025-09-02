@@ -3,10 +3,11 @@ package config
 import (
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"net/url"
 	"os"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/go-playground/validator/v10"
 )

@@ -2,9 +2,10 @@ package cache
 
 import (
 	"encoding/json"
-	"github.com/saltyorg/sb-go/constants"
 	"os"
 	"sync"
+
+	"github.com/saltyorg/sb-go/constants"
 )
 
 // Cache is a thread-safe structure for storing and persisting cached data.

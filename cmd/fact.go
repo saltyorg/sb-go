@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/saltyorg/sb-go/constants"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/saltyorg/sb-go/constants"
 
 	"github.com/saltyorg/sb-go/utils"
 	"github.com/spf13/cobra"
@@ -68,26 +69,7 @@ Example usage:
 
 				// Display facts for the specific instance
 				fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
-
-				// Sort keys for a consistent output
-				sortedKeys := make([]string, 0, len(facts))
-				for key := range facts {
-					sortedKeys = append(sortedKeys, key)
-				}
-
-				// Simple sort
-				for i := 0; i < len(sortedKeys); i++ {
-					for j := i + 1; j < len(sortedKeys); j++ {
-						if sortedKeys[i] > sortedKeys[j] {
-							sortedKeys[i], sortedKeys[j] = sortedKeys[j], sortedKeys[i]
-						}
-					}
-				}
-
-				// Display sorted facts
-				for _, key := range sortedKeys {
-					fmt.Printf("  %s: %s\n", key, facts[key])
-				}
+				displayFacts(facts)
 			} else {
 				// Load all instances for the role
 				instances, err := loadAllInstances(filePath)
@@ -109,40 +91,13 @@ Example usage:
 				for instance := range instances {
 					instanceNames = append(instanceNames, instance)
 				}
-
-				// Simple sort to make output consistent
-				for i := 0; i < len(instanceNames); i++ {
-					for j := i + 1; j < len(instanceNames); j++ {
-						if instanceNames[i] > instanceNames[j] {
-							instanceNames[i], instanceNames[j] = instanceNames[j], instanceNames[i]
-						}
-					}
-				}
+				sortStrings(instanceNames)
 
 				// Display each instance
 				for _, instance := range instanceNames {
 					facts := instances[instance]
 					fmt.Printf("\nInstance: %s\n", instance)
-
-					// Sort keys for a consistent output
-					keys := make([]string, 0, len(facts))
-					for key := range facts {
-						keys = append(keys, key)
-					}
-
-					// Simple sort
-					for i := 0; i < len(keys); i++ {
-						for j := i + 1; j < len(keys); j++ {
-							if keys[i] > keys[j] {
-								keys[i], keys[j] = keys[j], keys[i]
-							}
-						}
-					}
-
-					// Display sorted facts
-					for _, key := range keys {
-						fmt.Printf("  %s: %s\n", key, facts[key])
-					}
+					displayFacts(facts)
 				}
 			}
 
@@ -176,26 +131,7 @@ Example usage:
 
 			// Display saved facts
 			fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
-
-			// Sort keys for a consistent output
-			sortedKeys := make([]string, 0, len(facts))
-			for key := range facts {
-				sortedKeys = append(sortedKeys, key)
-			}
-
-			// Simple sort
-			for i := 0; i < len(sortedKeys); i++ {
-				for j := i + 1; j < len(sortedKeys); j++ {
-					if sortedKeys[i] > sortedKeys[j] {
-						sortedKeys[i], sortedKeys[j] = sortedKeys[j], sortedKeys[i]
-					}
-				}
-			}
-
-			// Display sorted facts
-			for _, key := range sortedKeys {
-				fmt.Printf("  %s: %s\n", key, facts[key])
-			}
+			displayFacts(facts)
 
 		case "delete":
 			if deleteType == "" {
@@ -257,6 +193,58 @@ Example usage:
 			cmd.Help()
 		}
 	},
+}
+
+// sortStrings performs a simple bubble sort on a string slice
+func sortStrings(items []string) {
+	for i := 0; i < len(items); i++ {
+		for j := i + 1; j < len(items); j++ {
+			if items[i] > items[j] {
+				items[i], items[j] = items[j], items[i]
+			}
+		}
+	}
+}
+
+// getSortedKeys returns sorted keys from a map
+func getSortedKeys(facts map[string]string) []string {
+	keys := make([]string, 0, len(facts))
+	for key := range facts {
+		keys = append(keys, key)
+	}
+	sortStrings(keys)
+	return keys
+}
+
+// displayFacts prints facts in a consistent sorted format
+func displayFacts(facts map[string]string) {
+	sortedKeys := getSortedKeys(facts)
+	for _, key := range sortedKeys {
+		fmt.Printf("  %s: %s\n", key, facts[key])
+	}
+}
+
+// setFileOwnershipAndPermissions sets the file ownership to saltboxUser and permissions to 0640
+func setFileOwnershipAndPermissions(filePath, saltboxUser string) error {
+	// Always set permissions to 0640
+	if err := os.Chmod(filePath, 0640); err != nil {
+		return fmt.Errorf("failed to set file permissions: %v", err)
+	}
+
+	// Set ownership to the Saltbox user
+	passwd, err := user.Lookup(saltboxUser)
+	if err == nil {
+		uid, _ := strconv.Atoi(passwd.Uid)
+		gid, _ := strconv.Atoi(passwd.Gid)
+		if err := syscall.Chown(filePath, uid, gid); err != nil {
+			// Just log the error but don't fail the operation
+			fmt.Printf("Warning: Failed to set ownership to %s: %v\n", saltboxUser, err)
+		}
+	} else {
+		fmt.Printf("Warning: Failed to lookup user %s: %v\n", saltboxUser, err)
+	}
+	
+	return nil
 }
 
 // Get names of keys from a map
@@ -442,24 +430,9 @@ func saveFacts(filePath, instance string, keys map[string]string, saltboxUser st
 			return facts, false, fmt.Errorf("failed to save ini file: %v", err)
 		}
 
-		// Always set permissions to 0640, regardless of what they were before
-		if err := os.Chmod(filePath, 0640); err != nil {
-			return facts, true, fmt.Errorf("failed to set file permissions: %v", err)
-		}
-
-		// Set ownership to the Saltbox user
-		// This will require running the command with appropriate privileges
-		passwd, err := user.Lookup(saltboxUser)
-		if err == nil {
-			uid, _ := strconv.Atoi(passwd.Uid)
-			gid, _ := strconv.Atoi(passwd.Gid)
-			// Set ownership
-			if err := syscall.Chown(filePath, uid, gid); err != nil {
-				// Just log the error but don't fail the operation
-				fmt.Printf("Warning: Failed to set ownership to %s: %v\n", saltboxUser, err)
-			}
-		} else {
-			fmt.Printf("Warning: Failed to lookup user %s: %v\n", saltboxUser, err)
+		// Set ownership and permissions
+		if err := setFileOwnershipAndPermissions(filePath, saltboxUser); err != nil {
+			return facts, true, err
 		}
 	}
 
@@ -520,23 +493,9 @@ func deleteFacts(filePath, deleteType, instance string, keys map[string]string, 
 			return false, fmt.Errorf("failed to save ini file: %v", err)
 		}
 
-		// Always set permissions to 0640 when saving
-		if err := os.Chmod(filePath, 0640); err != nil {
-			return true, fmt.Errorf("failed to set file permissions: %v", err)
-		}
-
-		// Set ownership to the Saltbox user
-		passwd, err := user.Lookup(saltboxUser)
-		if err == nil {
-			uid, _ := strconv.Atoi(passwd.Uid)
-			gid, _ := strconv.Atoi(passwd.Gid)
-			// Set ownership
-			if err := syscall.Chown(filePath, uid, gid); err != nil {
-				// Just log the error but don't fail the operation
-				fmt.Printf("Warning: Failed to set ownership to %s: %v\n", saltboxUser, err)
-			}
-		} else {
-			fmt.Printf("Warning: Failed to lookup user %s: %v\n", saltboxUser, err)
+		// Set ownership and permissions
+		if err := setFileOwnershipAndPermissions(filePath, saltboxUser); err != nil {
+			return true, err
 		}
 	}
 

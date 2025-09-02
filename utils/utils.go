@@ -106,7 +106,7 @@ func CheckArchitecture() error {
 	cmd := exec.Command("uname", "-m")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		// Return error, but include the output for debugging.  No longer continuing.
+		// Return the error but include the output for debugging.  No longer continuing.
 		return fmt.Errorf("error getting architecture: %v, output: %s", err, strings.TrimSpace(string(output)))
 	}
 
@@ -136,7 +136,7 @@ func CheckLXC() error {
 			if strings.TrimSpace(string(output)) != "none" {
 				return fmt.Errorf("could not detect virtualization using systemd-detect-virt: %v, output: %s", err, strings.TrimSpace(string(output)))
 			} else {
-				// If output is "none", even if there was an exit error, we treat it like not being in a container
+				// If the output is "none", even if there was an exit error, we treat it like not being in a container
 				return nil
 			}
 		}
@@ -171,32 +171,4 @@ func CheckDesktopEnvironment() error {
 		}
 	}
 	return fmt.Errorf("unexpected error checking for desktop environment: %w", err)
-}
-
-// InstallPip installs pip using get-pip.py.
-// If verbose is true, the output of the curl and python commands will be printed to stdout/stderr.
-func InstallPip(verbose bool) error {
-	fmt.Println("Installing pip using get-pip.py...")
-	if err := os.Chdir("/tmp"); err != nil {
-		return fmt.Errorf("failed to change directory to /tmp: %w", err)
-	}
-	// Download get-pip.py
-	curlCmd := exec.Command("curl", "-sLO", "https://bootstrap.pypa.io/get-pip.py")
-	if verbose {
-		curlCmd.Stdout = os.Stdout
-		curlCmd.Stderr = os.Stderr
-	}
-	if err := curlCmd.Run(); err != nil {
-		return fmt.Errorf("error downloading get-pip.py: %w", err)
-	}
-	// Run get-pip.py with python3.12
-	pythonCmd := exec.Command("python3.12", "get-pip.py")
-	if verbose {
-		pythonCmd.Stdout = os.Stdout
-		pythonCmd.Stderr = os.Stderr
-	}
-	if err := pythonCmd.Run(); err != nil {
-		return fmt.Errorf("error running get-pip.py: %w", err)
-	}
-	return nil
 }
