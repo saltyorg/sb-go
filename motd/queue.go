@@ -257,48 +257,33 @@ func getSonarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Fetching Sonarr queue for %s\n", instance.Name)
 	}
 
-	var allQueueItems []sonarr.QueueRecord
-	pageSize := 100
-	page := 1
-	for {
-		var queue *sonarr.Queue
-		var err error
-		queue, err = client.GetQueue(page, pageSize)
+	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
+	queue, err := client.GetQueue(0, 100)
+	if err != nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Error fetching Sonarr queue: %v\n", err)
+		}
+		return QueueInfo{}, err
+	}
 
-		if err != nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Error fetching Sonarr queue page %d: %v\n", page, err)
-			}
-			return QueueInfo{}, err
+	// Check for nil queue to prevent dereference
+	if queue == nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Received nil queue from Sonarr API\n")
 		}
-
-		// Check for nil queue to prevent dereference
-		if queue == nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Received nil queue from Sonarr API for page %d, stopping pagination.\n", page)
-			}
-			break
-		}
-
-		for _, record := range queue.Records {
-			allQueueItems = append(allQueueItems, *record)
-		}
-		if len(allQueueItems) >= queue.TotalRecords || len(queue.Records) < pageSize {
-			break
-		}
-		page++
+		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
 	}
 
 	if Verbose {
-		fmt.Printf("DEBUG: Received Sonarr queue with %d total records\n", len(allQueueItems))
+		fmt.Printf("DEBUG: Received Sonarr queue with %d total records\n", len(queue.Records))
 	}
 
 	info := QueueInfo{
 		Name:  instance.Name,
-		Items: make([]QueueItem, len(allQueueItems)),
+		Items: make([]QueueItem, len(queue.Records)),
 	}
-	for i, item := range allQueueItems {
-		info.Items[i] = QueueItem{Status: item.Status}
+	for i, record := range queue.Records {
+		info.Items[i] = QueueItem{Status: record.Status}
 	}
 
 	return info, nil
@@ -322,48 +307,33 @@ func getRadarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Fetching Radarr queue for %s\n", instance.Name)
 	}
 
-	var allQueueItems []radarr.QueueRecord
-	pageSize := 100
-	page := 1
-	for {
-		var queue *radarr.Queue
-		var err error
-		queue, err = client.GetQueue(page, pageSize)
+	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
+	queue, err := client.GetQueue(0, 100)
+	if err != nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Error fetching Radarr queue: %v\n", err)
+		}
+		return QueueInfo{}, err
+	}
 
-		if err != nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Error fetching Radarr queue page %d: %v\n", page, err)
-			}
-			return QueueInfo{}, err
+	// Check for nil queue to prevent dereference
+	if queue == nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Received nil queue from Radarr API\n")
 		}
-
-		// Check for nil queue to prevent dereference
-		if queue == nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Received nil queue from Radarr API for page %d, stopping pagination.\n", page)
-			}
-			break
-		}
-
-		for _, record := range queue.Records {
-			allQueueItems = append(allQueueItems, *record)
-		}
-		if len(allQueueItems) >= queue.TotalRecords || len(queue.Records) < pageSize {
-			break
-		}
-		page++
+		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
 	}
 
 	if Verbose {
-		fmt.Printf("DEBUG: Received Radarr queue with %d total records\n", len(allQueueItems))
+		fmt.Printf("DEBUG: Received Radarr queue with %d total records\n", len(queue.Records))
 	}
 
 	info := QueueInfo{
 		Name:  instance.Name,
-		Items: make([]QueueItem, len(allQueueItems)),
+		Items: make([]QueueItem, len(queue.Records)),
 	}
-	for i, item := range allQueueItems {
-		info.Items[i] = QueueItem{Status: item.Status}
+	for i, record := range queue.Records {
+		info.Items[i] = QueueItem{Status: record.Status}
 	}
 
 	return info, nil
@@ -387,48 +357,33 @@ func getLidarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Fetching Lidarr queue for %s\n", instance.Name)
 	}
 
-	var allQueueItems []lidarr.QueueRecord
-	pageSize := 100
-	page := 1
-	for {
-		var queue *lidarr.Queue
-		var err error
-		queue, err = client.GetQueue(page, pageSize)
+	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
+	queue, err := client.GetQueue(0, 100)
+	if err != nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Error fetching Lidarr queue: %v\n", err)
+		}
+		return QueueInfo{}, err
+	}
 
-		if err != nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Error fetching Lidarr queue page %d: %v\n", page, err)
-			}
-			return QueueInfo{}, err
+	// Check for nil queue to prevent dereference
+	if queue == nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Received nil queue from Lidarr API\n")
 		}
-
-		// Check for nil queue to prevent dereference
-		if queue == nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Received nil queue from Lidarr API for page %d, stopping pagination.\n", page)
-			}
-			break
-		}
-
-		for _, record := range queue.Records {
-			allQueueItems = append(allQueueItems, *record)
-		}
-		if len(allQueueItems) >= queue.TotalRecords || len(queue.Records) < pageSize {
-			break
-		}
-		page++
+		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
 	}
 
 	if Verbose {
-		fmt.Printf("DEBUG: Received Lidarr queue with %d total records\n", len(allQueueItems))
+		fmt.Printf("DEBUG: Received Lidarr queue with %d total records\n", len(queue.Records))
 	}
 
 	info := QueueInfo{
 		Name:  instance.Name,
-		Items: make([]QueueItem, len(allQueueItems)),
+		Items: make([]QueueItem, len(queue.Records)),
 	}
-	for i, item := range allQueueItems {
-		info.Items[i] = QueueItem{Status: item.Status}
+	for i, record := range queue.Records {
+		info.Items[i] = QueueItem{Status: record.Status}
 	}
 
 	return info, nil
@@ -452,48 +407,33 @@ func getReadarrQueueDetailed(instance config.AppInstance) (QueueInfo, error) {
 		fmt.Printf("DEBUG: Fetching Readarr queue for %s\n", instance.Name)
 	}
 
-	var allQueueItems []readarr.QueueRecord
-	pageSize := 100
-	page := 1
-	for {
-		var queue *readarr.Queue
-		var err error
-		queue, err = client.GetQueue(page, pageSize)
+	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
+	queue, err := client.GetQueue(0, 100)
+	if err != nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Error fetching Readarr queue: %v\n", err)
+		}
+		return QueueInfo{}, err
+	}
 
-		if err != nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Error fetching Readarr queue page %d: %v\n", page, err)
-			}
-			return QueueInfo{}, err
+	// Check for nil queue to prevent dereference
+	if queue == nil {
+		if Verbose {
+			fmt.Printf("DEBUG: Received nil queue from Readarr API\n")
 		}
-
-		// Check for nil queue to prevent dereference
-		if queue == nil {
-			if Verbose {
-				fmt.Printf("DEBUG: Received nil queue from Readarr API for page %d, stopping pagination.\n", page)
-			}
-			break
-		}
-
-		for _, record := range queue.Records {
-			allQueueItems = append(allQueueItems, *record)
-		}
-		if len(allQueueItems) >= queue.TotalRecords || len(queue.Records) < pageSize {
-			break
-		}
-		page++
+		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
 	}
 
 	if Verbose {
-		fmt.Printf("DEBUG: Received Readarr queue with %d total records\n", len(allQueueItems))
+		fmt.Printf("DEBUG: Received Readarr queue with %d total records\n", len(queue.Records))
 	}
 
 	info := QueueInfo{
 		Name:  instance.Name,
-		Items: make([]QueueItem, len(allQueueItems)),
+		Items: make([]QueueItem, len(queue.Records)),
 	}
-	for i, item := range allQueueItems {
-		info.Items[i] = QueueItem{Status: item.Status}
+	for i, record := range queue.Records {
+		info.Items[i] = QueueItem{Status: record.Status}
 	}
 
 	return info, nil
