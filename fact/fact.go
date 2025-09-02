@@ -18,17 +18,17 @@ import (
 // retryWithBackoff executes a function with exponential backoff retry logic
 func retryWithBackoff(operation func() error, maxRetries int, baseDelay time.Duration) error {
 	var lastErr error
-	
+
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			// Calculate delay with exponential backoff (2^attempt * baseDelay)
 			delay := time.Duration(1<<uint(attempt-1)) * baseDelay
 			if delay > 30*time.Second {
-				delay = 30*time.Second // Cap maximum delay at 30 seconds
+				delay = 30 * time.Second // Cap maximum delay at 30 seconds
 			}
 			time.Sleep(delay)
 		}
-		
+
 		if err := operation(); err != nil {
 			lastErr = err
 			if attempt < maxRetries {
@@ -38,7 +38,7 @@ func retryWithBackoff(operation func() error, maxRetries int, baseDelay time.Dur
 			return nil // Success
 		}
 	}
-	
+
 	return fmt.Errorf("operation failed after %d attempts: %w", maxRetries+1, lastErr)
 }
 
@@ -46,7 +46,7 @@ func retryWithBackoff(operation func() error, maxRetries int, baseDelay time.Dur
 func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
 	downloadURL := "https://github.com/saltyorg/ansible-facts/releases/latest/download/saltbox-facts"
 	targetPath := "/srv/git/saltbox/ansible_facts.d/saltbox.fact"
-	apiURL := "https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
+	apiURL := "https://svm.saltbox.dev/version?url=https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
 
 	var latestVersion string
 
