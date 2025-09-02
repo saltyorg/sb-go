@@ -15,6 +15,8 @@ var reinstallFactsCmd = &cobra.Command{
 	Short: "Reinstall the Rust saltbox.fact file",
 	Long:  `Reinstall the Rust saltbox.fact file`,
 	Run: func(cmd *cobra.Command, args []string) {
+		verbose, _ := cmd.Flags().GetBool("verbose")
+
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(verbose)
 
@@ -27,5 +29,5 @@ var reinstallFactsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(reinstallFactsCmd)
-	reinstallFactsCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	reinstallFactsCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 }

@@ -15,13 +15,14 @@ var reinstallVenvCmd = &cobra.Command{
 	Short: "Reinstall the Ansible virtual environment",
 	Long:  `Reinstall the Ansible virtual environment`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		verbose, _ := cmd.Flags().GetBool("verbose")
 		return handleReinstallVenv(verbose)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(reinstallVenvCmd)
-	reinstallVenvCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	reinstallVenvCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 }
 
 // handleReinstallVenv handles the reinstallation of the Ansible virtual environment.

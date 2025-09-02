@@ -3,10 +3,11 @@ package cmd
 import (
 	"bytes"
 	"fmt"
-	"github.com/saltyorg/sb-go/spinners"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/saltyorg/sb-go/spinners"
 
 	"github.com/saltyorg/sb-go/utils"
 	"github.com/saltyorg/sb-go/venv"
@@ -19,16 +20,17 @@ var reinstallPythonCmd = &cobra.Command{
 	Short: "Reinstall the deadsnakes Python version used by Saltbox and related Ansible virtual environment",
 	Long:  `Reinstall the deadsnakes Python version used by Saltbox and related Ansible virtual environment`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleReinstallPython()
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		return handleReinstallPython(verbose)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(reinstallPythonCmd)
-	reinstallPythonCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	reinstallPythonCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 }
 
-func handleReinstallPython() error {
+func handleReinstallPython(verbose bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 

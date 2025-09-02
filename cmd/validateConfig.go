@@ -1,13 +1,10 @@
 package cmd
 
 import (
+	"os"
+
 	"github.com/saltyorg/sb-go/validate"
 	"github.com/spf13/cobra"
-	"os"
-)
-
-var (
-	verbose bool
 )
 
 var configCmd = &cobra.Command{
@@ -15,6 +12,7 @@ var configCmd = &cobra.Command{
 	Short: "Validate Saltbox configuration files",
 	Long:  `Validate Saltbox configuration files`,
 	Run: func(cmd *cobra.Command, args []string) {
+		verbose, _ := cmd.Flags().GetBool("verbose")
 		err := validate.AllSaltboxConfigs(verbose)
 		if err != nil {
 			os.Exit(1)
@@ -24,5 +22,5 @@ var configCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(configCmd)
-	configCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	configCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 }

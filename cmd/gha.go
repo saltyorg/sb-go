@@ -30,7 +30,7 @@ var ghaCmd = &cobra.Command{
 		setup.PythonVenv(true)
 
 		// Install pip3 Dependencies
-		setup.InstallPipDependencies()
+		setup.InstallPipDependencies(true)
 
 		if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {
 			fmt.Printf("Error downloading and installing saltbox.fact: %v\n", err)

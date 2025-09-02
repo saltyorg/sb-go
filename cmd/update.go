@@ -21,16 +21,17 @@ var updateCmd = &cobra.Command{
 	Short: "Update Saltbox & Sandbox",
 	Long:  `Update Saltbox & Sandbox`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleUpdate()
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		return handleUpdate(verbose)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(updateCmd)
-	updateCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	updateCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 }
 
-func handleUpdate() error {
+func handleUpdate(verbose bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 

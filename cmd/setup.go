@@ -20,6 +20,9 @@ var setupCmd = &cobra.Command{
 	Long:   `Install Saltbox and its dependencies`,
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		branch, _ := cmd.Flags().GetString("branch")
+
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(verbose)
 
@@ -81,10 +84,10 @@ var setupCmd = &cobra.Command{
 		setup.PythonVenv(verbose)
 
 		// Setup Saltbox Repo
-		setup.SaltboxRepo(verbose)
+		setup.SaltboxRepo(verbose, branch)
 
 		// Install pip3 Dependencies
-		setup.InstallPipDependencies()
+		setup.InstallPipDependencies(verbose)
 
 		// Copy ansible* files to /usr/local/bin
 		setup.CopyRequiredBinaries()
@@ -102,5 +105,6 @@ var setupCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(setupCmd)
-	setupCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	setupCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+	setupCmd.PersistentFlags().StringP("branch", "b", "master", "Branch to use for Saltbox repository")
 }

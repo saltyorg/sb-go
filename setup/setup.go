@@ -278,10 +278,12 @@ func PythonVenv(verbose bool) {
 // SaltboxRepo checks out the master branch of the Saltbox GitHub repository.
 // Resets existing git repository folder if present.
 // Runs submodule update.
-func SaltboxRepo(verbose bool) {
+func SaltboxRepo(verbose bool, branch string) {
 	saltboxPath := constants.SaltboxRepoPath
 	saltboxRepoURL := constants.SaltboxRepoURL
-	branch := "master" // Or get this from a flag/config
+	if branch == "" {
+		branch = "master" // Default to master if not specified
+	}
 
 	// Check if the Saltbox directory exists.
 	_, err := os.Stat(saltboxPath)
@@ -370,7 +372,7 @@ func SaltboxRepo(verbose bool) {
 }
 
 // InstallPipDependencies installs pip dependencies in the Ansible virtual environment.
-func InstallPipDependencies() {
+func InstallPipDependencies(verbose bool) {
 	venvPythonPath := constants.AnsibleVenvPythonPath()
 	python3Cmd := []string{venvPythonPath, "-m", "pip", "install", "--timeout=360", "--no-cache-dir", "--disable-pip-version-check", "--upgrade"}
 
@@ -378,6 +380,11 @@ func InstallPipDependencies() {
 	if err := spinners.RunTaskWithSpinner("Installing pip, setuptools, and wheel", func() error {
 		installBaseDeps := append(python3Cmd, "pip", "setuptools", "wheel")
 		cmdInstallBase := exec.Command(installBaseDeps[0], installBaseDeps[1:]...)
+		if verbose {
+			fmt.Println("Running command:", installBaseDeps)
+			cmdInstallBase.Stdout = os.Stdout
+			cmdInstallBase.Stderr = os.Stderr
+		}
 		return cmdInstallBase.Run()
 	}); err != nil {
 		fmt.Println("Error installing pip, setuptools, and wheel:", err)
@@ -389,6 +396,11 @@ func InstallPipDependencies() {
 		requirementsPath := filepath.Join(constants.SaltboxRepoPath, "requirements", "requirements-saltbox.txt")
 		installRequirements := append(python3Cmd, "--requirement", requirementsPath)
 		cmdInstallReq := exec.Command(installRequirements[0], installRequirements[1:]...)
+		if verbose {
+			fmt.Println("Running command:", installRequirements)
+			cmdInstallReq.Stdout = os.Stdout
+			cmdInstallReq.Stderr = os.Stderr
+		}
 		return cmdInstallReq.Run()
 	}); err != nil {
 		fmt.Println("Error installing requirements from requirements-saltbox.txt:", err)
