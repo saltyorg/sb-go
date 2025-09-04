@@ -10,6 +10,7 @@ import (
 
 	"github.com/saltyorg/sb-go/constants"
 	"github.com/saltyorg/sb-go/ubuntu"
+
 	"gopkg.in/yaml.v3"
 )
 

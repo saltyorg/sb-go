@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	
+
 	"github.com/saltyorg/sb-go/runtime"
+
 	"github.com/spf13/cobra"
 )
 

@@ -10,8 +10,8 @@ import (
 	"syscall"
 
 	"github.com/saltyorg/sb-go/constants"
-
 	"github.com/saltyorg/sb-go/utils"
+
 	"github.com/spf13/cobra"
 	"gopkg.in/ini.v1"
 )
@@ -42,175 +42,175 @@ Example usage:
 		method, _ := cmd.Flags().GetString("method")
 		deleteType, _ := cmd.Flags().GetString("delete-type")
 		keyValues, _ := cmd.Flags().GetStringSlice("key")
-		
+
 		config := &factConfig{
 			method:     method,
 			deleteType: deleteType,
 			keyValues:  keyValues,
 		}
-		
+
 		runFactCommand(cmd, args, config)
 	},
 }
 
 // runFactCommand handles the main logic for the fact command
 func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
-		if len(args) < 1 {
-			fmt.Print("Error: Role name is required\n\n")
+	if len(args) < 1 {
+		fmt.Print("Error: Role name is required\n\n")
+		cmd.Help()
+		return
+	}
+
+	role := args[0]
+	// Get a file path for the role
+	filePath := getFilePath(role)
+
+	// Parse key-value pairs
+	keys := parseKeyValues(config.keyValues)
+
+	switch config.method {
+	case "load":
+		// Check if a specific instance was requested
+		if len(args) > 1 {
+			// Load a specific instance
+			instance := args[1]
+			facts, err := loadFacts(filePath, instance, keys)
+			if err != nil {
+				fmt.Printf("Error loading facts: %v\n", err)
+				return
+			}
+
+			if len(facts) == 0 {
+				fmt.Printf("No facts found for role '%s', instance '%s'\n", role, instance)
+				return
+			}
+
+			// Display facts for the specific instance
+			fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
+			displayFacts(facts)
+		} else {
+			// Load all instances for the role
+			instances, err := loadAllInstances(filePath)
+			if err != nil {
+				fmt.Printf("Error loading instances: %v\n", err)
+				return
+			}
+
+			if len(instances) == 0 {
+				fmt.Printf("No facts found for role '%s'\n", role)
+				return
+			}
+
+			// Display facts for all instances
+			fmt.Printf("Facts for role '%s':\n", role)
+
+			// Sort instance names for a consistent output
+			instanceNames := make([]string, 0, len(instances))
+			for instance := range instances {
+				instanceNames = append(instanceNames, instance)
+			}
+			sortStrings(instanceNames)
+
+			// Display each instance
+			for _, instance := range instanceNames {
+				facts := instances[instance]
+				fmt.Printf("\nInstance: %s\n", instance)
+				displayFacts(facts)
+			}
+		}
+
+	case "save":
+		// For save, we must have an instance
+		if len(args) < 2 {
+			fmt.Println("Error: Instance name is required for save method")
 			cmd.Help()
 			return
 		}
+		instance := args[1]
 
-		role := args[0]
-		// Get a file path for the role
-		filePath := getFilePath(role)
+		// Get the Saltbox user for owner/group
+		saltboxUser, err := utils.GetSaltboxUser()
+		if err != nil {
+			fmt.Printf("Error getting Saltbox user: %v\n", err)
+			return
+		}
 
-		// Parse key-value pairs
-		keys := parseKeyValues(config.keyValues)
+		facts, changed, err := saveFacts(filePath, instance, keys, saltboxUser)
+		if err != nil {
+			fmt.Printf("Error saving facts: %v\n", err)
+			return
+		}
 
-		switch config.method {
-		case "load":
-			// Check if a specific instance was requested
-			if len(args) > 1 {
-				// Load a specific instance
-				instance := args[1]
-				facts, err := loadFacts(filePath, instance, keys)
-				if err != nil {
-					fmt.Printf("Error loading facts: %v\n", err)
-					return
-				}
+		if changed {
+			fmt.Println("Facts were updated")
+		} else {
+			fmt.Println("No changes were made")
+		}
 
-				if len(facts) == 0 {
-					fmt.Printf("No facts found for role '%s', instance '%s'\n", role, instance)
-					return
-				}
+		// Display saved facts
+		fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
+		displayFacts(facts)
 
-				// Display facts for the specific instance
-				fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
-				displayFacts(facts)
-			} else {
-				// Load all instances for the role
-				instances, err := loadAllInstances(filePath)
-				if err != nil {
-					fmt.Printf("Error loading instances: %v\n", err)
-					return
-				}
+	case "delete":
+		if config.deleteType == "" {
+			fmt.Println("Error: delete-type is required for delete method")
+			return
+		}
 
-				if len(instances) == 0 {
-					fmt.Printf("No facts found for role '%s'\n", role)
-					return
-				}
+		// Get the Saltbox user for owner/group if needed for cleanup
+		saltboxUser, err := utils.GetSaltboxUser()
+		if err != nil {
+			fmt.Printf("Error getting Saltbox user: %v\n", err)
+			return
+		}
 
-				// Display facts for all instances
-				fmt.Printf("Facts for role '%s':\n", role)
-
-				// Sort instance names for a consistent output
-				instanceNames := make([]string, 0, len(instances))
-				for instance := range instances {
-					instanceNames = append(instanceNames, instance)
-				}
-				sortStrings(instanceNames)
-
-				// Display each instance
-				for _, instance := range instanceNames {
-					facts := instances[instance]
-					fmt.Printf("\nInstance: %s\n", instance)
-					displayFacts(facts)
-				}
+		// Handle delete based on type
+		if config.deleteType == "role" {
+			// No instance needed for role deletion
+			changed, err := deleteFacts(filePath, config.deleteType, "", keys, saltboxUser)
+			if err != nil {
+				fmt.Printf("Error deleting facts: %v\n", err)
+				return
 			}
 
-		case "save":
-			// For save, we must have an instance
+			if changed {
+				fmt.Printf("Role '%s' was deleted\n", role)
+			} else {
+				fmt.Println("No changes were made")
+			}
+		} else {
+			// For instance or key deletion, we need an instance
 			if len(args) < 2 {
-				fmt.Println("Error: Instance name is required for save method")
+				fmt.Println("Error: Instance name is required for instance or key deletion")
 				cmd.Help()
 				return
 			}
 			instance := args[1]
 
-			// Get the Saltbox user for owner/group
-			saltboxUser, err := utils.GetSaltboxUser()
+			changed, err := deleteFacts(filePath, config.deleteType, instance, keys, saltboxUser)
 			if err != nil {
-				fmt.Printf("Error getting Saltbox user: %v\n", err)
-				return
-			}
-
-			facts, changed, err := saveFacts(filePath, instance, keys, saltboxUser)
-			if err != nil {
-				fmt.Printf("Error saving facts: %v\n", err)
+				fmt.Printf("Error deleting facts: %v\n", err)
 				return
 			}
 
 			if changed {
-				fmt.Println("Facts were updated")
+				switch config.deleteType {
+				case "instance":
+					fmt.Printf("Instance '%s' of role '%s' was deleted\n", instance, role)
+				case "key":
+					fmt.Printf("Keys %v were deleted from instance '%s' of role '%s'\n",
+						getKeyNames(keys), instance, role)
+				}
 			} else {
 				fmt.Println("No changes were made")
 			}
-
-			// Display saved facts
-			fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
-			displayFacts(facts)
-
-		case "delete":
-			if config.deleteType == "" {
-				fmt.Println("Error: delete-type is required for delete method")
-				return
-			}
-
-			// Get the Saltbox user for owner/group if needed for cleanup
-			saltboxUser, err := utils.GetSaltboxUser()
-			if err != nil {
-				fmt.Printf("Error getting Saltbox user: %v\n", err)
-				return
-			}
-
-			// Handle delete based on type
-			if config.deleteType == "role" {
-				// No instance needed for role deletion
-				changed, err := deleteFacts(filePath, config.deleteType, "", keys, saltboxUser)
-				if err != nil {
-					fmt.Printf("Error deleting facts: %v\n", err)
-					return
-				}
-
-				if changed {
-					fmt.Printf("Role '%s' was deleted\n", role)
-				} else {
-					fmt.Println("No changes were made")
-				}
-			} else {
-				// For instance or key deletion, we need an instance
-				if len(args) < 2 {
-					fmt.Println("Error: Instance name is required for instance or key deletion")
-					cmd.Help()
-					return
-				}
-				instance := args[1]
-
-				changed, err := deleteFacts(filePath, config.deleteType, instance, keys, saltboxUser)
-				if err != nil {
-					fmt.Printf("Error deleting facts: %v\n", err)
-					return
-				}
-
-				if changed {
-					switch config.deleteType {
-					case "instance":
-						fmt.Printf("Instance '%s' of role '%s' was deleted\n", instance, role)
-					case "key":
-						fmt.Printf("Keys %v were deleted from instance '%s' of role '%s'\n",
-							getKeyNames(keys), instance, role)
-					}
-				} else {
-					fmt.Println("No changes were made")
-				}
-			}
-
-		default:
-			fmt.Printf("Unknown method: %s\n", config.method)
-			cmd.Help()
 		}
+
+	default:
+		fmt.Printf("Unknown method: %s\n", config.method)
+		cmd.Help()
 	}
+}
 
 // sortStrings performs a simple bubble sort on a string slice
 func sortStrings(items []string) {

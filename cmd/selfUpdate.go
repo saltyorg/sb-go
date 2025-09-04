@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/saltyorg/sb-go/runtime"
 	"github.com/saltyorg/sb-go/spinners"
 
 	"github.com/blang/semver"
 	"github.com/creativeprojects/go-selfupdate"
-	"github.com/saltyorg/sb-go/runtime"
 	"github.com/spf13/cobra"
 )
 

@@ -6,12 +6,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/saltyorg/sb-go/utils"
-
-	"github.com/agnivade/levenshtein"
 	"github.com/saltyorg/sb-go/ansible"
 	"github.com/saltyorg/sb-go/cache"
 	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/utils"
+
+	"github.com/agnivade/levenshtein"
 	"github.com/spf13/cobra"
 )
 

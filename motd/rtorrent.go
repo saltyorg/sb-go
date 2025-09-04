@@ -9,9 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saltydk/go-rtorrent"
 	"github.com/saltyorg/sb-go/config"
 	"github.com/saltyorg/sb-go/constants"
+
+	"github.com/saltydk/go-rtorrent"
 )
 
 // rtorrentInfo holds the processed information for an rTorrent instance.

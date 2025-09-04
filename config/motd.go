@@ -7,9 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/go-playground/validator/v10"
+	"gopkg.in/yaml.v3"
 )
 
 // MOTDConfig represents the MOTD configuration structure

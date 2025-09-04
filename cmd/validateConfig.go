@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/saltyorg/sb-go/validate"
+
 	"github.com/spf13/cobra"
 )
 

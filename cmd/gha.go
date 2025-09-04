@@ -7,6 +7,7 @@ import (
 	"github.com/saltyorg/sb-go/fact"
 	"github.com/saltyorg/sb-go/setup"
 	"github.com/saltyorg/sb-go/spinners"
+
 	"github.com/spf13/cobra"
 )
 

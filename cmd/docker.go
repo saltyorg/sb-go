@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/saltyorg/sb-go/constants"
+
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 

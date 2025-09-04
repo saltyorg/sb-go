@@ -13,11 +13,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/saltyorg/sb-go/constants"
+
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/saltyorg/sb-go/constants"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/pbkdf2"
 )

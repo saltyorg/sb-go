@@ -7,6 +7,7 @@ import (
 	"github.com/saltyorg/sb-go/ansible"
 	"github.com/saltyorg/sb-go/cache"
 	"github.com/saltyorg/sb-go/constants"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/autobrr/go-qbittorrent"
 	"github.com/saltyorg/sb-go/config"
 	"github.com/saltyorg/sb-go/constants"
+
+	"github.com/autobrr/go-qbittorrent"
 )
 
 // qbittorrentInfo holds the processed information for a qBittorrent instance.

@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	saltboxfact "github.com/saltyorg/sb-go/fact"
+	"github.com/saltyorg/sb-go/fact"
 	"github.com/saltyorg/sb-go/spinners"
+
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +21,7 @@ var reinstallFactsCmd = &cobra.Command{
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(verbose)
 
-		if err := saltboxfact.DownloadAndInstallSaltboxFact(true); err != nil {
+		if err := fact.DownloadAndInstallSaltboxFact(true); err != nil {
 			fmt.Println("Error reinstalling saltbox.fact:", err)
 			os.Exit(1)
 		}

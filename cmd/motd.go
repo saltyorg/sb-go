@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/motd"
+
 	"github.com/spf13/cobra"
 )
 
-// Display flags and options
-var (
+// motdConfig holds the configuration for the motd command
+type motdConfig struct {
 	showAll              bool
 	showAptStatus        bool
 	showCPU              bool
@@ -42,7 +43,7 @@ var (
 	bannerTitle          string
 	bannerType           string
 	verbosity            int
-)
+}
 
 // motdCmd represents the motd command
 var motdCmd = &cobra.Command{
@@ -52,145 +53,183 @@ var motdCmd = &cobra.Command{
 kernel version, system uptime, CPU load, memory usage, disk usage,
 last login, user sessions, process information, and system update status based on flags provided.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// If --all flag is used, enable everything
-		if showAll {
-			showAptStatus = true
-			showCPU = true
-			showCpuAverages = true
-			showDisk = true
-			showDistribution = true
-			showDocker = true
-			showEmby = true
-			showGPU = true
-			showJellyfin = true
-			showKernel = true
-			showLastLogin = true
-			showMemory = true
-			showNzbget = true
-			showPlex = true
-			showProcesses = true
-			showQbittorrent = true
-			showQueues = true
-			showRebootRequired = true
-			showRtorrent = true
-			showSabnzbd = true
-			showSessions = true
-			showTraefik = true
-			showUptime = true
-		}
+		// Get flag values and create config
+		config := &motdConfig{}
+		config.showAll, _ = cmd.Flags().GetBool("all")
+		config.showAptStatus, _ = cmd.Flags().GetBool("apt")
+		config.showCPU, _ = cmd.Flags().GetBool("cpu-info")
+		config.showCpuAverages, _ = cmd.Flags().GetBool("cpu")
+		config.showDisk, _ = cmd.Flags().GetBool("disk")
+		config.showDistribution, _ = cmd.Flags().GetBool("distro")
+		config.showDocker, _ = cmd.Flags().GetBool("docker")
+		config.showEmby, _ = cmd.Flags().GetBool("emby")
+		config.showGPU, _ = cmd.Flags().GetBool("gpu")
+		config.showJellyfin, _ = cmd.Flags().GetBool("jellyfin")
+		config.showKernel, _ = cmd.Flags().GetBool("kernel")
+		config.showLastLogin, _ = cmd.Flags().GetBool("login")
+		config.showMemory, _ = cmd.Flags().GetBool("memory")
+		config.showNzbget, _ = cmd.Flags().GetBool("nzbget")
+		config.showPlex, _ = cmd.Flags().GetBool("plex")
+		config.showProcesses, _ = cmd.Flags().GetBool("processes")
+		config.showQbittorrent, _ = cmd.Flags().GetBool("qbittorrent")
+		config.showQueues, _ = cmd.Flags().GetBool("queues")
+		config.showRebootRequired, _ = cmd.Flags().GetBool("reboot")
+		config.showRtorrent, _ = cmd.Flags().GetBool("rtorrent")
+		config.showSabnzbd, _ = cmd.Flags().GetBool("sabnzbd")
+		config.showSessions, _ = cmd.Flags().GetBool("sessions")
+		config.showTraefik, _ = cmd.Flags().GetBool("traefik")
+		config.showUptime, _ = cmd.Flags().GetBool("uptime")
+		config.bannerFile, _ = cmd.Flags().GetString("banner-file")
+		config.bannerFileToiletArgs, _ = cmd.Flags().GetString("banner-file-toilet")
+		config.bannerFont, _ = cmd.Flags().GetString("font")
+		config.bannerTitle, _ = cmd.Flags().GetString("title")
+		config.bannerType, _ = cmd.Flags().GetString("type")
+		config.verbosity, _ = cmd.Flags().GetCount("verbose")
 
-		// Check if at least one flag is enabled
-		if !showAptStatus && !showCPU && !showCpuAverages && !showDisk && !showDistribution &&
-			!showDocker && !showEmby && !showGPU && !showJellyfin && !showKernel && !showLastLogin &&
-			!showMemory && !showNzbget && !showPlex && !showProcesses && !showQbittorrent &&
-			!showQueues && !showRebootRequired && !showRtorrent && !showSabnzbd && !showSessions &&
-			!showTraefik && !showUptime {
-			fmt.Println("Error: No information selected to display.")
-			fmt.Println("Please use at least one of the following flags:")
-			fmt.Println("  --all          Show all information")
-			fmt.Println("  --apt          Show apt package status")
-			fmt.Println("  --cpu          Show CPU load averages")
-			fmt.Println("  --cpu-info     Show CPU model and core count")
-			fmt.Println("  --disk         Show disk usage for all partitions")
-			fmt.Println("  --distro       Show distribution information")
-			fmt.Println("  --docker       Show Docker container information")
-			fmt.Println("  --emby         Show Emby streaming information")
-			fmt.Println("  --gpu          Show GPU information")
-			fmt.Println("  --jellyfin     Show Jellyfin streaming information")
-			fmt.Println("  --kernel       Show kernel information")
-			fmt.Println("  --login        Show last login information")
-			fmt.Println("  --memory       Show memory usage")
-			fmt.Println("  --nzbget       Show NZBGet queue information")
-			fmt.Println("  --plex         Show Plex streaming information")
-			fmt.Println("  --processes    Show process count")
-			fmt.Println("  --qbittorrent  Show qBittorrent queue information")
-			fmt.Println("  --queues       Show download queue information from Sonarr, Radarr, etc.")
-			fmt.Println("  --reboot       Show if reboot is required")
-			fmt.Println("  --rtorrent     Show rTorrent queue information")
-			fmt.Println("  --sabnzbd      Show Sabnzbd queue information")
-			fmt.Println("  --sessions     Show active user sessions")
-			fmt.Println("  --traefik      Show Traefik router status information")
-			fmt.Println("  --uptime       Show uptime information")
-			os.Exit(1)
-		}
-
-		motd.Verbose = verbosity > 0
-
-		// Validate banner type if specified
-		if bannerType != "" && bannerType != "none" {
-			validType := false
-			for _, bType := range motd.AvailableBannerTypes {
-				if bannerType == bType {
-					validType = true
-					break
-				}
-			}
-
-			if !validType {
-				fmt.Println("Error: Invalid banner type specified:", bannerType)
-				fmt.Println()
-				fmt.Println("Available types:")
-
-				// Print available types in columns
-				const numColumns = 4
-				for i, bType := range motd.AvailableBannerTypes {
-					if i%numColumns == 0 {
-						fmt.Println()
-					}
-					fmt.Printf("  %-16s", bType)
-				}
-				fmt.Println()
-				fmt.Println()
-				os.Exit(1)
-			}
-		}
-
-		// Validate font if specified
-		if bannerFont != "" && !motd.IsValidFont(bannerFont) {
-			fmt.Println("Error: Invalid font specified:", bannerFont)
-			fmt.Println()
-			fmt.Println("Available fonts (from /usr/share/figlet):")
-
-			// Print available fonts in columns
-			fonts := motd.ListAvailableFonts()
-			const numColumns = 4
-			for i, font := range fonts {
-				if i%numColumns == 0 {
-					fmt.Println()
-				}
-				fmt.Printf("  %-16s", font)
-			}
-			fmt.Println()
-			fmt.Println()
-			os.Exit(1)
-		}
-
-		displayMotd()
+		runMotdCommand(config)
 	},
 }
 
-func displayMotd() {
+// runMotdCommand handles the main logic for the motd command
+func runMotdCommand(config *motdConfig) {
+	// If --all flag is used, enable everything
+	if config.showAll {
+		config.showAptStatus = true
+		config.showCPU = true
+		config.showCpuAverages = true
+		config.showDisk = true
+		config.showDistribution = true
+		config.showDocker = true
+		config.showEmby = true
+		config.showGPU = true
+		config.showJellyfin = true
+		config.showKernel = true
+		config.showLastLogin = true
+		config.showMemory = true
+		config.showNzbget = true
+		config.showPlex = true
+		config.showProcesses = true
+		config.showQbittorrent = true
+		config.showQueues = true
+		config.showRebootRequired = true
+		config.showRtorrent = true
+		config.showSabnzbd = true
+		config.showSessions = true
+		config.showTraefik = true
+		config.showUptime = true
+	}
+
+	// Check if at least one flag is enabled
+	if !config.showAptStatus && !config.showCPU && !config.showCpuAverages && !config.showDisk && !config.showDistribution &&
+		!config.showDocker && !config.showEmby && !config.showGPU && !config.showJellyfin && !config.showKernel && !config.showLastLogin &&
+		!config.showMemory && !config.showNzbget && !config.showPlex && !config.showProcesses && !config.showQbittorrent &&
+		!config.showQueues && !config.showRebootRequired && !config.showRtorrent && !config.showSabnzbd && !config.showSessions &&
+		!config.showTraefik && !config.showUptime {
+		fmt.Println("Error: No information selected to display.")
+		fmt.Println("Please use at least one of the following flags:")
+		fmt.Println("  --all          Show all information")
+		fmt.Println("  --apt          Show apt package status")
+		fmt.Println("  --cpu          Show CPU load averages")
+		fmt.Println("  --cpu-info     Show CPU model and core count")
+		fmt.Println("  --disk         Show disk usage for all partitions")
+		fmt.Println("  --distro       Show distribution information")
+		fmt.Println("  --docker       Show Docker container information")
+		fmt.Println("  --emby         Show Emby streaming information")
+		fmt.Println("  --gpu          Show GPU information")
+		fmt.Println("  --jellyfin     Show Jellyfin streaming information")
+		fmt.Println("  --kernel       Show kernel information")
+		fmt.Println("  --login        Show last login information")
+		fmt.Println("  --memory       Show memory usage")
+		fmt.Println("  --nzbget       Show NZBGet queue information")
+		fmt.Println("  --plex         Show Plex streaming information")
+		fmt.Println("  --processes    Show process count")
+		fmt.Println("  --qbittorrent  Show qBittorrent queue information")
+		fmt.Println("  --queues       Show download queue information from Sonarr, Radarr, etc.")
+		fmt.Println("  --reboot       Show if reboot is required")
+		fmt.Println("  --rtorrent     Show rTorrent queue information")
+		fmt.Println("  --sabnzbd      Show Sabnzbd queue information")
+		fmt.Println("  --sessions     Show active user sessions")
+		fmt.Println("  --traefik      Show Traefik router status information")
+		fmt.Println("  --uptime       Show uptime information")
+		os.Exit(1)
+	}
+
+	motd.Verbose = config.verbosity > 0
+
+	// Validate banner type if specified
+	if config.bannerType != "" && config.bannerType != "none" {
+		validType := false
+		for _, bType := range motd.AvailableBannerTypes {
+			if config.bannerType == bType {
+				validType = true
+				break
+			}
+		}
+
+		if !validType {
+			fmt.Println("Error: Invalid banner type specified:", config.bannerType)
+			fmt.Println()
+			fmt.Println("Available types:")
+
+			// Print available types in columns
+			const numColumns = 4
+			for i, bType := range motd.AvailableBannerTypes {
+				if i%numColumns == 0 {
+					fmt.Println()
+				}
+				fmt.Printf("  %-16s", bType)
+			}
+			fmt.Println()
+			fmt.Println()
+			os.Exit(1)
+		}
+	}
+
+	// Validate font if specified
+	if config.bannerFont != "" && !motd.IsValidFont(config.bannerFont) {
+		fmt.Println("Error: Invalid font specified:", config.bannerFont)
+		fmt.Println()
+		fmt.Println("Available fonts (from /usr/share/figlet):")
+
+		// Print available fonts in columns
+		fonts := motd.ListAvailableFonts()
+		const numColumns = 4
+		for i, font := range fonts {
+			if i%numColumns == 0 {
+				fmt.Println()
+			}
+			fmt.Printf("  %-16s", font)
+		}
+		fmt.Println()
+		fmt.Println()
+		os.Exit(1)
+	}
+
+	displayMotd(config)
+}
+
+func displayMotd(config *motdConfig) {
 	// Display a banner from a file if provided. This takes precedence.
-	if bannerFile != "" {
-		content, err := os.ReadFile(bannerFile)
+	if config.bannerFile != "" {
+		content, err := os.ReadFile(config.bannerFile)
 		if err != nil {
-			fmt.Printf("Error: could not read banner file '%s': %v\n", bannerFile, err)
+			fmt.Printf("Error: could not read banner file '%s': %v\n", config.bannerFile, err)
 			os.Exit(1)
 		}
 
 		var banner string
 		// If toilet args are provided, process the file content through toilet.
-		if bannerFileToiletArgs != "" {
-			banner = motd.GenerateBannerFromFile(string(content), bannerFileToiletArgs)
+		if config.bannerFileToiletArgs != "" {
+			banner = motd.GenerateBannerFromFile(string(content), config.bannerFileToiletArgs)
 		} else {
 			// Otherwise, just use the raw file content.
 			banner = string(content)
 		}
 		fmt.Println(banner)
 
-	} else if bannerTitle != "" {
+	} else if config.bannerTitle != "" {
 		// Otherwise, generate banner if title is provided
-		banner := motd.GenerateBanner(bannerTitle, bannerFont, bannerType)
+		banner := motd.GenerateBanner(config.bannerTitle, config.bannerFont, config.bannerType)
 		fmt.Println(banner)
 	}
 
@@ -224,29 +263,29 @@ func displayMotd() {
 	// Filter sources based on enabled flags
 	var activeSources []motd.InfoSource
 	flags := map[string]bool{
-		"Distribution:":    showDistribution,
-		"Kernel:":          showKernel,
-		"Uptime:":          showUptime,
-		"Load Averages:":   showCpuAverages,
-		"Processes:":       showProcesses,
-		"CPU:":             showCPU,
-		"GPU:":             showGPU,
-		"Memory Usage:":    showMemory,
-		"Package Status:":  showAptStatus,
-		"Reboot Status:":   showRebootRequired,
-		"User Sessions:":   showSessions,
-		"Last login:":      showLastLogin,
-		"Disk Usage:":      showDisk,
-		"Docker:":          showDocker,
-		"Download Queues:": showQueues,
-		"SABnzbd:":         showSabnzbd,
-		"NZBGet:":          showNzbget,
-		"qBittorrent:":     showQbittorrent,
-		"rTorrent:":        showRtorrent,
-		"Plex:":            showPlex,
-		"Emby:":            showEmby,
-		"Jellyfin:":        showJellyfin,
-		"Traefik:":         showTraefik,
+		"Distribution:":    config.showDistribution,
+		"Kernel:":          config.showKernel,
+		"Uptime:":          config.showUptime,
+		"Load Averages:":   config.showCpuAverages,
+		"Processes:":       config.showProcesses,
+		"CPU:":             config.showCPU,
+		"GPU:":             config.showGPU,
+		"Memory Usage:":    config.showMemory,
+		"Package Status:":  config.showAptStatus,
+		"Reboot Status:":   config.showRebootRequired,
+		"User Sessions:":   config.showSessions,
+		"Last login:":      config.showLastLogin,
+		"Disk Usage:":      config.showDisk,
+		"Docker:":          config.showDocker,
+		"Download Queues:": config.showQueues,
+		"SABnzbd:":         config.showSabnzbd,
+		"NZBGet:":          config.showNzbget,
+		"qBittorrent:":     config.showQbittorrent,
+		"rTorrent:":        config.showRtorrent,
+		"Plex:":            config.showPlex,
+		"Emby:":            config.showEmby,
+		"Jellyfin:":        config.showJellyfin,
+		"Traefik:":         config.showTraefik,
 	}
 
 	// Simply use all enabled sources
@@ -307,38 +346,38 @@ func init() {
 	rootCmd.AddCommand(motdCmd)
 
 	// Define flags for enabling/disabling components (all default to false - opt-in)
-	motdCmd.Flags().BoolVar(&showAll, "all", false, "Show all information")
-	motdCmd.Flags().BoolVar(&showAptStatus, "apt", false, "Show apt package status")
-	motdCmd.Flags().BoolVar(&showCpuAverages, "cpu", false, "Show CPU load averages")
-	motdCmd.Flags().BoolVar(&showCPU, "cpu-info", false, "Show CPU model and core count information")
-	motdCmd.Flags().BoolVar(&showDisk, "disk", false, "Show disk usage for all partitions")
-	motdCmd.Flags().BoolVar(&showDistribution, "distro", false, "Show distribution information")
-	motdCmd.Flags().BoolVar(&showDocker, "docker", false, "Show Docker container information")
-	motdCmd.Flags().BoolVar(&showEmby, "emby", false, "Show Emby streaming information")
-	motdCmd.Flags().BoolVar(&showGPU, "gpu", false, "Show GPU information")
-	motdCmd.Flags().BoolVar(&showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")
-	motdCmd.Flags().BoolVar(&showKernel, "kernel", false, "Show kernel information")
-	motdCmd.Flags().BoolVar(&showLastLogin, "login", false, "Show last login information")
-	motdCmd.Flags().BoolVar(&showMemory, "memory", false, "Show memory usage")
-	motdCmd.Flags().BoolVar(&showNzbget, "nzbget", false, "Show NZBGet queue information")
-	motdCmd.Flags().BoolVar(&showPlex, "plex", false, "Show Plex streaming information")
-	motdCmd.Flags().BoolVar(&showProcesses, "processes", false, "Show process count")
-	motdCmd.Flags().BoolVar(&showQbittorrent, "qbittorrent", false, "Show qBittorrent queue information")
-	motdCmd.Flags().BoolVar(&showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
-	motdCmd.Flags().BoolVar(&showRebootRequired, "reboot", false, "Show if reboot is required")
-	motdCmd.Flags().BoolVar(&showRtorrent, "rtorrent", false, "Show rTorrent queue information")
-	motdCmd.Flags().BoolVar(&showSabnzbd, "sabnzbd", false, "Show SABnzbd queue information")
-	motdCmd.Flags().BoolVar(&showSessions, "sessions", false, "Show active user sessions")
-	motdCmd.Flags().BoolVar(&showTraefik, "traefik", false, "Show Traefik router status information")
-	motdCmd.Flags().BoolVar(&showUptime, "uptime", false, "Show uptime information")
+	motdCmd.Flags().Bool("all", false, "Show all information")
+	motdCmd.Flags().Bool("apt", false, "Show apt package status")
+	motdCmd.Flags().Bool("cpu", false, "Show CPU load averages")
+	motdCmd.Flags().Bool("cpu-info", false, "Show CPU model and core count information")
+	motdCmd.Flags().Bool("disk", false, "Show disk usage for all partitions")
+	motdCmd.Flags().Bool("distro", false, "Show distribution information")
+	motdCmd.Flags().Bool("docker", false, "Show Docker container information")
+	motdCmd.Flags().Bool("emby", false, "Show Emby streaming information")
+	motdCmd.Flags().Bool("gpu", false, "Show GPU information")
+	motdCmd.Flags().Bool("jellyfin", false, "Show Jellyfin streaming information")
+	motdCmd.Flags().Bool("kernel", false, "Show kernel information")
+	motdCmd.Flags().Bool("login", false, "Show last login information")
+	motdCmd.Flags().Bool("memory", false, "Show memory usage")
+	motdCmd.Flags().Bool("nzbget", false, "Show NZBGet queue information")
+	motdCmd.Flags().Bool("plex", false, "Show Plex streaming information")
+	motdCmd.Flags().Bool("processes", false, "Show process count")
+	motdCmd.Flags().Bool("qbittorrent", false, "Show qBittorrent queue information")
+	motdCmd.Flags().Bool("queues", false, "Show download queue information from Sonarr, Radarr, etc.")
+	motdCmd.Flags().Bool("reboot", false, "Show if reboot is required")
+	motdCmd.Flags().Bool("rtorrent", false, "Show rTorrent queue information")
+	motdCmd.Flags().Bool("sabnzbd", false, "Show SABnzbd queue information")
+	motdCmd.Flags().Bool("sessions", false, "Show active user sessions")
+	motdCmd.Flags().Bool("traefik", false, "Show Traefik router status information")
+	motdCmd.Flags().Bool("uptime", false, "Show uptime information")
 
 	// Add verbosity flag
-	motdCmd.Flags().CountVarP(&verbosity, "verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
+	motdCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
 
 	// Add banner options
-	motdCmd.Flags().StringVar(&bannerTitle, "title", "Saltbox", "Text to display in the banner")
-	motdCmd.Flags().StringVar(&bannerType, "type", "peek", "Banner type for boxes (use 'none' to omit box)")
-	motdCmd.Flags().StringVar(&bannerFont, "font", "ivrit", "Font for toilet cli")
-	motdCmd.Flags().StringVar(&bannerFile, "banner-file", "", "Path to a file containing a custom banner to display")
-	motdCmd.Flags().StringVar(&bannerFileToiletArgs, "banner-file-toilet", "", "A string of arguments for toilet when using --banner-file")
+	motdCmd.Flags().String("title", "Saltbox", "Text to display in the banner")
+	motdCmd.Flags().String("type", "peek", "Banner type for boxes (use 'none' to omit box)")
+	motdCmd.Flags().String("font", "ivrit", "Font for toilet cli")
+	motdCmd.Flags().String("banner-file", "", "Path to a file containing a custom banner to display")
+	motdCmd.Flags().String("banner-file-toilet", "", "A string of arguments for toilet when using --banner-file")
 }

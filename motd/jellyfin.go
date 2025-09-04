@@ -11,6 +11,7 @@ import (
 
 	"github.com/saltyorg/sb-go/config"
 	"github.com/saltyorg/sb-go/constants"
+
 	jellyfin "github.com/sj14/jellyfin-go/api"
 )
 

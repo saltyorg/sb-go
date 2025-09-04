@@ -11,8 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/saltyorg/sb-go/utils"
+
+	"github.com/go-playground/validator/v10"
 )
 
 // SettingsConfig represents the settings configuration.

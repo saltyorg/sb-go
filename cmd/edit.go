@@ -5,10 +5,11 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/saltyorg/sb-go/constants"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/saltyorg/sb-go/constants"
 	"github.com/spf13/cobra"
 )
 

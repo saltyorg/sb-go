@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/saltyorg/sb-go/spinners"
+
+	"github.com/Masterminds/semver/v3"
 )
 
 // retryWithBackoff executes a function with exponential backoff retry logic

@@ -8,6 +8,7 @@ import (
 
 	"github.com/saltyorg/sb-go/constants"
 	"github.com/saltyorg/sb-go/spinners"
+
 	"github.com/spf13/cobra"
 )
 

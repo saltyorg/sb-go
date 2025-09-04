@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/config"
+
 	"golift.io/starr"
 	"golift.io/starr/lidarr"
 	"golift.io/starr/radarr"
