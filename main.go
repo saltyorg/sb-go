@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/saltyorg/sb-go/cmd"
-	"github.com/saltyorg/sb-go/ubuntu"
-	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/internal/ubuntu"
+	"github.com/saltyorg/sb-go/internal/utils"
 )
 
 func main() {

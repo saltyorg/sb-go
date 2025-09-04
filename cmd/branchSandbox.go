@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/saltyorg/sb-go/ansible"
-	"github.com/saltyorg/sb-go/cache"
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/git"
-	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/internal/ansible"
+	"github.com/saltyorg/sb-go/internal/cache"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/git"
+	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/spf13/cobra"
 )

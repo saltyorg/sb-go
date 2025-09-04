@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/saltyorg/sb-go/validate"
+	"github.com/saltyorg/sb-go/internal/validate"
 
 	"github.com/spf13/cobra"
 )

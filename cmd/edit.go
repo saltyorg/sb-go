@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/internal/constants"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saltyorg/sb-go/config"
+	"github.com/saltyorg/sb-go/internal/config"
 
 	"golift.io/starr"
 	"golift.io/starr/lidarr"

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/motd"
+	"github.com/saltyorg/sb-go/internal/motd"
 
 	"github.com/spf13/cobra"
 )

@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/saltyorg/sb-go/runtime"
+	"github.com/saltyorg/sb-go/internal/runtime"
 
 	"github.com/spf13/cobra"
 )

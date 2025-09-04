@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/saltyorg/sb-go/fact"
-	"github.com/saltyorg/sb-go/setup"
-	"github.com/saltyorg/sb-go/spinners"
+	"github.com/saltyorg/sb-go/internal/fact"
+	"github.com/saltyorg/sb-go/internal/setup"
+	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"github.com/spf13/cobra"
 )

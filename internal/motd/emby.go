@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saltyorg/sb-go/config"
-	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/internal/config"
+	"github.com/saltyorg/sb-go/internal/constants"
 )
 
 // EmbyStreamInfo contains detailed information about Emby streams

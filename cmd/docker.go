@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/internal/constants"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"

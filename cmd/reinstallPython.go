@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/saltyorg/sb-go/spinners"
-	"github.com/saltyorg/sb-go/utils"
-	"github.com/saltyorg/sb-go/venv"
+	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/utils"
+	"github.com/saltyorg/sb-go/internal/venv"
 
 	"github.com/spf13/cobra"
 )

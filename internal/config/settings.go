@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/go-playground/validator/v10"
 )

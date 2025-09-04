@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/saltyorg/sb-go/config"
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/spinners"
+	"github.com/saltyorg/sb-go/internal/config"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"gopkg.in/yaml.v3"
 )

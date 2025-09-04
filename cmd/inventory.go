@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/internal/constants"
 
 	"github.com/spf13/cobra"
 )

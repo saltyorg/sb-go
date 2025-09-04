@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/setup"
-	"github.com/saltyorg/sb-go/spinners"
-	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/setup"
+	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/spf13/cobra"
 )

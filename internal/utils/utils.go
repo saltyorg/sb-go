@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/ubuntu"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/ubuntu"
 
 	"gopkg.in/yaml.v3"
 )

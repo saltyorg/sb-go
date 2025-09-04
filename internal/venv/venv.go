@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/spinners"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/spinners"
 )
 
 // ManageAnsibleVenv manages the Ansible virtual environment.

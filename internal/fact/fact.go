@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/spinners"
+	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"github.com/Masterminds/semver/v3"
 )

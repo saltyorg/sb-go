@@ -9,8 +9,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/utils"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/ini.v1"

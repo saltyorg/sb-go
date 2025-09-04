@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/apt"
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/fact"
-	"github.com/saltyorg/sb-go/git"
-	"github.com/saltyorg/sb-go/spinners"
-	"github.com/saltyorg/sb-go/ubuntu"
+	"github.com/saltyorg/sb-go/internal/apt"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/fact"
+	"github.com/saltyorg/sb-go/internal/git"
+	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/ubuntu"
 )
 
 // InitialSetup performs the initial setup tasks.

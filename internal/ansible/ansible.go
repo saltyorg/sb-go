@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/saltyorg/sb-go/cache"
-	"github.com/saltyorg/sb-go/constants"
-	"github.com/saltyorg/sb-go/git"
+	"github.com/saltyorg/sb-go/internal/cache"
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/git"
 )
 
 // RunAnsiblePlaybook executes an Ansible playbook using the specified binary and arguments.

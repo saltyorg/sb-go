@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/saltyorg/sb-go/spinners"
+	"github.com/saltyorg/sb-go/internal/spinners"
 )
 
 // CloneRepository clones a Git repository to a specified path and branch.

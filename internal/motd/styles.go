@@ -1,7 +1,7 @@
 package motd
 
 import (
-	"github.com/saltyorg/sb-go/styles"
+	"github.com/saltyorg/sb-go/internal/styles"
 )
 
 // Use styles from the global styles package

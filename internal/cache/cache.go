@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/saltyorg/sb-go/constants"
+	"github.com/saltyorg/sb-go/internal/constants"
 )
 
 // Cache is a thread-safe structure for storing and persisting cached data.
