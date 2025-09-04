@@ -72,25 +72,25 @@ type PlexSession struct {
 }
 
 // GetPlexInfo fetches and formats Plex streaming information
-func GetPlexInfo() string {
+func GetPlexInfo(verbose bool) string {
 	// Check if the configuration file exists
 	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
 		}
 		// If config does not exist, return empty string so this section won't be displayed
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Loading config from %s for Plex\n", configPath)
 	}
 
 	// Load the configuration
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Error loading config: %v\n", err)
 		}
 		// If there's an error loading the config, return an empty string to skip this section
@@ -103,7 +103,7 @@ func GetPlexInfo() string {
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Found %d Plex instance(s) in config\n", len(plexInstances))
 	}
 
@@ -115,7 +115,7 @@ func GetPlexInfo() string {
 	// Process each Plex instance concurrently
 	for i, instance := range plexInstances {
 		if instance.URL == "" || instance.Token == "" {
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Skipping Plex instance %s due to missing URL or token\n", instance.Name)
 			}
 			continue
@@ -125,19 +125,19 @@ func GetPlexInfo() string {
 		go func(idx int, inst config.PlexInstance) {
 			defer wg.Done()
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Processing Plex instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
 			info, err := getPlexStreamInfo(inst)
 			if err != nil {
-				if Verbose {
+				if verbose {
 					fmt.Printf("DEBUG: Error getting Plex stream info for %s, hiding entry: %v\n", inst.Name, err)
 				}
 				return
 			}
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Successfully retrieved Plex stream info for instance %d: %d active streams\n", idx, info.ActiveStreams)
 			}
 
@@ -151,7 +151,7 @@ func GetPlexInfo() string {
 	wg.Wait()
 
 	if len(streamInfos) == 0 {
-		if Verbose {
+		if verbose {
 			fmt.Println("DEBUG: No valid Plex information found")
 		}
 		return ""

@@ -40,22 +40,22 @@ type SabnzbdQueue struct {
 }
 
 // GetSabnzbdInfo fetches and formats SABnzbd queue information
-func GetSabnzbdInfo() string {
+func GetSabnzbdInfo(verbose bool) string {
 	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
 		}
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Loading cfg from %s for SABnzbd\n", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Error loading cfg: %v\n", err)
 		}
 		return ""
@@ -74,7 +74,7 @@ func GetSabnzbdInfo() string {
 	// Process each SABnzbd instance concurrently
 	for i, instance := range sabnzbdInstances {
 		if instance.URL == "" || instance.APIKey == "" {
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Skipping SABnzbd instance %d due to missing URL or API key\n", i)
 			}
 			continue
@@ -84,19 +84,19 @@ func GetSabnzbdInfo() string {
 		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Processing SABnzbd instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
 			info, err := getSabnzbdQueueInfo(inst)
 			if err != nil {
-				if Verbose {
+				if verbose {
 					fmt.Printf("DEBUG: Error getting SABnzbd info for %s, hiding entry: %v\n", inst.Name, err)
 				}
 				return
 			}
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Successfully retrieved SABnzbd info for instance %d: %d items in queue\n", idx, info.QueueCount)
 			}
 

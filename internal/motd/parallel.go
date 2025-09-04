@@ -9,7 +9,7 @@ import (
 )
 
 // InfoProvider defines a function type that provides information with timeout support
-type InfoProvider func(ctx context.Context) string
+type InfoProvider func(ctx context.Context, verbose bool) string
 
 // InfoSource represents a source of system information
 type InfoSource struct {
@@ -34,7 +34,7 @@ type MultiStringResult struct {
 }
 
 // GetSystemInfo gathers all requested system information in parallel
-func GetSystemInfo(sources []InfoSource) []Result {
+func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
 	var wg sync.WaitGroup
 	resultChan := make(chan Result, len(sources))
 	results := make([]Result, 0, len(sources))
@@ -51,16 +51,16 @@ func GetSystemInfo(sources []InfoSource) []Result {
 
 			// Track timing if verbose mode is enabled
 			var start time.Time
-			if Verbose {
+			if verbose {
 				start = time.Now()
 			}
 
 			// Get the information with timeout
-			providerFunc := src.Provider.(func(context.Context) string)
-			value := providerFunc(ctx)
+			providerFunc := src.Provider.(func(context.Context, bool) string)
+			value := providerFunc(ctx, verbose)
 
 			// Print timing debug info if verbose mode is enabled
-			if Verbose {
+			if verbose {
 				elapsed := time.Since(start)
 				fmt.Printf("DEBUG: %s took %v\n", src.Key, elapsed)
 			}

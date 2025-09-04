@@ -38,22 +38,22 @@ type EmbySessionInfo struct {
 }
 
 // GetEmbyInfo fetches and formats Emby streaming information
-func GetEmbyInfo() string {
+func GetEmbyInfo(verbose bool) string {
 	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
 		}
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Loading cfg from %s for Emby\n", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Error loading cfg: %v\n", err)
 		}
 		return ""
@@ -72,7 +72,7 @@ func GetEmbyInfo() string {
 	// Process each Emby instance concurrently
 	for i, instance := range embyInstances {
 		if instance.URL == "" || instance.Token == "" {
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Skipping Emby instance %d due to missing URL or token\n", i)
 			}
 			continue
@@ -82,19 +82,19 @@ func GetEmbyInfo() string {
 		go func(idx int, inst config.EmbyInstance) {
 			defer wg.Done()
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Processing Emby instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
 			info, err := getEmbyStreamInfo(inst)
 			if err != nil {
-				if Verbose {
+				if verbose {
 					fmt.Printf("DEBUG: Error getting Emby stream info for %s, hiding entry: %v\n", inst.Name, err)
 				}
 				return
 			}
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Successfully retrieved Emby stream info for instance %d: %d active streams\n", idx, info.ActiveStreams)
 			}
 

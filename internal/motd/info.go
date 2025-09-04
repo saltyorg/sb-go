@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -272,12 +273,22 @@ func GetProcessCount() string {
 }
 
 // GetAptStatus returns the apt package status
-func GetAptStatus() string {
+func GetAptStatus(verbose bool) string {
+	if verbose {
+		fmt.Printf("DEBUG: Starting GetAptStatus\n")
+	}
+	
 	// Check the updates-available file, which is updated by the daily apt update
 	updatesFile := "/var/lib/update-notifier/updates-available"
+	if verbose {
+		fmt.Printf("DEBUG: Reading updates file: %s\n", updatesFile)
+	}
 	data, err := os.ReadFile(updatesFile)
 
 	if err == nil && len(data) > 0 {
+		if verbose {
+			fmt.Printf("DEBUG: Successfully read updates file, parsing content (%d bytes)\n", len(data))
+		}
 		content := string(data)
 		lines := strings.Split(content, "\n")
 
@@ -285,9 +296,15 @@ func GetAptStatus() string {
 		// that doesn't mention ESM
 		for _, line := range lines {
 			trimmed := strings.TrimSpace(line)
-			if strings.Contains(trimmed, "updates can be applied immediately") &&
+			if verbose {
+				fmt.Printf("DEBUG: Parsing line: '%s'\n", trimmed)
+			}
+			if strings.Contains(trimmed, "can be applied immediately") &&
 				!strings.Contains(trimmed, "ESM") &&
 				!strings.Contains(trimmed, "esm") {
+				if verbose {
+					fmt.Printf("DEBUG: Found matching update line: '%s'\n", trimmed)
+				}
 
 				// Color the number of updates
 				re := regexp.MustCompile(`(\d+)`)
@@ -302,17 +319,33 @@ func GetAptStatus() string {
 
 					// Extract just the main update count message, removing any instruction text
 					if idx := strings.Index(coloredLine, "."); idx != -1 {
+						if verbose {
+							fmt.Printf("DEBUG: Returning from updates file: '%s'\n", coloredLine[:idx+1])
+						}
 						return coloredLine[:idx+1] // Include the period
+					}
+					if verbose {
+						fmt.Printf("DEBUG: Returning from updates file: '%s'\n", coloredLine)
 					}
 					return coloredLine
 				}
 
 				// If we can't extract the number, return the original text
 				if idx := strings.Index(trimmed, "."); idx != -1 {
+					if verbose {
+						fmt.Printf("DEBUG: Returning from updates file (no number match): '%s'\n", trimmed[:idx+1])
+					}
 					return trimmed[:idx+1] // Include the period
+				}
+				if verbose {
+					fmt.Printf("DEBUG: Returning from updates file (no period): '%s'\n", trimmed)
 				}
 				return trimmed
 			}
+		}
+
+		if verbose {
+			fmt.Printf("DEBUG: No immediate update lines found in file, checking for 'up to date' messages\n")
 		}
 
 		// If we found no updates but the file exists, check if it explicitly says that the system is up to date
@@ -323,8 +356,28 @@ func GetAptStatus() string {
 		}
 	}
 
+	if verbose {
+		fmt.Printf("DEBUG: Updates file not found or empty (%v), falling back to apt-check command\n", err)
+	}
+
 	// Fallback to apt-check command
+	if verbose {
+		fmt.Printf("DEBUG: Executing apt-check command: /usr/lib/update-notifier/apt-check --human-readable --no-esm-messages\n")
+	}
+	start := time.Now()
 	output := ExecCommand("/usr/lib/update-notifier/apt-check", "--human-readable", "--no-esm-messages")
+	if verbose {
+		fmt.Printf("DEBUG: apt-check command completed in %v\n", time.Since(start))
+	}
+	if verbose {
+		if output == "Not available" {
+			fmt.Printf("DEBUG: apt-check command returned 'Not available'\n")
+		} else if output == "" {
+			fmt.Printf("DEBUG: apt-check command returned empty output\n")
+		} else {
+			fmt.Printf("DEBUG: apt-check command completed successfully, parsing output\n")
+		}
+	}
 	if output != "Not available" && output != "" {
 		lines := strings.Split(output, "\n")
 
@@ -377,7 +430,23 @@ func GetAptStatus() string {
 	}
 
 	// Additional fallback using apt list
+	if verbose {
+		fmt.Printf("DEBUG: apt-check failed, trying final fallback: apt list --upgradable\n")
+	}
+	start = time.Now()
 	output = ExecCommand("apt", "list", "--upgradable")
+	if verbose {
+		fmt.Printf("DEBUG: apt list --upgradable completed in %v\n", time.Since(start))
+	}
+	if verbose {
+		if output == "Not available" {
+			fmt.Printf("DEBUG: apt list --upgradable returned 'Not available'\n")
+		} else if output == "" {
+			fmt.Printf("DEBUG: apt list --upgradable returned empty output\n")
+		} else {
+			fmt.Printf("DEBUG: apt list --upgradable completed successfully\n")
+		}
+	}
 	if output != "Not available" && output != "" {
 		lines := strings.Split(output, "\n")
 		if len(lines) > 1 {
@@ -397,6 +466,9 @@ func GetAptStatus() string {
 	}
 
 	// If we can't determine the status, return a neutral message
+	if verbose {
+		fmt.Printf("DEBUG: All apt status methods failed, returning 'Update status unknown'\n")
+	}
 	return "Update status unknown"
 }
 

@@ -28,22 +28,22 @@ type rtorrentInfo struct {
 }
 
 // GetRtorrentInfo fetches and formats rTorrent information.
-func GetRtorrentInfo() string {
+func GetRtorrentInfo(verbose bool) string {
 	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
 		}
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Loading cfg from %s for rTorrent\n", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Error loading cfg: %v\n", err)
 		}
 		return ""
@@ -62,7 +62,7 @@ func GetRtorrentInfo() string {
 	// Process each rTorrent instance concurrently
 	for i, instance := range rtorrentInstances {
 		if instance.URL == "" {
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Skipping rTorrent instance %d due to missing URL\n", i)
 			}
 			continue
@@ -72,19 +72,19 @@ func GetRtorrentInfo() string {
 		go func(idx int, inst config.UserPassAppInstance) {
 			defer wg.Done()
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Processing rTorrent instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
 			info, err := getRtorrentStats(inst)
 			if err != nil {
-				if Verbose {
+				if verbose {
 					fmt.Printf("DEBUG: Error getting rTorrent info for %s, hiding entry: %v\n", inst.Name, err)
 				}
 				return
 			}
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Successfully retrieved rTorrent info for instance %d: %d downloading, %d seeding\n", idx, info.DownloadingCount, info.SeedingCount)
 			}
 

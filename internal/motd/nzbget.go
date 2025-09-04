@@ -52,22 +52,22 @@ type listGroupsResponse struct {
 }
 
 // GetNzbgetInfo fetches and formats NZBGet queue information
-func GetNzbgetInfo() string {
+func GetNzbgetInfo(verbose bool) string {
 	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
 		}
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Loading cfg from %s for NZBGet\n", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Error loading cfg: %v\n", err)
 		}
 		return ""
@@ -86,7 +86,7 @@ func GetNzbgetInfo() string {
 	// Process each NZBGet instance concurrently
 	for i, instance := range nzbgetInstances {
 		if instance.URL == "" || instance.User == "" || instance.Password == "" {
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Skipping NZBGet instance %d due to missing URL, user, or password\n", i)
 			}
 			continue
@@ -96,19 +96,19 @@ func GetNzbgetInfo() string {
 		go func(idx int, inst config.UserPassAppInstance) {
 			defer wg.Done()
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Processing NZBGet instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
 			info, err := getNzbgetQueueInfo(inst)
 			if err != nil {
-				if Verbose {
+				if verbose {
 					fmt.Printf("DEBUG: Error getting NZBGet info for %s, hiding entry: %v\n", inst.Name, err)
 				}
 				return
 			}
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Successfully retrieved NZBGet info for instance %d: %d items in queue\n", idx, info.QueueCount)
 			}
 

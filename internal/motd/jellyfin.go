@@ -26,22 +26,22 @@ type JellyfinStreamInfo struct {
 }
 
 // GetJellyfinInfo fetches and formats Jellyfin streaming information
-func GetJellyfinInfo() string {
+func GetJellyfinInfo(verbose bool) string {
 	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
 		}
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Loading cfg from %s for Jellyfin\n", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Error loading cfg: %v\n", err)
 		}
 		return ""
@@ -61,7 +61,7 @@ func GetJellyfinInfo() string {
 	// Process each Jellyfin instance concurrently
 	for i, instance := range jellyfinInstances {
 		if instance.URL == "" || instance.Token == "" {
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Skipping Jellyfin instance %d due to missing URL or token\n", i)
 			}
 			continue
@@ -71,19 +71,19 @@ func GetJellyfinInfo() string {
 		go func(idx int, inst config.JellyfinInstance) {
 			defer wg.Done()
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Processing Jellyfin instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
 			info, err := getJellyfinStreamInfo(inst)
 			if err != nil {
-				if Verbose {
+				if verbose {
 					fmt.Printf("DEBUG: Error getting Jellyfin stream info for %s, hiding entry: %v\n", inst.Name, err)
 				}
 				return
 			}
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Successfully retrieved Jellyfin stream info for instance %d: %d active streams\n", idx, info.ActiveStreams)
 			}
 

@@ -154,7 +154,6 @@ func runMotdCommand(config *motdConfig) {
 		os.Exit(1)
 	}
 
-	motd.Verbose = config.verbosity > 0
 
 	// Validate banner type if specified
 	if config.bannerType != "" && config.bannerType != "none" {
@@ -205,10 +204,10 @@ func runMotdCommand(config *motdConfig) {
 		os.Exit(1)
 	}
 
-	displayMotd(config)
+	displayMotd(config, config.verbosity > 0)
 }
 
-func displayMotd(config *motdConfig) {
+func displayMotd(config *motdConfig, verbose bool) {
 	// Display a banner from a file if provided. This takes precedence.
 	if config.bannerFile != "" {
 		content, err := os.ReadFile(config.bannerFile)
@@ -296,7 +295,7 @@ func displayMotd(config *motdConfig) {
 	}
 
 	// Get system information in parallel
-	results := motd.GetSystemInfo(activeSources)
+	results := motd.GetSystemInfo(activeSources, verbose)
 
 	// Filter out any results with empty values
 	var filteredResults []motd.Result

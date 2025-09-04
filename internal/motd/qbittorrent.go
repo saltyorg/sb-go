@@ -27,22 +27,22 @@ type qbittorrentInfo struct {
 }
 
 // GetQbittorrentInfo fetches and formats qBittorrent information.
-func GetQbittorrentInfo() string {
+func GetQbittorrentInfo(verbose bool) string {
 	configPath := constants.SaltboxMOTDPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
 		}
 		return ""
 	}
 
-	if Verbose {
+	if verbose {
 		fmt.Printf("DEBUG: Loading cfg from %s for qBittorrent\n", configPath)
 	}
 
 	cfg, err := config.LoadConfig(configPath)
 	if err != nil {
-		if Verbose {
+		if verbose {
 			fmt.Printf("DEBUG: Error loading cfg: %v\n", err)
 		}
 		return ""
@@ -61,7 +61,7 @@ func GetQbittorrentInfo() string {
 	// Process each qBittorrent instance concurrently
 	for i, instance := range qbittorrentInstances {
 		if instance.URL == "" || instance.User == "" || instance.Password == "" {
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Skipping qBittorrent instance %d due to missing URL, user, or password\n", i)
 			}
 			continue
@@ -71,19 +71,19 @@ func GetQbittorrentInfo() string {
 		go func(idx int, inst config.UserPassAppInstance) {
 			defer wg.Done()
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Processing qBittorrent instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
 			info, err := getQbittorrentStats(inst)
 			if err != nil {
-				if Verbose {
+				if verbose {
 					fmt.Printf("DEBUG: Error getting qBittorrent info for %s, hiding entry: %v\n", inst.Name, err)
 				}
 				return
 			}
 
-			if Verbose {
+			if verbose {
 				fmt.Printf("DEBUG: Successfully retrieved qBittorrent info for instance %d: %d downloading, %d seeding\n", idx, info.DownloadingCount, info.SeedingCount)
 			}
 
