@@ -16,11 +16,12 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-var (
+// factConfig holds the configuration for the fact command
+type factConfig struct {
 	method     string
 	deleteType string
 	keyValues  []string
-)
+}
 
 // factCmd represents the fact command
 var factCmd = &cobra.Command{
@@ -37,6 +38,23 @@ Example usage:
   sb fact role instance --method=delete --delete-type=instance
   sb fact role --method=delete --delete-type=role`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Get flag values and create config
+		method, _ := cmd.Flags().GetString("method")
+		deleteType, _ := cmd.Flags().GetString("delete-type")
+		keyValues, _ := cmd.Flags().GetStringSlice("key")
+		
+		config := &factConfig{
+			method:     method,
+			deleteType: deleteType,
+			keyValues:  keyValues,
+		}
+		
+		runFactCommand(cmd, args, config)
+	},
+}
+
+// runFactCommand handles the main logic for the fact command
+func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 		if len(args) < 1 {
 			fmt.Print("Error: Role name is required\n\n")
 			cmd.Help()
@@ -48,9 +66,9 @@ Example usage:
 		filePath := getFilePath(role)
 
 		// Parse key-value pairs
-		keys := parseKeyValues(keyValues)
+		keys := parseKeyValues(config.keyValues)
 
-		switch method {
+		switch config.method {
 		case "load":
 			// Check if a specific instance was requested
 			if len(args) > 1 {
@@ -134,7 +152,7 @@ Example usage:
 			displayFacts(facts)
 
 		case "delete":
-			if deleteType == "" {
+			if config.deleteType == "" {
 				fmt.Println("Error: delete-type is required for delete method")
 				return
 			}
@@ -147,9 +165,9 @@ Example usage:
 			}
 
 			// Handle delete based on type
-			if deleteType == "role" {
+			if config.deleteType == "role" {
 				// No instance needed for role deletion
-				changed, err := deleteFacts(filePath, deleteType, "", keys, saltboxUser)
+				changed, err := deleteFacts(filePath, config.deleteType, "", keys, saltboxUser)
 				if err != nil {
 					fmt.Printf("Error deleting facts: %v\n", err)
 					return
@@ -169,14 +187,14 @@ Example usage:
 				}
 				instance := args[1]
 
-				changed, err := deleteFacts(filePath, deleteType, instance, keys, saltboxUser)
+				changed, err := deleteFacts(filePath, config.deleteType, instance, keys, saltboxUser)
 				if err != nil {
 					fmt.Printf("Error deleting facts: %v\n", err)
 					return
 				}
 
 				if changed {
-					switch deleteType {
+					switch config.deleteType {
 					case "instance":
 						fmt.Printf("Instance '%s' of role '%s' was deleted\n", instance, role)
 					case "key":
@@ -189,11 +207,10 @@ Example usage:
 			}
 
 		default:
-			fmt.Printf("Unknown method: %s\n", method)
+			fmt.Printf("Unknown method: %s\n", config.method)
 			cmd.Help()
 		}
-	},
-}
+	}
 
 // sortStrings performs a simple bubble sort on a string slice
 func sortStrings(items []string) {
@@ -506,7 +523,7 @@ func init() {
 	rootCmd.AddCommand(factCmd)
 
 	// Add flags
-	factCmd.Flags().StringVar(&method, "method", "load", "Method to use (load, save, delete)")
-	factCmd.Flags().StringVar(&deleteType, "delete-type", "", "Type of deletion (role, instance, key)")
-	factCmd.Flags().StringSliceVar(&keyValues, "key", []string{}, "Key-value pairs (format: key=value)")
+	factCmd.Flags().String("method", "load", "Method to use (load, save, delete)")
+	factCmd.Flags().String("delete-type", "", "Type of deletion (role, instance, key)")
+	factCmd.Flags().StringSlice("key", []string{}, "Key-value pairs (format: key=value)")
 }
