@@ -2,6 +2,7 @@ package motd
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -48,9 +49,21 @@ func GetSystemInfo(sources []InfoSource) []Result {
 			ctx, cancel := context.WithTimeout(context.Background(), src.Timeout)
 			defer cancel()
 
+			// Track timing if verbose mode is enabled
+			var start time.Time
+			if Verbose {
+				start = time.Now()
+			}
+
 			// Get the information with timeout
 			providerFunc := src.Provider.(func(context.Context) string)
 			value := providerFunc(ctx)
+
+			// Print timing debug info if verbose mode is enabled
+			if Verbose {
+				elapsed := time.Since(start)
+				fmt.Printf("DEBUG: %s took %v\n", src.Key, elapsed)
+			}
 
 			resultChan <- Result{
 				Key:   src.Key,

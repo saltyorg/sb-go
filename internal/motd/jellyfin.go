@@ -49,6 +49,7 @@ func GetJellyfinInfo() string {
 
 	jellyfinInstances := cfg.Jellyfin
 	if len(jellyfinInstances) == 0 {
+
 		return ""
 	}
 
