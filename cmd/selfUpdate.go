@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/saltyorg/sb-go/spinners"
 
 	"github.com/blang/semver"
-	"github.com/rhysd/go-github-selfupdate/selfupdate"
+	"github.com/creativeprojects/go-selfupdate"
 	"github.com/saltyorg/sb-go/runtime"
 	"github.com/spf13/cobra"
 )
@@ -69,7 +70,17 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 	}
 
 	// First, check if an update is available without applying it
-	latest, found, err := selfupdate.DetectLatest("saltyorg/sb-go")
+	updater, err := selfupdate.NewUpdater(selfupdate.Config{})
+	if err != nil {
+		if verbose {
+			fmt.Printf("Debug: Error creating updater: %v\n", err)
+		}
+		fmt.Println("Error creating updater:", err)
+		os.Exit(1)
+		return
+	}
+
+	latest, found, err := updater.DetectLatest(context.Background(), selfupdate.ParseSlug("saltyorg/sb-go"))
 	if err != nil {
 		if verbose {
 			fmt.Printf("Debug: Error checking for updates: %v\n", err)
@@ -79,7 +90,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 		return
 	}
 
-	if !found || latest.Version.Equals(v) {
+	if !found || latest.Version() == v.String() {
 		if verbose {
 			fmt.Println("Debug: No update available - current version is the latest")
 		}
@@ -88,7 +99,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 	}
 
 	// An update is available
-	_ = spinners.RunInfoSpinner(fmt.Sprintf("New sb CLI version available: %s (current: %s)", latest.Version, v))
+	_ = spinners.RunInfoSpinner(fmt.Sprintf("New sb CLI version available: %s (current: %s)", latest.Version(), v))
 
 	// If autoUpdate is false, ask for confirmation
 	if !autoUpdate {
@@ -102,7 +113,17 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 	}
 
 	// User confirmed or auto-update enabled, proceed with update
-	result, err := selfupdate.UpdateSelf(v, "saltyorg/sb-go")
+	exe, err := os.Executable()
+	if err != nil {
+		if verbose {
+			fmt.Printf("Debug: Error getting executable path: %v\n", err)
+		}
+		fmt.Println("Error getting executable path:", err)
+		os.Exit(1)
+		return
+	}
+
+	err = updater.UpdateTo(context.Background(), latest, exe)
 	if err != nil {
 		if verbose {
 			fmt.Printf("Debug: Update failed with error: %v\n", err)
@@ -113,9 +134,9 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 	}
 
 	if verbose {
-		fmt.Printf("Debug: Update successful - previous version: %s, new version: %s\n", v, result.Version)
+		fmt.Printf("Debug: Update successful - previous version: %s, new version: %s\n", v, latest.Version())
 	}
-	_ = spinners.RunInfoSpinner(fmt.Sprintf("Successfully updated sb CLI to version: %s", result.Version))
+	_ = spinners.RunInfoSpinner(fmt.Sprintf("Successfully updated sb CLI to version: %s", latest.Version()))
 
 	// Print an optional message if provided
 	if optionalMessage != "" {

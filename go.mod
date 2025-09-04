@@ -12,10 +12,10 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cloudflare/cloudflare-go v0.115.0
+	github.com/creativeprojects/go-selfupdate v1.5.1
 	github.com/docker/docker v28.3.3+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/go-playground/validator/v10 v10.27.0
-	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/saltydk/go-rtorrent v1.0.1
 	github.com/sj14/jellyfin-go v0.3.3
 	github.com/spf13/cobra v1.9.1
@@ -28,6 +28,8 @@ require (
 )
 
 require (
+	code.gitea.io/sdk/gitea v0.22.0 // indirect
+	github.com/42wim/httpsig v1.2.3 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
@@ -41,11 +43,13 @@ require (
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
+	github.com/davidmz/go-pageant v1.0.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
+	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -54,7 +58,9 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
+	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
@@ -75,8 +81,8 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/spf13/pflag v1.0.7 // indirect
-	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
+	github.com/xanzy/go-gitlab v0.115.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.62.0 // indirect
@@ -94,6 +100,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20250804133106-a7a43d27e69b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	gopkg.in/validator.v2 v2.0.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
