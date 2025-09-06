@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -144,18 +145,27 @@ func AddAptRepositories() error {
 
 	sourcesFile := "/etc/apt/sources.list"
 
-	// Remove any existing repository configuration in sources.list.d.
-	if err := os.RemoveAll("/etc/apt/sources.list.d/"); err != nil {
-		return fmt.Errorf("error removing /etc/apt/sources.list.d/: %w", err)
-	}
-	// Recreate the directory for repository files.
-	if err := os.MkdirAll("/etc/apt/sources.list.d/", 0755); err != nil {
-		return fmt.Errorf("error recreating /etc/apt/sources.list.d/: %w", err)
-	}
-
 	// Define regex patterns to identify specific Ubuntu releases.
 	jammyRegex := regexp.MustCompile(`(jammy)$`)
 	nobleRegex := regexp.MustCompile(`(noble)$`)
+
+	// Remove repository configuration files, but preserve ubuntu.sources on Noble
+	sourcesDir := "/etc/apt/sources.list.d/"
+	entries, err := os.ReadDir(sourcesDir)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("error reading %s: %w", sourcesDir, err)
+	}
+	
+	for _, entry := range entries {
+		filePath := filepath.Join(sourcesDir, entry.Name())
+		// On Noble, skip deleting ubuntu.sources
+		if nobleRegex.MatchString(release) && entry.Name() == "ubuntu.sources" {
+			continue
+		}
+		if err := os.Remove(filePath); err != nil {
+			return fmt.Errorf("error removing %s: %w", filePath, err)
+		}
+	}
 
 	// Based on the release codename, select and add the appropriate repository lines.
 	if jammyRegex.MatchString(release) {
