@@ -85,7 +85,7 @@ func InitialSetup(verbose bool) {
 	// Install additional required packages.
 	if err := spinners.RunTaskWithSpinner("Installing additional required packages", func() error {
 		packages := []string{
-			"locales", "nano", "wget", "jq", "file", "gpg-agent",
+			"locales", "nano", "wget", "jq", "file", "gpg-agent", "libpq-dev",
 			"build-essential", "libssl-dev", "libffi-dev", "python3-dev",
 			"python3-testresources", "python3-apt", "python3-venv", "python3-pip",
 		}

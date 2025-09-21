@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
 )
@@ -74,6 +75,12 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 		fmt.Println("Upgrading pip...")
 		if err := upgradePip(ansibleVenvPath, verbose); err != nil {
 			return fmt.Errorf("error upgrading pip: %w", err)
+		}
+
+		// Install libpq-dev dependency
+		fmt.Println("Installing libpq-dev...")
+		if err := apt.InstallPackage([]string{"libpq-dev"}, verbose)(); err != nil {
+			return fmt.Errorf("error installing libpq-dev: %w", err)
 		}
 
 		// Install requirements
@@ -167,6 +174,13 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 			return upgradePip(ansibleVenvPath, verbose)
 		}); err != nil {
 			return fmt.Errorf("error upgrading pip: %w", err)
+		}
+
+		// Install libpq-dev dependency
+		if err := spinners.RunTaskWithSpinner("Installing libpq-dev", func() error {
+			return apt.InstallPackage([]string{"libpq-dev"}, verbose)()
+		}); err != nil {
+			return fmt.Errorf("error installing libpq-dev: %w", err)
 		}
 
 		// Install requirements
