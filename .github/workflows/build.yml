@@ -82,5 +82,6 @@ jobs:
           tag_name: ${{ steps.determine_version.outputs.version }}
           name: Release ${{ steps.determine_version.outputs.version }}
           draft: false
+          generate_release_notes: true
           prerelease: false
           files: ${{ env.APP_NAME }}_linux_amd64
