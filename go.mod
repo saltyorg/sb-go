@@ -11,7 +11,8 @@ require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/cloudflare/cloudflare-go v0.115.0
+	github.com/cloudflare/cloudflare-go v0.116.0
+	github.com/cloudflare/cloudflare-go/v6 v6.0.1
 	github.com/creativeprojects/go-selfupdate v1.5.1
 	github.com/docker/docker v28.4.0+incompatible
 	github.com/docker/go-connections v0.6.0
