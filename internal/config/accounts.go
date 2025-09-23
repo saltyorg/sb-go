@@ -10,7 +10,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cloudflare/cloudflare-go"
+	"github.com/cloudflare/cloudflare-go/v6"
+	"github.com/cloudflare/cloudflare-go/v6/option"
+	"github.com/cloudflare/cloudflare-go/v6/zones"
 	"github.com/go-playground/validator/v10"
 	"golang.org/x/net/publicsuffix"
 	"gopkg.in/yaml.v3"
@@ -320,16 +322,14 @@ func getRootDomain(fqdn string) (string, error) {
 func validateCloudflare(apiKey, email, domain string) error {
 	debugPrintf("DEBUG: validateCloudflare called with apiKey: '%s', email: '%s', domain: '%s'\n", apiKey, email, domain)
 	// Create a new Cloudflare API client.
-	api, err := cloudflare.New(apiKey, email)
-	if err != nil {
-		err = fmt.Errorf("failed to create Cloudflare API client: %w", err)
-		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
-		return err
-	}
+	api := cloudflare.NewClient(
+		option.WithAPIKey(apiKey),
+		option.WithAPIEmail(email),
+	)
 	debugPrintf("DEBUG: validateCloudflare - Cloudflare API client created successfully\n")
 
 	// --- Verify API Key ---
-	_, err = api.UserDetails(context.Background())
+	_, err := api.User.Get(context.Background())
 	if err != nil {
 		err = fmt.Errorf("cloudflare API key verification failed: %w", err)
 		debugPrintf("DEBUG: validateCloudflare - API key verification failed: %v\n", err)
@@ -343,66 +343,90 @@ func validateCloudflare(apiKey, email, domain string) error {
 		debugPrintf("DEBUG: validateCloudflare - error getting root domain: %v\n", err)
 		return err // Invalid domain format
 	}
-	zoneID, err := api.ZoneIDByName(rootDomain)
+	zonesList, err := api.Zones.List(context.Background(), zones.ZoneListParams{
+		Name: cloudflare.F(rootDomain),
+	})
 	if err != nil {
 		err = fmt.Errorf("domain verification failed (zone not found): %w", err)
 		debugPrintf("DEBUG: validateCloudflare - domain verification failed for '%s': %v\n", rootDomain, err)
 		return err
 	}
-	// Check if zone ID exists (indicating ownership).
-	if zoneID == "" {
+	// Check if zone exists (indicating ownership).
+	if len(zonesList.Result) == 0 {
 		err = fmt.Errorf("domain verification failed: %s not found in Cloudflare account", rootDomain)
 		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
 		return err
 	}
+	zoneID := zonesList.Result[0].ID
 	debugPrintf("DEBUG: validateCloudflare - domain '%s' verified successfully (zone ID: '%s')\n", rootDomain, zoneID)
 
 	// --- Verify SSL/TLS Settings ---
 	// Get the current SSL/TLS settings for the zone
 	ctx := context.Background()
-	zoneSettings, err := api.ZoneSettings(ctx, zoneID)
+	sslSettings, err := api.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{
+		ZoneID: cloudflare.F(zoneID),
+	})
 	if err != nil {
-		err = fmt.Errorf("failed to get zone settings: %w", err)
-		debugPrintf("DEBUG: validateCloudflare - failed to get zone settings: %v\n", err)
+		err = fmt.Errorf("failed to get zone SSL settings: %w", err)
+		debugPrintf("DEBUG: validateCloudflare - failed to get zone SSL settings: %v\n", err)
 		return err
 	}
 
-	// Look for the ssl setting
-	var sslMode string
-	for _, setting := range zoneSettings.Result {
-		if setting.ID == "ssl" {
-			sslMode = setting.Value.(string)
-			break
+	// Validate SSL mode using the typed value - reject "flexible" and "off" modes
+	if sslSettings != nil && sslSettings.Value != nil {
+		// Type assert to the SSL value type
+		if sslValue, ok := sslSettings.Value.(zones.SettingGetResponseZonesSchemasSSLValue); ok {
+			debugPrintf("DEBUG: validateCloudflare - SSL mode for domain '%s': '%s'\n", rootDomain, string(sslValue))
+
+			// Check for incompatible SSL modes using the typed constants
+			if sslValue == zones.SettingGetResponseZonesSchemasSSLValueFlexible ||
+			   sslValue == zones.SettingGetResponseZonesSchemasSSLValueOff {
+				err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
+					"  This SSL/TLS mode is not compatible with Saltbox.\n"+
+					"  With '%s' mode, connections will fail or behave unexpectedly.\n\n"+
+					"  Please update your Cloudflare settings by:\n"+
+					"  1. Log in to your Cloudflare dashboard\n"+
+					"  2. Go to the SSL/TLS section for domain '%s'\n"+
+					"  3. Change the encryption mode to 'Full' or 'Full (strict)'\n"+
+					"  4. Save your changes\n",
+					string(sslValue), string(sslValue), rootDomain)
+				debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+				return err
+			}
+
+			debugPrintf("DEBUG: validateCloudflare - SSL mode '%s' is secure\n", string(sslValue))
+		} else {
+			// Fallback: try to get as string if type assertion fails
+			debugPrintf("DEBUG: validateCloudflare - SSL value type assertion failed, trying string conversion\n")
+			sslModeStr := fmt.Sprintf("%v", sslSettings.Value)
+			debugPrintf("DEBUG: validateCloudflare - SSL mode for domain '%s': '%s'\n", rootDomain, sslModeStr)
+
+			if sslModeStr == "flexible" || sslModeStr == "off" {
+				err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
+					"  This SSL/TLS mode is not compatible with Saltbox.\n"+
+					"  With '%s' mode, connections will fail or behave unexpectedly.\n\n"+
+					"  Please update your Cloudflare settings by:\n"+
+					"  1. Log in to your Cloudflare dashboard\n"+
+					"  2. Go to the SSL/TLS section for domain '%s'\n"+
+					"  3. Change the encryption mode to 'Full' or 'Full (strict)'\n"+
+					"  4. Save your changes\n",
+					sslModeStr, sslModeStr, rootDomain)
+				debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+				return err
+			}
+
+			debugPrintf("DEBUG: validateCloudflare - SSL mode '%s' is secure\n", sslModeStr)
 		}
-	}
-
-	debugPrintf("DEBUG: validateCloudflare - SSL mode for domain '%s': '%s'\n", rootDomain, sslMode)
-
-	// Validate SSL mode - reject "flexible" and "off" modes
-	if sslMode == "flexible" || sslMode == "off" {
-		err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
-			"  This SSL/TLS mode is not compatible with Saltbox.\n"+
-			"  With '%s' mode, connections will fail or behave unexpectedly.\n\n"+
-			"  Please update your Cloudflare settings by:\n"+
-			"  1. Log in to your Cloudflare dashboard\n"+
-			"  2. Go to the SSL/TLS section for domain '%s'\n"+
-			"  3. Change the encryption mode to 'Full' or 'Full (strict)'\n"+
-			"  4. Save your changes\n",
-			sslMode, sslMode, rootDomain)
-		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
-		return err
-	}
-
-	// If the SSL mode is empty, warn but don't error
-	if sslMode == "" {
-		fmt.Printf("WARNING: Could not determine SSL/TLS mode for domain '%s'.\n"+
+	} else {
+		// If we can't get SSL settings, return an error
+		err = fmt.Errorf("failed to determine SSL/TLS mode for domain '%s'\n\n"+
 			"  Please verify your Cloudflare settings:\n"+
 			"  1. Log in to your Cloudflare dashboard\n"+
 			"  2. Navigate to the SSL/TLS section\n"+
 			"  3. Confirm encryption mode is set to 'Full' or 'Full (strict)'\n"+
-			"  4. Flexible or Off modes are incompatible with Saltbox\n", rootDomain)
-	} else {
-		debugPrintf("DEBUG: validateCloudflare - SSL mode '%s' is secure\n", sslMode)
+			"  4. Flexible or Off modes are incompatible with Saltbox", rootDomain)
+		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+		return err
 	}
 
 	return nil
