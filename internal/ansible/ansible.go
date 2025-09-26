@@ -2,12 +2,15 @@ package ansible
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -18,6 +21,7 @@ import (
 // It constructs the command based on the provided playbook path, extra arguments, and repository directory.
 // If verbose is true, the command output is streamed directly to the console; otherwise, output is captured for error reporting.
 // On error, it returns a detailed error message including the exit code and, if available, the captured stderr.
+// The function handles SIGINT (Ctrl+C) and SIGTERM signals to gracefully interrupt the playbook execution.
 func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraArgs []string, verbose bool) error {
 	command := []string{ansibleBinaryPath, playbookPath, "--become"}
 	command = append(command, extraArgs...)
@@ -26,7 +30,22 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 		fmt.Println("Executing Ansible playbook with command:", strings.Join(command, " "))
 	}
 
-	cmd := exec.Command(command[0], command[1:]...)
+	// Create a context that can be cancelled by signals
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigChan
+		if verbose {
+			fmt.Println("\nReceived interrupt signal, stopping playbook...")
+		}
+		cancel()
+	}()
+
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Dir = repoPath
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -42,9 +61,24 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 
 	err := cmd.Run()
 
+	// Clean up signal handling
+	signal.Stop(sigChan)
+	close(sigChan)
+
 	if err != nil {
+		// Check if the error is due to context cancellation (signal interruption)
+		if errors.Is(err, context.Canceled) {
+			fmt.Println("Playbook execution was interrupted by user")
+			os.Exit(130) // Standard exit code for SIGINT (128 + 2)
+		}
+
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
+			// Check if the exit code indicates the process was killed by a signal (negative exit codes)
+			if exitErr.ExitCode() < 0 {
+				fmt.Println("Playbook execution was interrupted by user")
+				os.Exit(130) // Standard exit code for SIGINT (128 + 2)
+			}
 			if !verbose {
 				return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), stderrBuf.String())
 			}
