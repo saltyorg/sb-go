@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
@@ -45,13 +44,6 @@ func changeSandboxBranch(branchName string) error {
 		return err
 	}
 
-	// Run Settings role with specified tags and skip-tags
-	tags := []string{"settings"}
-	skipTags := []string{"sanity-check", "pre-tasks"}
-	if err := runSandboxAnsiblePlaybook(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, tags, skipTags); err != nil {
-		return err
-	}
-
 	fmt.Println("Updating Sandbox tags cache.")
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
@@ -63,19 +55,6 @@ func changeSandboxBranch(branchName string) error {
 		return err
 	}
 
-	fmt.Printf("Sandbox repository branch switched to %s and settings updated.\n", branchName)
-	return nil
-}
-
-func runSandboxAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, tags, skipTags []string) error {
-	tagsArg := strings.Join(tags, ",")
-	skipTagsArg := strings.Join(skipTags, ",")
-
-	allArgs := []string{"--tags", tagsArg, "--skip-tags", skipTagsArg}
-
-	err := ansible.RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath, allArgs, true)
-	if err != nil {
-		return fmt.Errorf("error running playbook: %w", err)
-	}
+	fmt.Printf("Sandbox repository branch switched to %s.\n", branchName)
 	return nil
 }
