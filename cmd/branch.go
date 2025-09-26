@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/git"
-	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/spf13/cobra"
@@ -53,13 +51,6 @@ func changeBranch(branchName string) error {
 		return err
 	}
 
-	// Run Settings role with specified tags and skip-tags
-	tags := []string{"settings"}
-	skipTags := []string{"sanity-check", "pre-tasks"}
-	if err := runAnsiblePlaybook(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, tags, skipTags); err != nil {
-		return err
-	}
-
 	fmt.Println("Updating Saltbox tags cache.")
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
@@ -71,20 +62,6 @@ func changeBranch(branchName string) error {
 		return err
 	}
 
-	fmt.Printf("Saltbox repository branch switched to %s and settings updated.\n", branchName)
-	return nil
-}
-
-func runAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, tags, skipTags []string) error {
-	tagsArg := strings.Join(tags, ",")
-	skipTagsArg := strings.Join(skipTags, ",")
-
-	allArgs := []string{"--tags", tagsArg, "--skip-tags", skipTagsArg}
-
-	if err := spinners.RunTaskWithSpinner("Running Ansible Playbook to update settings.yml", func() error {
-		return ansible.RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath, allArgs, true)
-	}); err != nil {
-		return fmt.Errorf("error running ansible playbook: %w", err)
-	}
+	fmt.Printf("Saltbox repository branch switched to %s.\n", branchName)
 	return nil
 }
