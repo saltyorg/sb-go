@@ -157,17 +157,6 @@ func updateSandbox(verbose bool) error {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
-	// Run Ansible playbook to upgrade configuration files
-	tags := []string{"--tags", "settings"}
-	skipTags := []string{"--skip-tags", "sanity-check,pre-tasks"}
-	ansibleArgs := append(tags, skipTags...)
-
-	if err := spinners.RunTaskWithSpinner("Running Ansible Playbook to upgrade configuration files", func() error {
-		return ansible.RunAnsiblePlaybook(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), constants.AnsiblePlaybookBinaryPath, ansibleArgs, verbose)
-	}); err != nil {
-		return fmt.Errorf("error running ansible playbook: %w", err)
-	}
-
 	// Get commit hash after fetch and reset
 	newCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
 	if err != nil {
