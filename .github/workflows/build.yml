@@ -114,3 +114,54 @@ jobs:
           body_path: release_notes.md
           prerelease: false
           files: ${{ env.APP_NAME }}_linux_amd64
+
+      - name: Notify Discord
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK" ]; then
+            # Read the release notes and format for Discord
+            RELEASE_NOTES=$(cat release_notes.md)
+
+            # Truncate if too long (Discord has a 2000 char limit for description)
+            if [ ${#RELEASE_NOTES} -gt 1800 ]; then
+              RELEASE_NOTES="${RELEASE_NOTES:0:1800}..."
+            fi
+
+            # Create Discord embed payload
+            cat > discord_payload.json << EOF
+          {
+            "embeds": [
+              {
+                "title": "🚀 New Release: ${{ steps.determine_version.outputs.version }}",
+                "description": "$(echo "$RELEASE_NOTES" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')",
+                "color": 5814783,
+                "url": "https://github.com/saltyorg/sb-go/releases/tag/${{ steps.determine_version.outputs.version }}",
+                "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
+                "footer": {
+                  "text": "sb-go",
+                  "icon_url": "https://github.com/saltyorg.png"
+                },
+                "fields": [
+                  {
+                    "name": "📥 Download",
+                    "value": "[sb_linux_amd64](https://github.com/saltyorg/sb-go/releases/download/${{ steps.determine_version.outputs.version }}/sb_linux_amd64)",
+                    "inline": true
+                  },
+                  {
+                    "name": "📝 Full Changelog",
+                    "value": "[View Changes](https://github.com/saltyorg/sb-go/releases/tag/${{ steps.determine_version.outputs.version }})",
+                    "inline": true
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+
+            # Send to Discord
+            curl -X POST "$DISCORD_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d @discord_payload.json
+          fi
