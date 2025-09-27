@@ -332,7 +332,7 @@ func SaltboxRepo(verbose bool, branch string) {
 	}
 
 	// These functions already have internal spinners
-	if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {
+	if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
 		fmt.Printf("Error downloading and installing saltbox.fact: %v\n", err)
 		os.Exit(1)
 	}

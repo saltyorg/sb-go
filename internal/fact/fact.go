@@ -43,13 +43,67 @@ func retryWithBackoff(operation func() error, maxRetries int, baseDelay time.Dur
 	return fmt.Errorf("operation failed after %d attempts: %w", maxRetries+1, lastErr)
 }
 
+// validateBinary performs validation checks on the downloaded Ubuntu x86_64 binary
+func validateBinary(filePath string, expectedSize int64, verbose bool) error {
+	if verbose {
+		fmt.Printf("Validating downloaded binary: %s\n", filePath)
+	}
+
+	// Check if file exists and get info
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return fmt.Errorf("cannot stat file: %w", err)
+	}
+
+	// Check file size matches what GitHub API reported
+	actualSize := fileInfo.Size()
+	if verbose {
+		fmt.Printf("File size check: expected %d bytes, actual %d bytes\n", expectedSize, actualSize)
+	}
+	if actualSize != expectedSize {
+		return fmt.Errorf("file size mismatch: expected %d bytes, got %d bytes", expectedSize, actualSize)
+	}
+
+	// Read first 4 bytes to check for ELF header (Ubuntu x86_64 binary)
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("cannot open file for validation: %w", err)
+	}
+	defer file.Close()
+
+	header := make([]byte, 4)
+	if _, err := file.Read(header); err != nil {
+		return fmt.Errorf("cannot read file header: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("Binary header check: [0x%02x, %s] ", header[0], string(header[1:4]))
+	}
+
+	// Check for ELF magic number (0x7F followed by "ELF")
+	if len(header) < 4 || header[0] != 0x7F || string(header[1:4]) != "ELF" {
+		if verbose {
+			fmt.Println("- Invalid ELF header")
+		}
+		return fmt.Errorf("file is not a valid ELF binary (expected for Ubuntu x86_64)")
+	}
+
+	if verbose {
+		fmt.Println("- Valid ELF binary")
+		fmt.Println("Binary validation passed")
+	}
+
+	return nil
+}
+
 // DownloadAndInstallSaltboxFact downloads and installs the latest saltbox.fact file.
-func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
+func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 	downloadURL := "https://github.com/saltyorg/ansible-facts/releases/latest/download/saltbox-facts"
 	targetPath := "/srv/git/saltbox/ansible_facts.d/saltbox.fact"
 	apiURL := "https://svm.saltbox.dev/version?url=https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
 
 	var latestVersion string
+	var expectedSize int64
 
 	// Fetch the latest release info from GitHub with retry logic
 	if err := spinners.RunTaskWithSpinner("Fetching latest saltbox.fact release info", func() error {
@@ -70,11 +124,27 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
 
 			var latestRelease struct {
 				TagName string `json:"tag_name"`
+				Assets  []struct {
+					Name string `json:"name"`
+					Size int64  `json:"size"`
+				} `json:"assets"`
 			}
 			if err := json.NewDecoder(response.Body).Decode(&latestRelease); err != nil {
 				return fmt.Errorf("failed to parse release info: %w", err)
 			}
 			latestVersion = latestRelease.TagName
+
+			// Find the saltbox-facts asset and get its size
+			for _, asset := range latestRelease.Assets {
+				if asset.Name == "saltbox-facts" {
+					expectedSize = asset.Size
+					break
+				}
+			}
+			if expectedSize == 0 {
+				return fmt.Errorf("saltbox-facts asset not found in release")
+			}
+
 			return nil
 		}, 3, 1*time.Second) // 3 retries with 1-second base delay
 	}); err != nil {
@@ -201,6 +271,16 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool) error {
 				if err != nil {
 					return fmt.Errorf("error setting file permissions: %w", err)
 				}
+
+				// Validate the downloaded binary
+				if err := validateBinary(targetPath, expectedSize, verbose); err != nil {
+					// Clean up the invalid file
+					if removeErr := os.Remove(targetPath); removeErr != nil {
+						return fmt.Errorf("downloaded binary validation failed (%w) and cleanup failed (%v)", err, removeErr)
+					}
+					return fmt.Errorf("downloaded binary validation failed: %w", err)
+				}
+
 				return nil
 			}, 3, 2*time.Second) // 3 retries with 2-second base delay for downloads
 		}); err != nil {

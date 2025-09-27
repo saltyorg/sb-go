@@ -40,7 +40,7 @@ type RcloneSettings struct {
 
 // RemoteConfig holds settings for a single rclone remote.
 type RemoteConfig struct {
-	Remote   string         `yaml:"remote" validate:"required"` // This is now "remote:path"
+	Remote   string         `yaml:"remote" validate:"required"`
 	Settings RemoteSettings `yaml:"settings" validate:"required"`
 }
 

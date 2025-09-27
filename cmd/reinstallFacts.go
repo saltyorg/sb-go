@@ -21,7 +21,7 @@ var reinstallFactsCmd = &cobra.Command{
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(verbose)
 
-		if err := fact.DownloadAndInstallSaltboxFact(true); err != nil {
+		if err := fact.DownloadAndInstallSaltboxFact(true, verbose); err != nil {
 			fmt.Println("Error reinstalling saltbox.fact:", err)
 			os.Exit(1)
 		}

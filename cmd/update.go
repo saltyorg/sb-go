@@ -96,7 +96,7 @@ func updateSaltbox(verbose bool) error {
 	}
 
 	// Download and install Saltbox fact - this function already has internal spinners
-	if err := fact.DownloadAndInstallSaltboxFact(false); err != nil {
+	if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
 		return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
 	}
 
