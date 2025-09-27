@@ -132,6 +132,8 @@ jobs:
             # Create Discord embed payload
             cat > discord_payload.json << EOF
           {
+            "username": "GitHub",
+            "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
             "embeds": [
               {
                 "title": "🚀 New Release: ${{ steps.determine_version.outputs.version }}",
