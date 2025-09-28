@@ -317,10 +317,15 @@ func (s *Schema) validateField(value interface{}, rule *SchemaRule, path string,
 	}
 
 	if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
-		debugPrintf("DEBUG: Running built-in %s validator for field '%s'\n", rule.Type, path)
-		if validator, exists := customValidators[validatorName]; exists {
-			if err := validator(value, parentConfig); err != nil {
-				return fmt.Errorf("field '%s': %w", path, err)
+		// Skip validation if field is not required and value is empty
+		if !rule.Required && isEmptyValue(value) {
+			debugPrintf("DEBUG: Skipping built-in %s validator for non-required empty field '%s'\n", rule.Type, path)
+		} else {
+			debugPrintf("DEBUG: Running built-in %s validator for field '%s'\n", rule.Type, path)
+			if validator, exists := customValidators[validatorName]; exists {
+				if err := validator(value, parentConfig); err != nil {
+					return fmt.Errorf("field '%s': %w", path, err)
+				}
 			}
 		}
 	}
@@ -363,6 +368,12 @@ func (s *Schema) validateField(value interface{}, rule *SchemaRule, path string,
 func (s *Schema) validateType(value interface{}, rule *SchemaRule, path string) error {
 	if rule.Type == "" {
 		return nil // No type constraint
+	}
+
+	// Skip type validation if field is not required and value is empty
+	if !rule.Required && isEmptyValue(value) {
+		debugPrintf("DEBUG: validateType - skipping type check for non-required empty field '%s'\n", path)
+		return nil
 	}
 
 	valueType := getValueType(value)
@@ -598,4 +609,17 @@ func isValidURL(url string) bool {
 	// Simple URL validation
 	urlRegex := regexp.MustCompile(`^https?://[^\s]+$`)
 	return urlRegex.MatchString(url)
+}
+
+// isEmptyValue checks if a value is considered empty (nil, empty string, etc.)
+func isEmptyValue(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+
+	if str, ok := value.(string); ok {
+		return str == ""
+	}
+
+	return false
 }
