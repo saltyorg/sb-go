@@ -40,7 +40,7 @@ func handleUpdate(verbose bool) error {
 	if err := updateSaltbox(verbose); err != nil {
 		return fmt.Errorf("error updating Saltbox: %w", err)
 	}
-	if err := updateSandbox(verbose); err != nil {
+	if err := updateSandbox(); err != nil {
 		return fmt.Errorf("error updating Sandbox: %w", err)
 	}
 	return nil
@@ -125,7 +125,7 @@ func updateSaltbox(verbose bool) error {
 }
 
 // updateSandbox updates the Sandbox repository and configuration.
-func updateSandbox(verbose bool) error {
+func updateSandbox() error {
 	// Check if Sandbox repo exists
 	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
 		return fmt.Errorf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)
