@@ -518,10 +518,10 @@ func (s *Schema) validateRequiredWith(value interface{}, rule *SchemaRule, path 
 
 	debugPrintf("DEBUG: validateRequiredWith for '%s': required_with=%v\n", path, rule.RequiredWith)
 
-	// Check if any of the required_with fields are present
+	// Check if any of the required_with fields are present with meaningful values (not null/empty)
 	hasRequiredField := false
 	for _, requiredField := range rule.RequiredWith {
-		if _, exists := parentConfig[requiredField]; exists {
+		if fieldValue, exists := parentConfig[requiredField]; exists && !isEmptyValue(fieldValue) {
 			hasRequiredField = true
 			break
 		}
