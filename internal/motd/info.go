@@ -358,18 +358,14 @@ func GetAptStatus(verbose bool) string {
 
 	if verbose {
 		fmt.Printf("DEBUG: Updates file not found or empty (%v), falling back to apt-check command\n", err)
-	}
-
-	// Fallback to apt-check command
-	if verbose {
 		fmt.Printf("DEBUG: Executing apt-check command: /usr/lib/update-notifier/apt-check --human-readable --no-esm-messages\n")
+
 	}
-	start := timepkg.Now()
+	startAptCheck := timepkg.Now()
 	output := ExecCommand("/usr/lib/update-notifier/apt-check", "--human-readable", "--no-esm-messages")
 	if verbose {
-		fmt.Printf("DEBUG: apt-check command completed in %v\n", timepkg.Since(start))
-	}
-	if verbose {
+		fmt.Printf("DEBUG: apt-check command completed in %v\n", timepkg.Since(startAptCheck))
+
 		if output == "Not available" {
 			fmt.Printf("DEBUG: apt-check command returned 'Not available'\n")
 		} else if output == "" {
@@ -432,13 +428,13 @@ func GetAptStatus(verbose bool) string {
 	// Additional fallback using apt list
 	if verbose {
 		fmt.Printf("DEBUG: apt-check failed, trying final fallback: apt list --upgradable\n")
+
 	}
-	start = timepkg.Now()
+	startAptList := timepkg.Now()
 	output = ExecCommand("apt", "list", "--upgradable")
 	if verbose {
-		fmt.Printf("DEBUG: apt list --upgradable completed in %v\n", timepkg.Since(start))
-	}
-	if verbose {
+		fmt.Printf("DEBUG: apt list --upgradable completed in %v\n", timepkg.Since(startAptList))
+
 		if output == "Not available" {
 			fmt.Printf("DEBUG: apt list --upgradable returned 'Not available'\n")
 		} else if output == "" {

@@ -5,7 +5,7 @@ import (
 )
 
 // GetDistributionWithContext provides distribution info with context/timeout support
-func GetDistributionWithContext(ctx context.Context, verbose bool) string {
+func GetDistributionWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -21,7 +21,7 @@ func GetDistributionWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetKernelWithContext provides kernel info with context/timeout support
-func GetKernelWithContext(ctx context.Context, verbose bool) string {
+func GetKernelWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -37,7 +37,7 @@ func GetKernelWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetUptimeWithContext provides uptime info with context/timeout support
-func GetUptimeWithContext(ctx context.Context, verbose bool) string {
+func GetUptimeWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -53,7 +53,7 @@ func GetUptimeWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetCpuAveragesWithContext provides CPU load info with context/timeout support
-func GetCpuAveragesWithContext(ctx context.Context, verbose bool) string {
+func GetCpuAveragesWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -69,7 +69,7 @@ func GetCpuAveragesWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetLastLoginWithContext provides last login info with context/timeout support
-func GetLastLoginWithContext(ctx context.Context, verbose bool) string {
+func GetLastLoginWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -85,7 +85,7 @@ func GetLastLoginWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetUserSessionsWithContext provides user sessions info with context/timeout support
-func GetUserSessionsWithContext(ctx context.Context, verbose bool) string {
+func GetUserSessionsWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -101,7 +101,7 @@ func GetUserSessionsWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetProcessCountWithContext provides process count info with context/timeout support
-func GetProcessCountWithContext(ctx context.Context, verbose bool) string {
+func GetProcessCountWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -133,7 +133,7 @@ func GetAptStatusWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetRebootRequiredWithContext provides reboot status info with context/timeout support
-func GetRebootRequiredWithContext(ctx context.Context, verbose bool) string {
+func GetRebootRequiredWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -149,7 +149,7 @@ func GetRebootRequiredWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetCpuInfoWithContext provides CPU info with context/timeout support
-func GetCpuInfoWithContext(ctx context.Context, verbose bool) string {
+func GetCpuInfoWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -165,7 +165,7 @@ func GetCpuInfoWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetGpuInfoWithContext provides GPU info with context/timeout support
-func GetGpuInfoWithContext(ctx context.Context, verbose bool) string {
+func GetGpuInfoWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -181,7 +181,7 @@ func GetGpuInfoWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetMemoryInfoWithContext provides memory usage info with context/timeout support
-func GetMemoryInfoWithContext(ctx context.Context, verbose bool) string {
+func GetMemoryInfoWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -197,7 +197,7 @@ func GetMemoryInfoWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetDockerInfoWithContext provides Docker container info with context/timeout support
-func GetDockerInfoWithContext(ctx context.Context, verbose bool) string {
+func GetDockerInfoWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -213,7 +213,7 @@ func GetDockerInfoWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetDiskInfoWithContext provides disk usage info with context/timeout support
-func GetDiskInfoWithContext(ctx context.Context, verbose bool) string {
+func GetDiskInfoWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
@@ -357,7 +357,7 @@ func GetRtorrentInfoWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetTraefikInfoWithContext provides Traefik router status info with context/timeout support
-func GetTraefikInfoWithContext(ctx context.Context, verbose bool) string {
+func GetTraefikInfoWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
