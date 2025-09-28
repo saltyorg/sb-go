@@ -3,10 +3,7 @@ package validate2
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/saltyorg/sb-go/internal/config"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
@@ -145,111 +142,17 @@ func validateConfigWithSchema(configPath, schemaPath string) error {
 		return fmt.Errorf("error unmarshaling config file (%s): %w", configPath, err)
 	}
 
-	// Load the schema for additional validation if available
+	// Load the schema for schema-based validation
 	schema, err := LoadSchema(schemaPath)
 	if err != nil {
-		// If schema loading fails, skip schema validation and rely on struct validation
-		debugPrintf("DEBUG: Schema loading failed, skipping schema validation: %v\n", err)
-	} else {
-		// Perform full schema validation including type checking and custom validators
-		if err := schema.Validate(inputMap); err != nil {
-			return fmt.Errorf("schema validation failed: %w", err)
-		}
+		return fmt.Errorf("failed to load schema file %s: %w", schemaPath, err)
 	}
 
-	// Determine config type and validate using existing struct validation
-	configName := filepath.Base(configPath)
-	switch configName {
-	case "accounts.yml":
-		return validateWithStruct(configFile, &config.Config{}, config.ValidateConfig, inputMap)
-	case "adv_settings.yml":
-		return validateWithStruct(configFile, &config.AdvSettingsConfig{}, config.ValidateAdvSettingsConfig, inputMap)
-	case "backup_config.yml":
-		return validateWithStruct(configFile, &config.BackupConfig{}, config.ValidateBackupConfig, inputMap)
-	case "hetzner_vlan.yml":
-		return validateWithStruct(configFile, &config.HetznerVLANConfig{}, config.ValidateHetznerVLANConfig, inputMap)
-	case "settings.yml":
-		return validateWithStruct(configFile, &config.SettingsConfig{}, config.ValidateSettingsConfig, inputMap)
-	case "motd.yml":
-		return validateWithStruct(configFile, &config.MOTDConfig{}, config.ValidateMOTDConfig, inputMap)
-	default:
-		return fmt.Errorf("unknown config file: %s", configName)
-	}
-}
-
-// validateWithStruct uses the original struct-based validation approach
-func validateWithStruct[T any](configFile []byte, configData *T, validateFn func(*T, map[string]interface{}) error, inputMap map[string]interface{}) error {
-	// Unmarshal into the typed struct (this handles type conversion properly)
-	if err := yaml.Unmarshal(configFile, configData); err != nil {
-		// Try to provide better error context by analyzing the input map
-		enhancedErr := enhanceUnmarshalError(err, inputMap)
-		return fmt.Errorf("error unmarshaling config into struct: %w", enhancedErr)
+	// Perform schema validation with custom validators
+	if err := schema.ValidateWithTypeFlexibility(inputMap); err != nil {
+		return fmt.Errorf("schema validation failed: %w", err)
 	}
 
-	// Use the original validation function
-	if err := validateFn(configData, inputMap); err != nil {
-		return fmt.Errorf("configuration validation error: %w", err)
-	}
-
+	debugPrintf("DEBUG: Schema validation completed successfully\n")
 	return nil
-}
-
-// enhanceUnmarshalError attempts to provide better context for unmarshaling errors
-func enhanceUnmarshalError(err error, inputMap map[string]interface{}) error {
-	errStr := err.Error()
-
-	// Look for "invalid Ansible boolean value" errors and try to find the field
-	if strings.Contains(errStr, "invalid Ansible boolean value:") {
-		// Extract the invalid value from the error
-		parts := strings.Split(errStr, "invalid Ansible boolean value: ")
-		if len(parts) > 1 {
-			invalidValue := strings.TrimSpace(parts[1])
-
-			// Search for this value in the input map to find the field
-			if fieldPath := findFieldWithValue(inputMap, invalidValue, ""); fieldPath != "" {
-				return fmt.Errorf("invalid Ansible boolean value '%s' in field '%s'. Valid values are: yes/no, true/false, on/off, 1/0", invalidValue, fieldPath)
-			}
-		}
-	}
-
-	// For other errors, just return the original
-	return err
-}
-
-// findFieldWithValue recursively searches for a field containing the specified value
-func findFieldWithValue(obj map[string]interface{}, targetValue, currentPath string) string {
-	for key, value := range obj {
-		fieldPath := key
-		if currentPath != "" {
-			fieldPath = currentPath + "." + key
-		}
-
-		// Check if this field has the target value
-		if fmt.Sprintf("%v", value) == targetValue {
-			return fieldPath
-		}
-
-		// Recursively search nested objects
-		if nestedObj, ok := value.(map[string]interface{}); ok {
-			if found := findFieldWithValue(nestedObj, targetValue, fieldPath); found != "" {
-				return found
-			}
-		}
-
-		// Search in arrays
-		if arr, ok := value.([]interface{}); ok {
-			for i, item := range arr {
-				if fmt.Sprintf("%v", item) == targetValue {
-					return fmt.Sprintf("%s[%d]", fieldPath, i)
-				}
-				if nestedObj, ok := item.(map[string]interface{}); ok {
-					itemPath := fmt.Sprintf("%s[%d]", fieldPath, i)
-					if found := findFieldWithValue(nestedObj, targetValue, itemPath); found != "" {
-						return found
-					}
-				}
-			}
-		}
-	}
-	return ""
 }
