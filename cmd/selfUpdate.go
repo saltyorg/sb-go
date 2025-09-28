@@ -140,8 +140,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
 
 	// Print an optional message if provided
 	if optionalMessage != "" {
-		fmt.Println()
-		_ = spinners.RunInfoSpinner(optionalMessage)
+		_ = spinners.RunWarningSpinner(optionalMessage)
 	}
 	fmt.Println("")
 	os.Exit(0)

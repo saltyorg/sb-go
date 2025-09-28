@@ -36,7 +36,7 @@ func handleUpdate(verbose bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
-	doSelfUpdate(true, verbose, "Re-run your previous update command")
+	doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
 	if err := updateSaltbox(verbose); err != nil {
 		return fmt.Errorf("error updating Saltbox: %w", err)
 	}
