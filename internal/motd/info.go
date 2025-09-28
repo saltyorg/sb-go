@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
+	timepkg "time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -277,7 +277,7 @@ func GetAptStatus(verbose bool) string {
 	if verbose {
 		fmt.Printf("DEBUG: Starting GetAptStatus\n")
 	}
-	
+
 	// Check the updates-available file, which is updated by the daily apt update
 	updatesFile := "/var/lib/update-notifier/updates-available"
 	if verbose {
@@ -364,10 +364,10 @@ func GetAptStatus(verbose bool) string {
 	if verbose {
 		fmt.Printf("DEBUG: Executing apt-check command: /usr/lib/update-notifier/apt-check --human-readable --no-esm-messages\n")
 	}
-	start := time.Now()
+	start := timepkg.Now()
 	output := ExecCommand("/usr/lib/update-notifier/apt-check", "--human-readable", "--no-esm-messages")
 	if verbose {
-		fmt.Printf("DEBUG: apt-check command completed in %v\n", time.Since(start))
+		fmt.Printf("DEBUG: apt-check command completed in %v\n", timepkg.Since(start))
 	}
 	if verbose {
 		if output == "Not available" {
@@ -433,10 +433,10 @@ func GetAptStatus(verbose bool) string {
 	if verbose {
 		fmt.Printf("DEBUG: apt-check failed, trying final fallback: apt list --upgradable\n")
 	}
-	start = time.Now()
+	start = timepkg.Now()
 	output = ExecCommand("apt", "list", "--upgradable")
 	if verbose {
-		fmt.Printf("DEBUG: apt list --upgradable completed in %v\n", time.Since(start))
+		fmt.Printf("DEBUG: apt list --upgradable completed in %v\n", timepkg.Since(start))
 	}
 	if verbose {
 		if output == "Not available" {
