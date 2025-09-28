@@ -3,6 +3,8 @@ package validate2
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -128,7 +130,8 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 
 // validateConfigWithSchema validates a config file using the original struct approach but with schema for structure checking
 func validateConfigWithSchema(configPath, schemaPath string) error {
-	debugPrintf("DEBUG: validateConfigWithSchema called with config=%s, schema=%s\n", configPath, schemaPath)
+	startTime := time.Now()
+	debugPrintf("DEBUG: validateConfigWithSchema called with config=%s, schema=%s at %v\n", configPath, schemaPath, startTime)
 
 	// Load the config file
 	configFile, err := os.ReadFile(configPath)
@@ -148,11 +151,40 @@ func validateConfigWithSchema(configPath, schemaPath string) error {
 		return fmt.Errorf("failed to load schema file %s: %w", schemaPath, err)
 	}
 
-	// Perform schema validation with custom validators
-	if err := schema.ValidateWithTypeFlexibility(inputMap); err != nil {
-		return fmt.Errorf("schema validation failed: %w", err)
+	// Perform schema validation with async API checks
+	syncErr, asyncCtx := schema.ValidateWithTypeFlexibilityAsync(inputMap)
+	if syncErr != nil {
+		return fmt.Errorf("schema validation failed: %w", syncErr)
 	}
 
-	debugPrintf("DEBUG: Schema validation completed successfully\n")
+	syncDuration := time.Since(startTime)
+	debugPrintf("DEBUG: Synchronous schema validation completed successfully in %v\n", syncDuration)
+
+	// Wait for async API validations to complete
+	if asyncCtx != nil {
+		asyncStartTime := time.Now()
+		debugPrintf("DEBUG: Waiting for async API validations to complete\n")
+
+		// TODO: In the future, we could show progress here like:
+		// - "Validating Cloudflare API credentials..."
+		// - "Validating Docker Hub credentials..."
+		// For now, just wait for completion
+
+		apiErrors := asyncCtx.Wait()
+		if len(apiErrors) > 0 {
+			// Combine all API validation errors
+			var errorMsg strings.Builder
+			errorMsg.WriteString("API validation failed:")
+			for _, apiErr := range apiErrors {
+				errorMsg.WriteString(fmt.Sprintf("\n  - %v", apiErr))
+			}
+			return fmt.Errorf(errorMsg.String())
+		}
+		asyncDuration := time.Since(asyncStartTime)
+		debugPrintf("DEBUG: Async API validations completed successfully in %v\n", asyncDuration)
+	}
+
+	duration := time.Since(startTime)
+	debugPrintf("DEBUG: validateConfigWithSchema completed for %s in %v\n", configPath, duration)
 	return nil
 }

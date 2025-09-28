@@ -60,24 +60,6 @@ func LoadSchema(schemaPath string) (*Schema, error) {
 	return &Schema{Rules: rules}, nil
 }
 
-// LoadConfigAsMap loads a YAML config file as a map
-func LoadConfigAsMap(configPath string) (map[string]interface{}, error) {
-	debugPrintf("DEBUG: LoadConfigAsMap called with path: %s\n", configPath)
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %s: %w", configPath, err)
-	}
-
-	var config map[string]interface{}
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
-	}
-
-	debugPrintf("DEBUG: LoadConfigAsMap loaded config with %d top-level keys\n", len(config))
-	return config, nil
-}
-
 // Validate validates a configuration against the schema
 func (s *Schema) Validate(config map[string]interface{}) error {
 	debugPrintf("DEBUG: Schema.Validate called with config keys: %v\n", getKeys(config))
@@ -93,7 +75,15 @@ func (s *Schema) ValidateStructure(config map[string]interface{}) error {
 // ValidateWithTypeFlexibility performs full validation including custom validators but ignores type mismatches
 func (s *Schema) ValidateWithTypeFlexibility(config map[string]interface{}) error {
 	debugPrintf("DEBUG: Schema.ValidateWithTypeFlexibility called with config keys: %v\n", getKeys(config))
-	return s.validateObjectWithTypeFlexibility(config, s.Rules, "")
+	return s.validateObjectWithTypeFlexibility(config, s.Rules, "", nil)
+}
+
+// ValidateWithTypeFlexibilityAsync performs validation with async API checks
+func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]interface{}) (error, *AsyncValidationContext) {
+	debugPrintf("DEBUG: Schema.ValidateWithTypeFlexibilityAsync called with config keys: %v\n", getKeys(config))
+	asyncCtx := NewAsyncValidationContext()
+	err := s.validateObjectWithTypeFlexibility(config, s.Rules, "", asyncCtx)
+	return err, asyncCtx
 }
 
 // validateObject validates an object against schema rules
@@ -163,7 +153,7 @@ func (s *Schema) validateObjectStructure(obj map[string]interface{}, rules map[s
 }
 
 // validateObjectWithTypeFlexibility validates an object but skips type checking while running custom validators
-func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]interface{}, rules map[string]*SchemaRule, path string) error {
+func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]interface{}, rules map[string]*SchemaRule, path string, asyncCtx *AsyncValidationContext) error {
 	debugPrintf("DEBUG: validateObjectWithTypeFlexibility called with path: '%s', rules: %v\n", path, getKeys(rules))
 
 	// Check required fields
@@ -181,7 +171,7 @@ func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]interface{}, r
 			continue // Optional field not present
 		}
 
-		if err := s.validateFieldWithTypeFlexibility(value, rule, fieldPath, obj); err != nil {
+		if err := s.validateFieldWithTypeFlexibility(value, rule, fieldPath, obj, asyncCtx); err != nil {
 			return err
 		}
 	}
@@ -197,14 +187,8 @@ func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]interface{}, r
 }
 
 // validateFieldWithTypeFlexibility validates a field but skips type checking
-func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *SchemaRule, path string, parentConfig map[string]interface{}) error {
+func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *SchemaRule, path string, parentConfig map[string]interface{}, asyncCtx *AsyncValidationContext) error {
 	debugPrintf("DEBUG: validateFieldWithTypeFlexibility called for '%s' with value type: %T\n", path, value)
-
-	// Skip type validation entirely - let struct validation handle it
-
-	// Skip format validation - let struct validation handle it
-
-	// Skip length validation - let struct validation handle it
 
 	// Not equals validation
 	if err := s.validateNotEquals(value, rule, path); err != nil {
@@ -239,10 +223,16 @@ func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *Schem
 		}
 	}
 
-	// Custom validator - this is what we want to run!
+	// Custom validator - check if it's an async API validator first
 	if rule.CustomValidator != "" {
 		debugPrintf("DEBUG: Running custom validator '%s' for field '%s'\n", rule.CustomValidator, path)
-		if validator, exists := customValidators[rule.CustomValidator]; exists {
+
+		// Check if this is an async API validator
+		if asyncValidator, isAsync := asyncAPIValidators[rule.CustomValidator]; isAsync && asyncCtx != nil {
+			debugPrintf("DEBUG: Adding async API validator '%s' for field '%s'\n", rule.CustomValidator, path)
+			asyncCtx.AddAPIValidation(path, asyncValidator, value, parentConfig)
+		} else if validator, exists := customValidators[rule.CustomValidator]; exists {
+			// Run synchronous validator
 			if err := validator(value, parentConfig); err != nil {
 				return fmt.Errorf("field '%s': %w", path, err)
 			}
@@ -254,7 +244,7 @@ func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *Schem
 	// Nested object validation
 	if rule.Type == "object" && rule.Properties != nil {
 		if objMap, ok := value.(map[string]interface{}); ok {
-			return s.validateObjectWithTypeFlexibility(objMap, rule.Properties, path)
+			return s.validateObjectWithTypeFlexibility(objMap, rule.Properties, path, asyncCtx)
 		}
 	}
 
@@ -263,7 +253,7 @@ func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *Schem
 		if arr, ok := value.([]interface{}); ok {
 			for i, item := range arr {
 				itemPath := fmt.Sprintf("%s[%d]", path, i)
-				if err := s.validateFieldWithTypeFlexibility(item, rule.Items, itemPath, parentConfig); err != nil {
+				if err := s.validateFieldWithTypeFlexibility(item, rule.Items, itemPath, parentConfig, asyncCtx); err != nil {
 					return err
 				}
 			}
@@ -302,29 +292,60 @@ func (s *Schema) validateField(value interface{}, rule *SchemaRule, path string,
 		return err
 	}
 
-	// Built-in type validators (run automatically based on type)
-	builtInValidators := map[string]string{
-		"ansible_bool":    "validate_ansible_bool",
-		"subdomain":       "validate_subdomain",
-		"hostname":        "validate_hostname",
-		"directory_path":  "validate_directory_path",
-		"url":             "validate_url",
-		"timezone":        "validate_timezone",
-		"cron_time":       "validate_cron_time",
-		"rclone_template": "validate_rclone_template",
-		"ssh_key_or_url":  "validate_ssh_key_or_url",
-		"password":        "validate_password_strength",
-	}
-
-	if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
-		// Skip validation if field is not required and value is empty
+	// Fast path for common built-in validators to reduce map lookups
+	switch rule.Type {
+	case "ansible_bool":
 		if !rule.Required && isEmptyValue(value) {
-			debugPrintf("DEBUG: Skipping built-in %s validator for non-required empty field '%s'\n", rule.Type, path)
+			debugPrintf("DEBUG: Skipping ansible_bool validator for non-required empty field '%s'\n", path)
 		} else {
-			debugPrintf("DEBUG: Running built-in %s validator for field '%s'\n", rule.Type, path)
-			if validator, exists := customValidators[validatorName]; exists {
+			debugPrintf("DEBUG: Running built-in ansible_bool validator for field '%s'\n", path)
+			if err := validateAnsibleBoolValue(value); err != nil {
+				return fmt.Errorf("field '%s': %w", path, err)
+			}
+		}
+	case "subdomain":
+		if !rule.Required && isEmptyValue(value) {
+			debugPrintf("DEBUG: Skipping subdomain validator for non-required empty field '%s'\n", path)
+		} else {
+			debugPrintf("DEBUG: Running built-in subdomain validator for field '%s'\n", path)
+			if validator, exists := customValidators["validate_subdomain"]; exists {
 				if err := validator(value, parentConfig); err != nil {
 					return fmt.Errorf("field '%s': %w", path, err)
+				}
+			}
+		}
+	case "timezone":
+		if !rule.Required && isEmptyValue(value) {
+			debugPrintf("DEBUG: Skipping timezone validator for non-required empty field '%s'\n", path)
+		} else {
+			debugPrintf("DEBUG: Running built-in timezone validator for field '%s'\n", path)
+			if validator, exists := customValidators["validate_timezone"]; exists {
+				if err := validator(value, parentConfig); err != nil {
+					return fmt.Errorf("field '%s': %w", path, err)
+				}
+			}
+		}
+	default:
+		// Fallback to map lookup for less common validators
+		builtInValidators := map[string]string{
+			"hostname":        "validate_hostname",
+			"directory_path":  "validate_directory_path",
+			"url":             "validate_url",
+			"cron_time":       "validate_cron_time",
+			"rclone_template": "validate_rclone_template",
+			"ssh_key_or_url":  "validate_ssh_key_or_url",
+			"password":        "validate_password_strength",
+		}
+
+		if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
+			if !rule.Required && isEmptyValue(value) {
+				debugPrintf("DEBUG: Skipping built-in %s validator for non-required empty field '%s'\n", rule.Type, path)
+			} else {
+				debugPrintf("DEBUG: Running built-in %s validator for field '%s'\n", rule.Type, path)
+				if validator, exists := customValidators[validatorName]; exists {
+					if err := validator(value, parentConfig); err != nil {
+						return fmt.Errorf("field '%s': %w", path, err)
+					}
 				}
 			}
 		}
