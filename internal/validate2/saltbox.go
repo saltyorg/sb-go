@@ -88,14 +88,10 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 		return fmt.Errorf("required config file not found: %s", job.configPath)
 	}
 
-	// Try to find schema file (first in current directory, then fallback)
+	// Check if schema file exists
 	schemaPath := job.schemaPath
 	if _, err := os.Stat(schemaPath); err != nil {
-		// Fallback to old validation method if schema not found
-		if verbose {
-			fmt.Printf("Schema file %s not found, skipping YAML schema validation for %s\n", schemaPath, job.name)
-		}
-		return nil
+		return fmt.Errorf("schema file not found: %s", schemaPath)
 	}
 
 	// Perform validation with spinner or verbose output
@@ -128,7 +124,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 	return nil
 }
 
-// validateConfigWithSchema validates a config file using the original struct approach but with schema for structure checking
+// validateConfigWithSchema validates a config file against its YAML schema
 func validateConfigWithSchema(configPath, schemaPath string) error {
 	startTime := time.Now()
 	debugPrintf("DEBUG: validateConfigWithSchema called with config=%s, schema=%s at %v\n", configPath, schemaPath, startTime)
