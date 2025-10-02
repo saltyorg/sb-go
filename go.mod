@@ -12,9 +12,9 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/cloudflare/cloudflare-go/v6 v6.0.1
+	github.com/cloudflare/cloudflare-go/v6 v6.1.0
 	github.com/creativeprojects/go-selfupdate v1.5.1
-	github.com/docker/docker v28.4.0+incompatible
+	github.com/docker/docker v28.5.0+incompatible
 	github.com/docker/go-connections v0.6.0
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/saltydk/go-rtorrent v1.0.1
