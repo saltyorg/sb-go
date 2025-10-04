@@ -28,3 +28,5 @@ go.work.sum
 # goland
 .idea/
 .claude/
+CLAUDE.md
+.mcp.json

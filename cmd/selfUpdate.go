@@ -10,7 +10,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/runtime"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
-	"github.com/blang/semver"
+	"github.com/Masterminds/semver/v3"
 	"github.com/creativeprojects/go-selfupdate"
 	"github.com/spf13/cobra"
 )

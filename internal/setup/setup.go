@@ -323,7 +323,7 @@ func SaltboxRepo(verbose bool, branch string) {
 		} else {
 			// It's a git repo, fetch and reset
 			if err := spinners.RunTaskWithSpinner("Updating existing Saltbox repository", func() error {
-				return git.FetchAndReset(saltboxPath, branch, "root", nil) // Assuming root user
+				return git.FetchAndReset(saltboxPath, branch, "root", nil, nil) // Assuming root user
 			}); err != nil {
 				fmt.Printf("Error updating Saltbox repository: %v\n", err)
 				os.Exit(1)

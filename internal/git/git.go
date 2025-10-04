@@ -60,7 +60,7 @@ func CloneRepository(repoURL, destPath, branch string, verbose bool) error {
 }
 
 // FetchAndReset performs a git fetch and reset to a specified branch.
-func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]string) error {
+func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool) error {
 	// Get the current branch name
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = repoPath
@@ -77,18 +77,31 @@ func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]stri
 		if err := spinners.RunInfoSpinner(fmt.Sprintf("Currently on branch '%s'", currentBranch)); err != nil {
 			return err
 		}
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Printf("Do you want to reset to the '%s' branch? (y/n): ", defaultBranch)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(strings.ToLower(input))
 
-		if input != "y" {
+		if branchReset == nil {
+			// No flag specified, prompt user
+			reader := bufio.NewReader(os.Stdin)
+			fmt.Printf("Do you want to reset to the '%s' branch? (y/n): ", defaultBranch)
+			input, _ := reader.ReadString('\n')
+			input = strings.TrimSpace(strings.ToLower(input))
+
+			if input != "y" {
+				if err := spinners.RunInfoSpinner(fmt.Sprintf("Updating the current branch '%s'", currentBranch)); err != nil {
+					return err
+				}
+				branch = currentBranch
+			} else {
+				branch = defaultBranch
+			}
+		} else if *branchReset {
+			// --reset-branch flag: reset to default branch
+			branch = defaultBranch
+		} else {
+			// --keep-branch flag: stay on current branch
 			if err := spinners.RunInfoSpinner(fmt.Sprintf("Updating the current branch '%s'", currentBranch)); err != nil {
 				return err
 			}
 			branch = currentBranch
-		} else {
-			branch = defaultBranch
 		}
 	} else {
 		branch = defaultBranch

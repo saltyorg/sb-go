@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/saltyorg/sb-go/internal/announcements"
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -23,36 +24,84 @@ var updateCmd = &cobra.Command{
 	Long:  `Update Saltbox & Sandbox`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
-		return handleUpdate(verbose)
+		keepBranch, _ := cmd.Flags().GetBool("keep-branch")
+		resetBranch, _ := cmd.Flags().GetBool("reset-branch")
+
+		var branchReset *bool
+		if keepBranch {
+			falseVal := false
+			branchReset = &falseVal
+		} else if resetBranch {
+			trueVal := true
+			branchReset = &trueVal
+		}
+
+		return handleUpdate(verbose, branchReset)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(updateCmd)
 	updateCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+	updateCmd.PersistentFlags().Bool("keep-branch", false, "Skip branch reset prompt and stay on current branch")
+	updateCmd.PersistentFlags().Bool("reset-branch", false, "Skip branch reset prompt and reset to default branch")
 }
 
-func handleUpdate(verbose bool) error {
+func handleUpdate(verbose bool, branchReset *bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
-	doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
-	if err := updateSaltbox(verbose); err != nil {
+	//doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
+
+	// Load announcement files before updates
+	saltboxAnnouncementsBefore, sandboxAnnouncementsBefore, err := announcements.LoadAllAnnouncementFiles()
+	if err != nil {
+		return fmt.Errorf("error loading announcements before update: %w", err)
+	}
+
+	// Update repositories
+	if err := updateSaltbox(verbose, branchReset); err != nil {
 		return fmt.Errorf("error updating Saltbox: %w", err)
 	}
-	if err := updateSandbox(); err != nil {
+	if err := updateSandbox(branchReset); err != nil {
 		return fmt.Errorf("error updating Sandbox: %w", err)
 	}
+
+	// Load announcement files after updates
+	saltboxAnnouncementsAfter, sandboxAnnouncementsAfter, err := announcements.LoadAllAnnouncementFiles()
+	if err != nil {
+		return fmt.Errorf("error loading announcements after update: %w", err)
+	}
+
+	// Check for new announcements in both repositories
+	announcementDiffs := announcements.CheckForNewAnnouncementsAllRepos(saltboxAnnouncementsBefore, saltboxAnnouncementsAfter, sandboxAnnouncementsBefore, sandboxAnnouncementsAfter)
+
+	// Display new announcements
+	if err := announcements.DisplayAnnouncements(announcementDiffs); err != nil {
+		return fmt.Errorf("error displaying announcements: %w", err)
+	}
+
+	// Prompt for migration approvals and execute
+	migrationRequests, err := announcements.PromptForMigrations(announcementDiffs)
+	if err != nil {
+		return fmt.Errorf("error prompting for migrations: %w", err)
+	}
+
+	// Execute migration requests
+	if err := announcements.ExecuteMigrations(migrationRequests); err != nil {
+		return fmt.Errorf("error executing migrations: %w", err)
+	}
+
+	// Validate Saltbox configuration after announcements and migrations
+	if err := validateSaltboxConfig(verbose); err != nil {
+		return fmt.Errorf("error validating Saltbox configuration: %w", err)
+	}
+
 	return nil
 }
 
-// updateSaltbox updates the Saltbox repository and configuration.
-func updateSaltbox(verbose bool) error {
-	// Check if Saltbox repo exists
-	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
-		return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
-	}
-
+// validateSaltboxConfig validates the Saltbox configuration.
+func validateSaltboxConfig(verbose bool) error {
 	if err := spinners.RunInfoSpinner("Validating Saltbox configuration"); err != nil {
 		return err
 	}
@@ -60,8 +109,17 @@ func updateSaltbox(verbose bool) error {
 	// Validate Saltbox configuration
 	err := validate.AllSaltboxConfigs(verbose)
 	if err != nil {
-		fmt.Println("Saltbox update cancelled")
 		return fmt.Errorf("error validating configs: %w", err)
+	}
+
+	return nil
+}
+
+// updateSaltbox updates the Saltbox repository and configuration.
+func updateSaltbox(verbose bool, branchReset *bool) error {
+	// Check if Saltbox repo exists
+	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
+		return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
 	}
 
 	// Get Saltbox user
@@ -91,7 +149,7 @@ func updateSaltbox(verbose bool) error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(constants.SaltboxRepoPath, "master", saltboxUser, customCommands); err != nil {
+	if err := git.FetchAndReset(constants.SaltboxRepoPath, "master", saltboxUser, customCommands, branchReset); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
@@ -125,7 +183,7 @@ func updateSaltbox(verbose bool) error {
 }
 
 // updateSandbox updates the Sandbox repository and configuration.
-func updateSandbox() error {
+func updateSandbox(branchReset *bool) error {
 	// Check if Sandbox repo exists
 	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
 		return fmt.Errorf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)
@@ -153,7 +211,7 @@ func updateSandbox() error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(constants.SandboxRepoPath, "master", saltboxUser, customCommands); err != nil {
+	if err := git.FetchAndReset(constants.SandboxRepoPath, "master", saltboxUser, customCommands, branchReset); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
