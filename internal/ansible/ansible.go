@@ -47,7 +47,8 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 	if err != nil {
 		// Check if the error is due to context cancellation (signal interruption)
 		if errors.Is(err, context.Canceled) {
-			fmt.Println("Playbook execution was interrupted by user")
+			// Clear the line (removes ^C) and add a blank line before the message
+			fmt.Fprintf(os.Stderr, "\r\033[K\nPlaybook execution was interrupted by user\n")
 			os.Exit(130) // Standard exit code for SIGINT (128 + 2)
 		}
 
@@ -55,7 +56,8 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 		if errors.As(err, &exitErr) {
 			// Check if the exit code indicates the process was killed by a signal (negative exit codes)
 			if exitErr.ExitCode() < 0 {
-				fmt.Println("Playbook execution was interrupted by user")
+				// Clear the line (removes ^C) and add a blank line before the message
+				fmt.Fprintf(os.Stderr, "\r\033[K\nPlaybook execution was interrupted by user\n")
 				os.Exit(130) // Standard exit code for SIGINT (128 + 2)
 			}
 			if !verbose {

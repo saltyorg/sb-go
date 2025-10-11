@@ -104,7 +104,8 @@ func runBenchmark(ctx context.Context) error {
 
 	// Check if context was canceled (user interrupted)
 	if errors.Is(ctx.Err(), context.Canceled) {
-		fmt.Println("\nCommand was interrupted by the user.")
+		// Clear the line (removes ^C) and add a blank line before the message
+		fmt.Fprintf(os.Stderr, "\r\033[K\nCommand was interrupted by the user.\n")
 		return nil
 	}
 
