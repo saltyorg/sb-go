@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -154,16 +155,9 @@ func runMotdCommand(config *motdConfig) {
 		os.Exit(1)
 	}
 
-
 	// Validate banner type if specified
 	if config.bannerType != "" && config.bannerType != "none" {
-		validType := false
-		for _, bType := range motd.AvailableBannerTypes {
-			if config.bannerType == bType {
-				validType = true
-				break
-			}
-		}
+		validType := slices.Contains(motd.AvailableBannerTypes, config.bannerType)
 
 		if !validType {
 			fmt.Println("Error: Invalid banner type specified:", config.bannerType)

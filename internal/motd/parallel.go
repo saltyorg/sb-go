@@ -14,7 +14,7 @@ type InfoProvider func(ctx context.Context, verbose bool) string
 // InfoSource represents a source of system information
 type InfoSource struct {
 	Key      string        // The label for the information (e.g., "Distribution:")
-	Provider interface{}   // The function that retrieves the information (can be string or []string)
+	Provider any           // The function that retrieves the information (can be string or []string)
 	Timeout  time.Duration // How long to wait before timing out
 	Order    int           // Display order for a consistent output
 }

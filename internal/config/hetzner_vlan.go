@@ -25,7 +25,7 @@ type HetznerVLANSection struct {
 type StringOrInt string
 
 // UnmarshalYAML implements custom unmarshalling for StringOrInt.
-func (soi *StringOrInt) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (soi *StringOrInt) UnmarshalYAML(unmarshal func(any) error) error {
 	debugPrintf("DEBUG: StringOrInt.UnmarshalYAML called\n")
 	var s string
 	var i int
@@ -66,7 +66,7 @@ func wholeNumberValidator(fl validator.FieldLevel) bool {
 }
 
 // ValidateHetznerVLANConfig validates the HetznerVLANConfig struct.
-func ValidateHetznerVLANConfig(config *HetznerVLANConfig, inputMap map[string]interface{}) error {
+func ValidateHetznerVLANConfig(config *HetznerVLANConfig, inputMap map[string]any) error {
 	debugPrintf("\nDEBUG: ValidateHetznerVLANConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 	debugPrintf("DEBUG: ValidateHetznerVLANConfig - registering custom validators\n")

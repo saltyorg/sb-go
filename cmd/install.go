@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -82,10 +83,10 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	}
 
 	for _, tag := range parsedTags {
-		if strings.HasPrefix(tag, "mod-") {
-			saltboxModTags = append(saltboxModTags, strings.TrimPrefix(tag, "mod-"))
-		} else if strings.HasPrefix(tag, "sandbox-") {
-			sandboxTags = append(sandboxTags, strings.TrimPrefix(tag, "sandbox-"))
+		if after, ok := strings.CutPrefix(tag, "mod-"); ok {
+			saltboxModTags = append(saltboxModTags, after)
+		} else if after, ok := strings.CutPrefix(tag, "sandbox-"); ok {
+			sandboxTags = append(sandboxTags, after)
 		} else {
 			saltboxTags = append(saltboxTags, tag)
 		}
@@ -217,15 +218,7 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 		if verbosity > 0 {
 			fmt.Printf("DEBUG: Checking tag: %s%s\n", currentPrefix, providedTag)
 		}
-		found := false
-
-		// 1. Check for an exact match in the current repository
-		for _, validTag := range validTags {
-			if providedTag == validTag {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(validTags, providedTag)
 		if found {
 			if verbosity > 0 {
 				fmt.Printf("DEBUG: Exact match found for %s%s\n", currentPrefix, providedTag)
@@ -234,15 +227,12 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 		}
 
 		// 2. Check for an exact match in the *other* repository (the strongest suggestion)
-		for _, otherValidTag := range otherValidTags {
-			if providedTag == otherValidTag {
-				suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s, but '%s%s' exists in %s. Use that instead.", currentPrefix, providedTag, repoName, otherPrefix, providedTag, otherRepoName))
-				if verbosity > 0 {
-					fmt.Printf("DEBUG: Exact match found in other repo for %s%s, suggesting %s%s\n", currentPrefix, providedTag, otherPrefix, providedTag)
-				}
-				found = true // Prevent further checks
-				break
+		if slices.Contains(otherValidTags, providedTag) {
+			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s, but '%s%s' exists in %s. Use that instead.", currentPrefix, providedTag, repoName, otherPrefix, providedTag, otherRepoName))
+			if verbosity > 0 {
+				fmt.Printf("DEBUG: Exact match found in other repo for %s%s, suggesting %s%s\n", currentPrefix, providedTag, otherPrefix, providedTag)
 			}
+			found = true
 		}
 		if found {
 			continue
@@ -326,7 +316,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 			if verbosity > 0 {
 				fmt.Printf("DEBUG: 'tags' key found in cache for %s\n", repoPath)
 			}
-			cachedTags, ok := cachedTagsInterface.([]interface{})
+			cachedTags, ok := cachedTagsInterface.([]any)
 			if ok {
 				if verbosity > 0 {
 					fmt.Printf("DEBUG: Cache is valid type for: %s\n", repoPath)
@@ -422,7 +412,7 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosit
 	}
 
 	// Check if cachedTagsInterface is a slice of interfaces (which is how JSON arrays are typically unmarshalled)
-	cachedTagsSlice, ok := cachedTagsInterface.([]interface{})
+	cachedTagsSlice, ok := cachedTagsInterface.([]any)
 	if ok {
 		if len(cachedTagsSlice) == 0 {
 			if verbosity > 0 {

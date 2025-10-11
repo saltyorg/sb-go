@@ -88,7 +88,7 @@ func rcloneTemplateValidator(fl validator.FieldLevel) bool {
 }
 
 // ValidateSettingsConfig validates the SettingsConfig struct.
-func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]interface{}) error {
+func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]any) error {
 	debugPrintf("\nDEBUG: ValidateSettingsConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 	debugPrintf("DEBUG: ValidateSettingsConfig - registering custom validators\n")

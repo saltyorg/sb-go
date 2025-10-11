@@ -210,7 +210,7 @@ func fetchLogs(service string, reverse bool, cursor string) tea.Cmd {
 		cmd := exec.Command(args[0], args[1:]...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			output = []byte(fmt.Sprintf("Error fetching logs: %v", err))
+			output = fmt.Appendf(nil, "Error fetching logs: %v", err)
 		}
 
 		// Handle potential encoding issues

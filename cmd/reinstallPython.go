@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -154,10 +155,5 @@ func isPkgInstalled(pkgName string) (bool, error) {
 
 // contains checks if a string is in a slice
 func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, item)
 }

@@ -1,6 +1,7 @@
 package validate2
 
 import (
+	"slices"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,13 +22,14 @@ import (
 	"github.com/cloudflare/cloudflare-go/v6/zones"
 	"github.com/saltyorg/sb-go/internal/utils"
 	"golang.org/x/net/publicsuffix"
+	"golang.org/x/sync/errgroup"
 )
 
 // CustomValidator function type for custom validation
-type CustomValidator func(value interface{}, config map[string]interface{}) error
+type CustomValidator func(value any, config map[string]any) error
 
 // AsyncAPIValidator function type for async API validation
-type AsyncAPIValidator func(value interface{}, config map[string]interface{}) error
+type AsyncAPIValidator func(value any, config map[string]any) error
 
 // APIValidationResult holds the result of an async API validation
 type APIValidationResult struct {
@@ -37,7 +39,7 @@ type APIValidationResult struct {
 
 // AsyncValidationContext manages async API validations
 type AsyncValidationContext struct {
-	wg      sync.WaitGroup
+	eg      *errgroup.Group
 	results chan APIValidationResult
 	errors  []error
 	mu      sync.Mutex
@@ -45,26 +47,27 @@ type AsyncValidationContext struct {
 
 // NewAsyncValidationContext creates a new async validation context
 func NewAsyncValidationContext() *AsyncValidationContext {
+	eg := &errgroup.Group{}
 	return &AsyncValidationContext{
+		eg:      eg,
 		results: make(chan APIValidationResult, 10), // Buffer for multiple API validations
 	}
 }
 
 // AddAPIValidation adds an async API validation to be executed
-func (ctx *AsyncValidationContext) AddAPIValidation(name string, validator AsyncAPIValidator, value interface{}, config map[string]interface{}) {
-	ctx.wg.Add(1)
-	go func() {
-		defer ctx.wg.Done()
+func (ctx *AsyncValidationContext) AddAPIValidation(name string, validator AsyncAPIValidator, value any, config map[string]any) {
+	ctx.eg.Go(func() error {
 		err := validator(value, config)
 		ctx.results <- APIValidationResult{Name: name, Error: err}
-	}()
+		return nil // We collect errors via channel, not errgroup's error return
+	})
 }
 
 // Wait waits for all async validations to complete and returns any errors
 func (ctx *AsyncValidationContext) Wait() []error {
 	// Close the results channel when all goroutines are done
 	go func() {
-		ctx.wg.Wait()
+		ctx.eg.Wait()
 		close(ctx.results)
 	}()
 
@@ -106,7 +109,7 @@ var asyncAPIValidators = map[string]AsyncAPIValidator{
 }
 
 // validateSSHKeyOrURL validates SSH public keys or URLs
-func validateSSHKeyOrURL(value interface{}, _ map[string]interface{}) error {
+func validateSSHKeyOrURL(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok || str == "" {
 		return nil // Optional field
@@ -130,7 +133,7 @@ func validateSSHKeyOrURL(value interface{}, _ map[string]interface{}) error {
 }
 
 // validatePasswordStrength validates password strength and warns about weak passwords
-func validatePasswordStrength(value interface{}, _ map[string]interface{}) error {
+func validatePasswordStrength(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("password must be a string")
@@ -151,8 +154,8 @@ func validatePasswordStrength(value interface{}, _ map[string]interface{}) error
 }
 
 // validateCloudflareConfigSync validates Cloudflare configuration structure only (no API calls)
-func validateCloudflareConfigSync(value interface{}, config map[string]interface{}) error {
-	cfConfig, ok := value.(map[string]interface{})
+func validateCloudflareConfigSync(value any, config map[string]any) error {
+	cfConfig, ok := value.(map[string]any)
 	if !ok {
 		return fmt.Errorf("cloudflare config must be an object")
 	}
@@ -172,7 +175,7 @@ func validateCloudflareConfigSync(value interface{}, config map[string]interface
 	}
 
 	// Validate that user config exists for async validation
-	userConfig, ok := config["user"].(map[string]interface{})
+	userConfig, ok := config["user"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("user config is required for Cloudflare validation")
 	}
@@ -188,11 +191,11 @@ func validateCloudflareConfigSync(value interface{}, config map[string]interface
 }
 
 // validateCloudflareConfigAsync performs actual Cloudflare API validation
-func validateCloudflareConfigAsync(value interface{}, config map[string]interface{}) error {
+func validateCloudflareConfigAsync(value any, config map[string]any) error {
 	startTime := time.Now()
 	debugPrintf("DEBUG: validateCloudflareConfigAsync starting at %v\n", startTime)
 
-	cfConfig, ok := value.(map[string]interface{})
+	cfConfig, ok := value.(map[string]any)
 	if !ok {
 		return fmt.Errorf("cloudflare config must be an object")
 	}
@@ -211,7 +214,7 @@ func validateCloudflareConfigAsync(value interface{}, config map[string]interfac
 	}
 
 	// Get domain from user config for validation
-	userConfig, ok := config["user"].(map[string]interface{})
+	userConfig, ok := config["user"].(map[string]any)
 	if !ok {
 		debugPrintf("DEBUG: validateCloudflareConfigAsync completed in %v (error - no user config)\n", time.Since(startTime))
 		return fmt.Errorf("user config is required for Cloudflare validation")
@@ -238,8 +241,8 @@ func validateCloudflareConfigAsync(value interface{}, config map[string]interfac
 }
 
 // validateDockerhubConfigSync validates Docker Hub configuration structure only (no API calls)
-func validateDockerhubConfigSync(value interface{}, _ map[string]interface{}) error {
-	dhConfig, ok := value.(map[string]interface{})
+func validateDockerhubConfigSync(value any, _ map[string]any) error {
+	dhConfig, ok := value.(map[string]any)
 	if !ok {
 		return fmt.Errorf("dockerhub config must be an object")
 	}
@@ -264,11 +267,11 @@ func validateDockerhubConfigSync(value interface{}, _ map[string]interface{}) er
 }
 
 // validateDockerhubConfigAsync performs actual Docker Hub authentication test
-func validateDockerhubConfigAsync(value interface{}, _ map[string]interface{}) error {
+func validateDockerhubConfigAsync(value any, _ map[string]any) error {
 	startTime := time.Now()
 	debugPrintf("DEBUG: validateDockerhubConfigAsync starting at %v\n", startTime)
 
-	dhConfig, ok := value.(map[string]interface{})
+	dhConfig, ok := value.(map[string]any)
 	if !ok {
 		return fmt.Errorf("dockerhub config must be an object")
 	}
@@ -301,14 +304,14 @@ func validateDockerhubConfigAsync(value interface{}, _ map[string]interface{}) e
 }
 
 // validateAnsibleBool validates Ansible boolean values
-func validateAnsibleBool(value interface{}, _ map[string]interface{}) error {
+func validateAnsibleBool(value any, _ map[string]any) error {
 	debugPrintf("DEBUG: validateAnsibleBool called with value: %v (type: %T)\n", value, value)
 
 	return validateAnsibleBoolValue(value)
 }
 
 // validateAnsibleBoolValue validates a single Ansible boolean value (extracted for reuse)
-func validateAnsibleBoolValue(value interface{}) error {
+func validateAnsibleBoolValue(value any) error {
 	var str string
 	switch v := value.(type) {
 	case string:
@@ -334,7 +337,7 @@ func validateAnsibleBoolValue(value interface{}) error {
 }
 
 // validateTimezone validates timezone strings or "auto"
-func validateTimezone(value interface{}, _ map[string]interface{}) error {
+func validateTimezone(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("timezone must be a string")
@@ -355,7 +358,7 @@ func validateTimezone(value interface{}, _ map[string]interface{}) error {
 }
 
 // validateCronTime validates Ansible cron special time values
-func validateCronTime(value interface{}, _ map[string]interface{}) error {
+func validateCronTime(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("cron time must be a string")
@@ -373,7 +376,7 @@ func validateCronTime(value interface{}, _ map[string]interface{}) error {
 }
 
 // validateDirectoryPath validates directory paths
-func validateDirectoryPath(value interface{}, _ map[string]interface{}) error {
+func validateDirectoryPath(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("directory path must be a string")
@@ -400,7 +403,7 @@ func validateDirectoryPath(value interface{}, _ map[string]interface{}) error {
 }
 
 // validateRcloneTemplate validates rclone template types
-func validateRcloneTemplate(value interface{}, _ map[string]interface{}) error {
+func validateRcloneTemplate(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("rclone template must be a string")
@@ -426,7 +429,7 @@ func validateRcloneTemplate(value interface{}, _ map[string]interface{}) error {
 }
 
 // validateRcloneRemote validates that an rclone remote exists
-func validateRcloneRemote(value interface{}, _ map[string]interface{}) error {
+func validateRcloneRemote(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("rclone remote must be a string")
@@ -498,13 +501,7 @@ func isValidSSHKey(key string) bool {
 		return false
 	}
 
-	for _, keyType := range validKeyTypes {
-		if keyParts[0] == keyType {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(validKeyTypes, keyParts[0])
 }
 
 // validateCloudflareCredentials performs actual Cloudflare API validation
@@ -611,7 +608,7 @@ func validateDockerhubCredentials(username, token string) error {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		var respBody map[string]interface{}
+		var respBody map[string]any
 		if json.NewDecoder(res.Body).Decode(&respBody) == nil {
 			if message, ok := respBody["message"].(string); ok {
 				return fmt.Errorf("docker hub authentication failed (HTTP %d): %s", res.StatusCode, message)
@@ -740,7 +737,7 @@ func isAlphanumeric(char rune) bool {
 }
 
 // validateSubdomain validates subdomain format and characters
-func validateSubdomain(value interface{}, _ map[string]interface{}) error {
+func validateSubdomain(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("subdomain must be a string")
@@ -756,7 +753,7 @@ func validateSubdomain(value interface{}, _ map[string]interface{}) error {
 }
 
 // validateHostnameStrict validates hostname format and characters with strict RFC compliance
-func validateHostnameStrict(value interface{}, _ map[string]interface{}) error {
+func validateHostnameStrict(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok {
 		return fmt.Errorf("hostname must be a string")
@@ -781,7 +778,7 @@ func validateHostnameStrict(value interface{}, _ map[string]interface{}) error {
 }
 
 // validateWholeNumber validates that a value is a whole number (integer)
-func validateWholeNumber(value interface{}, _ map[string]interface{}) error {
+func validateWholeNumber(value any, _ map[string]any) error {
 	debugPrintf("DEBUG: validateWholeNumber called with value: %v (type: %T)\n", value, value)
 
 	switch v := value.(type) {
@@ -810,7 +807,7 @@ func validateWholeNumber(value interface{}, _ map[string]interface{}) error {
 }
 
 // validateURL validates URL format and characters
-func validateURL(value interface{}, _ map[string]interface{}) error {
+func validateURL(value any, _ map[string]any) error {
 	str, ok := value.(string)
 	if !ok || str == "" {
 		return nil // Optional field
@@ -832,7 +829,7 @@ func validateURL(value interface{}, _ map[string]interface{}) error {
 }
 
 // validatePositiveNumber validates that a number is positive
-func validatePositiveNumber(value interface{}, _ map[string]interface{}) error {
+func validatePositiveNumber(value any, _ map[string]any) error {
 	debugPrintf("DEBUG: validatePositiveNumber called with value: %v (type: %T)\n", value, value)
 
 	switch v := value.(type) {

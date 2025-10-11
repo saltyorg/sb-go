@@ -29,7 +29,7 @@ type EmbySessionInfo struct {
 		PlayMethod string `json:"PlayMethod"`
 		IsPaused   bool   `json:"IsPaused"`
 	} `json:"PlayState"`
-	NowPlayingItem  map[string]interface{} `json:"NowPlayingItem,omitempty"`
+	NowPlayingItem  map[string]any `json:"NowPlayingItem,omitempty"`
 	TranscodingInfo struct {
 		IsVideoDirect bool `json:"IsVideoDirect"`
 		IsAudioDirect bool `json:"IsAudioDirect"`

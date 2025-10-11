@@ -16,7 +16,7 @@ type SchemaRule struct {
 	Format          string                 `yaml:"format"`
 	MinLength       int                    `yaml:"min_length"`
 	MaxLength       int                    `yaml:"max_length"`
-	NotEquals       interface{}            `yaml:"not_equals"`
+	NotEquals       any                    `yaml:"not_equals"`
 	RequiredWith    []string               `yaml:"required_with"`
 	CustomValidator string                 `yaml:"custom_validator"`
 	Properties      map[string]*SchemaRule `yaml:"properties"`
@@ -36,7 +36,7 @@ func SetVerbose(v bool) {
 }
 
 // debugPrintf prints debug messages in verbose mode
-func debugPrintf(format string, a ...interface{}) {
+func debugPrintf(format string, a ...any) {
 	if verboseMode {
 		fmt.Printf(format, a...)
 	}
@@ -61,25 +61,25 @@ func LoadSchema(schemaPath string) (*Schema, error) {
 }
 
 // Validate validates a configuration against the schema
-func (s *Schema) Validate(config map[string]interface{}) error {
+func (s *Schema) Validate(config map[string]any) error {
 	debugPrintf("DEBUG: Schema.Validate called with config keys: %v\n", getKeys(config))
 	return s.validateObject(config, s.Rules, "")
 }
 
 // ValidateStructure performs lightweight structure validation (checks for unknown fields, required fields, but skips type checking)
-func (s *Schema) ValidateStructure(config map[string]interface{}) error {
+func (s *Schema) ValidateStructure(config map[string]any) error {
 	debugPrintf("DEBUG: Schema.ValidateStructure called with config keys: %v\n", getKeys(config))
 	return s.validateObjectStructure(config, s.Rules, "")
 }
 
 // ValidateWithTypeFlexibility performs full validation including custom validators but ignores type mismatches
-func (s *Schema) ValidateWithTypeFlexibility(config map[string]interface{}) error {
+func (s *Schema) ValidateWithTypeFlexibility(config map[string]any) error {
 	debugPrintf("DEBUG: Schema.ValidateWithTypeFlexibility called with config keys: %v\n", getKeys(config))
 	return s.validateObjectWithTypeFlexibility(config, s.Rules, "", nil)
 }
 
 // ValidateWithTypeFlexibilityAsync performs validation with async API checks
-func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]interface{}) (error, *AsyncValidationContext) {
+func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]any) (error, *AsyncValidationContext) {
 	debugPrintf("DEBUG: Schema.ValidateWithTypeFlexibilityAsync called with config keys: %v\n", getKeys(config))
 	asyncCtx := NewAsyncValidationContext()
 	err := s.validateObjectWithTypeFlexibility(config, s.Rules, "", asyncCtx)
@@ -87,7 +87,7 @@ func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]interface{})
 }
 
 // validateObject validates an object against schema rules
-func (s *Schema) validateObject(obj map[string]interface{}, rules map[string]*SchemaRule, path string) error {
+func (s *Schema) validateObject(obj map[string]any, rules map[string]*SchemaRule, path string) error {
 	debugPrintf("DEBUG: validateObject called with path: '%s', rules: %v\n", path, getKeys(rules))
 
 	// Check required fields
@@ -121,7 +121,7 @@ func (s *Schema) validateObject(obj map[string]interface{}, rules map[string]*Sc
 }
 
 // validateObjectStructure validates object structure without strict type checking
-func (s *Schema) validateObjectStructure(obj map[string]interface{}, rules map[string]*SchemaRule, path string) error {
+func (s *Schema) validateObjectStructure(obj map[string]any, rules map[string]*SchemaRule, path string) error {
 	debugPrintf("DEBUG: validateObjectStructure called with path: '%s', rules: %v\n", path, getKeys(rules))
 
 	// Check for unknown fields
@@ -141,7 +141,7 @@ func (s *Schema) validateObjectStructure(obj map[string]interface{}, rules map[s
 		}
 
 		if exists && rule.Type == "object" && rule.Properties != nil {
-			if objMap, ok := value.(map[string]interface{}); ok {
+			if objMap, ok := value.(map[string]any); ok {
 				if err := s.validateObjectStructure(objMap, rule.Properties, fieldPath); err != nil {
 					return err
 				}
@@ -153,7 +153,7 @@ func (s *Schema) validateObjectStructure(obj map[string]interface{}, rules map[s
 }
 
 // validateObjectWithTypeFlexibility validates an object but skips type checking while running custom validators
-func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]interface{}, rules map[string]*SchemaRule, path string, asyncCtx *AsyncValidationContext) error {
+func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]any, rules map[string]*SchemaRule, path string, asyncCtx *AsyncValidationContext) error {
 	debugPrintf("DEBUG: validateObjectWithTypeFlexibility called with path: '%s', rules: %v\n", path, getKeys(rules))
 
 	// Check required fields
@@ -187,7 +187,7 @@ func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]interface{}, r
 }
 
 // validateFieldWithTypeFlexibility validates a field but skips type checking
-func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *SchemaRule, path string, parentConfig map[string]interface{}, asyncCtx *AsyncValidationContext) error {
+func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, path string, parentConfig map[string]any, asyncCtx *AsyncValidationContext) error {
 	debugPrintf("DEBUG: validateFieldWithTypeFlexibility called for '%s' with value type: %T\n", path, value)
 
 	// Not equals validation
@@ -243,14 +243,14 @@ func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *Schem
 
 	// Nested object validation
 	if rule.Type == "object" && rule.Properties != nil {
-		if objMap, ok := value.(map[string]interface{}); ok {
+		if objMap, ok := value.(map[string]any); ok {
 			return s.validateObjectWithTypeFlexibility(objMap, rule.Properties, path, asyncCtx)
 		}
 	}
 
 	// Array validation
 	if rule.Type == "array" && rule.Items != nil {
-		if arr, ok := value.([]interface{}); ok {
+		if arr, ok := value.([]any); ok {
 			for i, item := range arr {
 				itemPath := fmt.Sprintf("%s[%d]", path, i)
 				if err := s.validateFieldWithTypeFlexibility(item, rule.Items, itemPath, parentConfig, asyncCtx); err != nil {
@@ -264,7 +264,7 @@ func (s *Schema) validateFieldWithTypeFlexibility(value interface{}, rule *Schem
 }
 
 // validateField validates a single field value
-func (s *Schema) validateField(value interface{}, rule *SchemaRule, path string, parentConfig map[string]interface{}) error {
+func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentConfig map[string]any) error {
 	debugPrintf("DEBUG: validateField called for '%s' with value type: %T\n", path, value)
 
 	// Basic type validation
@@ -365,14 +365,14 @@ func (s *Schema) validateField(value interface{}, rule *SchemaRule, path string,
 
 	// Nested object validation
 	if rule.Type == "object" && rule.Properties != nil {
-		if objMap, ok := value.(map[string]interface{}); ok {
+		if objMap, ok := value.(map[string]any); ok {
 			return s.validateObject(objMap, rule.Properties, path)
 		}
 	}
 
 	// Array validation
 	if rule.Type == "array" && rule.Items != nil {
-		if arr, ok := value.([]interface{}); ok {
+		if arr, ok := value.([]any); ok {
 			for i, item := range arr {
 				itemPath := fmt.Sprintf("%s[%d]", path, i)
 				if err := s.validateField(item, rule.Items, itemPath, parentConfig); err != nil {
@@ -386,7 +386,7 @@ func (s *Schema) validateField(value interface{}, rule *SchemaRule, path string,
 }
 
 // validateType validates the basic type of a value
-func (s *Schema) validateType(value interface{}, rule *SchemaRule, path string) error {
+func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 	if rule.Type == "" {
 		return nil // No type constraint
 	}
@@ -463,7 +463,7 @@ func (s *Schema) validateType(value interface{}, rule *SchemaRule, path string) 
 }
 
 // validateFormat validates the format of a string value
-func (s *Schema) validateFormat(value interface{}, rule *SchemaRule, path string) error {
+func (s *Schema) validateFormat(value any, rule *SchemaRule, path string) error {
 	if rule.Format == "" {
 		return nil
 	}
@@ -496,7 +496,7 @@ func (s *Schema) validateFormat(value interface{}, rule *SchemaRule, path string
 }
 
 // validateLength validates string length constraints
-func (s *Schema) validateLength(value interface{}, rule *SchemaRule, path string) error {
+func (s *Schema) validateLength(value any, rule *SchemaRule, path string) error {
 	str, ok := value.(string)
 	if !ok {
 		return nil // Length only applies to strings
@@ -517,7 +517,7 @@ func (s *Schema) validateLength(value interface{}, rule *SchemaRule, path string
 }
 
 // validateNotEquals validates that value doesn't equal a forbidden value
-func (s *Schema) validateNotEquals(value interface{}, rule *SchemaRule, path string) error {
+func (s *Schema) validateNotEquals(value any, rule *SchemaRule, path string) error {
 	if rule.NotEquals == nil {
 		return nil
 	}
@@ -532,7 +532,7 @@ func (s *Schema) validateNotEquals(value interface{}, rule *SchemaRule, path str
 }
 
 // validateRequiredWith validates conditional requirements
-func (s *Schema) validateRequiredWith(value interface{}, rule *SchemaRule, path string, parentConfig map[string]interface{}) error {
+func (s *Schema) validateRequiredWith(value any, rule *SchemaRule, path string, parentConfig map[string]any) error {
 	if len(rule.RequiredWith) == 0 {
 		return nil
 	}
@@ -567,9 +567,9 @@ func appendPath(basePath, fieldName string) string {
 	return basePath + "." + fieldName
 }
 
-func getKeys(m interface{}) []string {
+func getKeys(m any) []string {
 	switch v := m.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		keys := make([]string, 0, len(v))
 		for k := range v {
 			keys = append(keys, k)
@@ -586,7 +586,7 @@ func getKeys(m interface{}) []string {
 	}
 }
 
-func getValueType(value interface{}) string {
+func getValueType(value any) string {
 	if value == nil {
 		return "null"
 	}
@@ -600,9 +600,9 @@ func getValueType(value interface{}) string {
 		return "float"
 	case bool:
 		return "boolean"
-	case []interface{}:
+	case []any:
 		return "array"
-	case map[string]interface{}:
+	case map[string]any:
 		return "object"
 	default:
 		return fmt.Sprintf("%T", value)
@@ -633,7 +633,7 @@ func isValidURL(url string) bool {
 }
 
 // isEmptyValue checks if a value is considered empty (nil, empty string, etc.)
-func isEmptyValue(value interface{}) bool {
+func isEmptyValue(value any) bool {
 	if value == nil {
 		return true
 	}

@@ -60,7 +60,7 @@ type RsyncConfig struct {
 }
 
 // ValidateBackupConfig validates the BackupConfig struct.
-func ValidateBackupConfig(config *BackupConfig, inputMap map[string]interface{}) error {
+func ValidateBackupConfig(config *BackupConfig, inputMap map[string]any) error {
 	debugPrintf("\nDEBUG: ValidateBackupConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 

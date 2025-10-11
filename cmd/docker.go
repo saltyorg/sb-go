@@ -127,7 +127,7 @@ func waitForJobCompletion(jobID string) (bool, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	// Poll the job status endpoint.
-	for i := 0; i < maxRetries; i++ {
+	for range maxRetries {
 		statusResp, err := getJobStatus(url, client)
 		if err != nil {
 			return false, err

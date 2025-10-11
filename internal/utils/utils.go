@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -43,13 +44,13 @@ func GetSaltboxUser() (string, error) {
 		return "", fmt.Errorf("failed to read accounts.yml: %w", err)
 	}
 
-	var accounts map[string]interface{}
+	var accounts map[string]any
 	err = yaml.Unmarshal(data, &accounts)
 	if err != nil {
 		return "", fmt.Errorf("failed to unmarshal accounts.yml: %w", err)
 	}
 
-	user, ok := accounts["user"].(map[string]interface{})
+	user, ok := accounts["user"].(map[string]any)
 	if !ok {
 		return "", fmt.Errorf("user section not found in accounts.yml")
 	}
@@ -71,10 +72,8 @@ func CheckUbuntuSupport() error {
 
 	osRelease, _ := ubuntu.ParseOSRelease("/etc/os-release")
 	versionID := osRelease["VERSION_ID"]
-	for _, v := range supportedVersions {
-		if versionID == v {
-			return nil // Supported version found
-		}
+	if slices.Contains(supportedVersions, versionID) {
+		return nil // Supported version found
 	}
 	return fmt.Errorf("warning: Could not determine specific support level after successful OS check")
 }

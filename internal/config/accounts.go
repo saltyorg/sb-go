@@ -109,7 +109,7 @@ func customSSHKeyOrURLValidator(fl validator.FieldLevel) bool {
 }
 
 // ValidateConfig validates the Config struct.
-func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
+func ValidateConfig(config *Config, inputMap map[string]any) error {
 	debugPrintf("\nDEBUG: ValidateConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 
@@ -191,7 +191,7 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 	}
 
 	// --- 2. Check for extra fields in the "user" section ---
-	if userMap, ok := inputMap["user"].(map[string]interface{}); ok {
+	if userMap, ok := inputMap["user"].(map[string]any); ok {
 		debugPrintf("DEBUG: ValidateConfig - found 'user' section in inputMap: %+v\n", userMap)
 		userType := reflect.TypeOf(UserConfig{})
 		for key := range userMap {
@@ -227,7 +227,7 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 		// If we get here, the apprise key exists but could be empty or nil, which is fine
 	}
 
-	if cfMap, ok := inputMap["cloudflare"].(map[string]interface{}); ok {
+	if cfMap, ok := inputMap["cloudflare"].(map[string]any); ok {
 		debugPrintf("DEBUG: ValidateConfig - found 'cloudflare' section in inputMap: %+v\n", cfMap)
 		cfType := reflect.TypeOf(CloudflareConfig{})
 		for key := range cfMap {
@@ -249,7 +249,7 @@ func ValidateConfig(config *Config, inputMap map[string]interface{}) error {
 		}
 	}
 
-	if dhMap, ok := inputMap["dockerhub"].(map[string]interface{}); ok {
+	if dhMap, ok := inputMap["dockerhub"].(map[string]any); ok {
 		debugPrintf("DEBUG: ValidateConfig - found 'dockerhub' section in inputMap: %+v\n", dhMap)
 		dhType := reflect.TypeOf(DockerhubConfig{})
 		for key := range dhMap {
@@ -380,7 +380,7 @@ func validateCloudflare(apiKey, email, domain string) error {
 
 			// Check for incompatible SSL modes using the typed constants
 			if sslValue == zones.SettingGetResponseZonesSchemasSSLValueFlexible ||
-			   sslValue == zones.SettingGetResponseZonesSchemasSSLValueOff {
+				sslValue == zones.SettingGetResponseZonesSchemasSSLValueOff {
 				err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
 					"  This SSL/TLS mode is not compatible with Saltbox.\n"+
 					"  With '%s' mode, connections will fail or behave unexpectedly.\n\n"+
@@ -458,7 +458,7 @@ func validateDockerHub(username, token string) error {
 
 	if res.StatusCode != http.StatusOK {
 		// Attempt to decode the response body to give a better error message.
-		var respBody map[string]interface{}
+		var respBody map[string]any
 		if json.NewDecoder(res.Body).Decode(&respBody) == nil { //Decode and check for errors
 			debugPrintf("DEBUG: validateDockerHub - decoded response body: %+v\n", respBody)
 			if message, ok := respBody["message"].(string); ok { //Check if a message exists in the body

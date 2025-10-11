@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -36,10 +37,8 @@ func CheckSupport(supportedVersions []string) error {
 		return fmt.Errorf("a Ubuntu version ID not found in /etc/os-release")
 	}
 
-	for _, v := range supportedVersions {
-		if versionID == v {
-			return nil // Supported version
-		}
+	if slices.Contains(supportedVersions, versionID) {
+		return nil // Supported version
 	}
 
 	return fmt.Errorf("unsupported Ubuntu version (detected version: %s, supported versions: %s)",

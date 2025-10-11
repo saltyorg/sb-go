@@ -13,7 +13,7 @@ import (
 )
 
 // validationFunc defines a function type that validates a config struct
-type validationFunc[T any] func(config *T, input map[string]interface{}) error
+type validationFunc[T any] func(config *T, input map[string]any) error
 
 // AllSaltboxConfigs validates all Saltbox configuration files
 // verbose: Enable verbose output mode
@@ -99,7 +99,7 @@ func validateConfigFile[T any](filePath string, configData *T, validateFn valida
 		return fmt.Errorf("error reading config file (%s): %w", filePath, err)
 	}
 
-	var inputMap map[string]interface{}
+	var inputMap map[string]any
 	if err := yaml.Unmarshal(configFile, &inputMap); err != nil {
 		return fmt.Errorf("error unmarshaling config file (%s): %w", filePath, err)
 	}

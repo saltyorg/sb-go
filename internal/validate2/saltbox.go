@@ -136,7 +136,7 @@ func validateConfigWithSchema(configPath, schemaPath string) error {
 	}
 
 	// Load into generic map for structure checking
-	var inputMap map[string]interface{}
+	var inputMap map[string]any
 	if err := yaml.Unmarshal(configFile, &inputMap); err != nil {
 		return fmt.Errorf("error unmarshaling config file (%s): %w", configPath, err)
 	}

@@ -124,7 +124,7 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 
 			if commit == currentCommit {
 				// Cached tags are valid; create a parser function that returns them directly.
-				cachedTags, tagsOk := repoCache["tags"].([]interface{})
+				cachedTags, tagsOk := repoCache["tags"].([]any)
 				if tagsOk {
 					stringTags := make([]string, len(cachedTags))
 					for i, tag := range cachedTags {
@@ -170,7 +170,7 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 			return false, err
 		}
 
-		repoCache := map[string]interface{}{
+		repoCache := map[string]any{
 			"commit": currentCommit,
 			"tags":   tags,
 		}
@@ -198,7 +198,7 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 			return true, err
 		}
 
-		repoCache := map[string]interface{}{
+		repoCache := map[string]any{
 			"commit": currentCommit,
 			"tags":   tags,
 		}

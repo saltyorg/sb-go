@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -39,13 +40,7 @@ func handleInventory() error {
 		editor = defaultEditor
 	}
 
-	isApproved := false
-	for _, approvedEditor := range approvedEditors {
-		if editor == approvedEditor {
-			isApproved = true
-			break
-		}
-	}
+	isApproved := slices.Contains(approvedEditors, editor)
 
 	if !isApproved {
 		if editor == defaultEditor {

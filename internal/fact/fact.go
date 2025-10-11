@@ -23,10 +23,9 @@ func retryWithBackoff(operation func() error, maxRetries int, baseDelay time.Dur
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
 			// Calculate delay with exponential backoff (2^attempt * baseDelay)
-			delay := time.Duration(1<<uint(attempt-1)) * baseDelay
-			if delay > 30*time.Second {
-				delay = 30 * time.Second // Cap maximum delay at 30 seconds
-			}
+			delay := min(time.Duration(1<<uint(attempt-1))*baseDelay,
+				// Cap maximum delay at 30 seconds
+				30*time.Second)
 			time.Sleep(delay)
 		}
 
@@ -171,7 +170,7 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 				}
 				needsUpdate = true
 			} else {
-				var currentData map[string]interface{}
+				var currentData map[string]any
 				if err = json.Unmarshal(output, &currentData); err != nil {
 					if err := spinners.RunWarningSpinner("Failed to parse current saltbox.fact output. Proceeding with update."); err != nil {
 						return err

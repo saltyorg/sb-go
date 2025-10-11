@@ -144,9 +144,9 @@ func GetLastLogin() string {
 
 					// Find the duration which is in parentheses
 					for i, field := range fields {
-						if strings.HasPrefix(field, "(") {
+						if after, ok := strings.CutPrefix(field, "("); ok {
 							// Start building duration from this field
-							duration = strings.TrimPrefix(field, "(")
+							duration = after
 
 							// May need to join with the next field if it's a multipart duration
 							if !strings.HasSuffix(duration, ")") && i+1 < len(fields) {
@@ -260,10 +260,7 @@ func GetProcessCount() string {
 	if psOutput != "Not available" {
 		lines := strings.Split(psOutput, "\n")
 		// Subtract 1 for the header line
-		count := len(lines) - 1
-		if count <= 0 {
-			count = 0
-		}
+		count := max(len(lines)-1, 0)
 		// Color the process count
 		coloredCount := ValueStyle.Render(fmt.Sprintf("%d", count))
 		return fmt.Sprintf("%s running processes", coloredCount)
@@ -649,8 +646,8 @@ func GetGpuInfo() string {
 	// Use lspci to detect GPUs (works for NVIDIA, AMD, Intel, etc.)
 	lspciOutput := ExecCommand("lspci")
 	if lspciOutput != "Not available" {
-		lines := strings.Split(lspciOutput, "\n")
-		for _, line := range lines {
+		lines := strings.SplitSeq(lspciOutput, "\n")
+		for line := range lines {
 			// Look for VGA compatible controller or 3D controller
 			if strings.Contains(line, "VGA compatible controller") ||
 				strings.Contains(line, "3D controller") ||

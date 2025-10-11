@@ -12,7 +12,7 @@ import (
 // It maintains an in-memory map (data) protected by a read-write mutex (mu)
 // and saves the cache contents to a file (file) for persistence.
 type Cache struct {
-	data map[string]interface{}
+	data map[string]any
 	mu   sync.RWMutex
 	file string
 }
@@ -24,7 +24,7 @@ type Cache struct {
 func NewCache() (*Cache, error) {
 	filePath := constants.SaltboxCacheFile
 	c := &Cache{
-		data: make(map[string]interface{}),
+		data: make(map[string]any),
 		file: filePath,
 	}
 	if err := c.load(); err != nil {
@@ -35,17 +35,17 @@ func NewCache() (*Cache, error) {
 
 // GetRepoCache retrieves cached data for a specific repository, identified by repoPath.
 // It returns the repository's cache data (as a map) and a boolean indicating whether the cache exists.
-func (c *Cache) GetRepoCache(repoPath string) (map[string]interface{}, bool) {
+func (c *Cache) GetRepoCache(repoPath string) (map[string]any, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	repoCache, ok := c.data[repoPath].(map[string]interface{})
+	repoCache, ok := c.data[repoPath].(map[string]any)
 	return repoCache, ok
 }
 
 // SetRepoCache updates the cache for a specific repository with new data.
 // It locks the cache for writing, updates the repository's entry, and then saves the entire cache to the file.
-func (c *Cache) SetRepoCache(repoPath string, repoCache map[string]interface{}) {
+func (c *Cache) SetRepoCache(repoPath string, repoCache map[string]any) {
 	c.mu.Lock()
 	c.data[repoPath] = repoCache
 	c.mu.Unlock()
@@ -61,7 +61,7 @@ func (c *Cache) CheckCache(repoPath string, tags []string) (bool, []string) {
 		return true, []string{}
 	}
 
-	cachedTags, ok := repoCache["tags"].([]interface{})
+	cachedTags, ok := repoCache["tags"].([]any)
 	if !ok {
 		return true, []string{}
 	}

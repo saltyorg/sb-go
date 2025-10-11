@@ -71,7 +71,7 @@ type SubdomainsConfig struct {
 type AnsibleBool string
 
 // UnmarshalYAML implements custom unmarshalling for AnsibleBool.
-func (a *AnsibleBool) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (a *AnsibleBool) UnmarshalYAML(unmarshal func(any) error) error {
 	debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML called\n")
 	var s string
 	if err := unmarshal(&s); err != nil {
@@ -93,7 +93,7 @@ func (a *AnsibleBool) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // ValidateAdvSettingsConfig validates the AdvSettingsConfig struct.
-func ValidateAdvSettingsConfig(config *AdvSettingsConfig, inputMap map[string]interface{}) error {
+func ValidateAdvSettingsConfig(config *AdvSettingsConfig, inputMap map[string]any) error {
 	debugPrintf("\nDEBUG: ValidateAdvSettingsConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 

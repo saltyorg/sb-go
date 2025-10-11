@@ -17,19 +17,19 @@ func SetVerbose(v bool) {
 }
 
 // debugPrintf prints a debug message if verbose mode is enabled.
-func debugPrintf(format string, a ...interface{}) {
+func debugPrintf(format string, a ...any) {
 	if verboseMode {
 		fmt.Printf(format, a...)
 	}
 }
 
 // checkExtraFields recursively checks for extra fields in nested maps AND slices.
-func checkExtraFields(inputMap map[string]interface{}, config interface{}) error {
+func checkExtraFields(inputMap map[string]any, config any) error {
 	return checkExtraFieldsInternal(inputMap, config, "")
 }
 
 // checkExtraFieldsInternal is a helper function that tracks the context information.
-func checkExtraFieldsInternal(inputMap map[string]interface{}, config interface{}, context string) error {
+func checkExtraFieldsInternal(inputMap map[string]any, config any, context string) error {
 	debugPrintf("\nDEBUG: checkExtraFields called with inputMap: %+v, config type: %T\n", inputMap, config)
 
 	configValue := reflect.ValueOf(config).Elem()
@@ -54,7 +54,7 @@ func checkExtraFieldsInternal(inputMap map[string]interface{}, config interface{
 			}
 
 			switch v := value.(type) {
-			case map[string]interface{}:
+			case map[string]any:
 				debugPrintf("DEBUG: Field '%s' is a map, recursing...\n", yamlKey)
 				nestedFieldValue := configValue.Field(i)
 				if nestedFieldValue.Kind() == reflect.Struct {
@@ -64,7 +64,7 @@ func checkExtraFieldsInternal(inputMap map[string]interface{}, config interface{
 				} else {
 					debugPrintf("DEBUG: Field '%s' is a map, but struct field is not a struct. Skipping recursion.\n", yamlKey)
 				}
-			case []interface{}:
+			case []any:
 				debugPrintf("DEBUG: Field '%s' is a slice\n", yamlKey)
 				nestedFieldValue := configValue.Field(i)
 				if nestedFieldValue.Kind() == reflect.Slice {
@@ -77,7 +77,7 @@ func checkExtraFieldsInternal(inputMap map[string]interface{}, config interface{
 							// For array elements, include the index in the context
 							elementContext := fmt.Sprintf("%s[%d]", currentContext, j)
 
-							if elementMap, ok := sliceElement.(map[string]interface{}); ok {
+							if elementMap, ok := sliceElement.(map[string]any); ok {
 								if elementType.Kind() == reflect.Ptr {
 									newElement := reflect.New(elementType.Elem()).Interface() // Create a new instance
 									if err := checkExtraFieldsInternal(elementMap, newElement, elementContext); err != nil {

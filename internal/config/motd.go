@@ -85,7 +85,7 @@ func LoadConfig(configPath string) (*MOTDConfig, error) {
 }
 
 // ValidateMOTDConfig validates the MOTD configuration
-func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]interface{}) error {
+func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]any) error {
 	debugPrintf("\nDEBUG: ValidateMOTDConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
 	validate := validator.New()
 

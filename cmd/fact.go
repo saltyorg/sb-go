@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -214,7 +215,7 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 
 // sortStrings performs a simple bubble sort on a string slice
 func sortStrings(items []string) {
-	for i := 0; i < len(items); i++ {
+	for i := range items {
 		for j := i + 1; j < len(items); j++ {
 			if items[i] > items[j] {
 				items[i], items[j] = items[j], items[i]
@@ -337,9 +338,7 @@ func loadFacts(filePath, instance string, defaults map[string]string) (map[strin
 	facts := make(map[string]string)
 
 	// Copy defaults into facts
-	for key, value := range defaults {
-		facts[key] = value
-	}
+	maps.Copy(facts, defaults)
 
 	// Check if the file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {

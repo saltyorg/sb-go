@@ -29,9 +29,9 @@ type NzbgetInfo struct {
 
 // jsonRPCRequest defines the structure for a JSON-RPC request
 type jsonRPCRequest struct {
-	Method string        `json:"method"`
-	Params []interface{} `json:"params"`
-	ID     int           `json:"id"`
+	Method string `json:"method"`
+	Params []any  `json:"params"`
+	ID     int    `json:"id"`
 }
 
 // statusResponse defines the structure for the result of the "status" method
@@ -129,7 +129,7 @@ func GetNzbgetInfo(verbose bool) string {
 }
 
 // callNzbgetAPI is a helper to perform JSON-RPC calls
-func callNzbgetAPI(instance config.UserPassAppInstance, method string, target interface{}) error {
+func callNzbgetAPI(instance config.UserPassAppInstance, method string, target any) error {
 	timeout := 1 * time.Second
 	if instance.Timeout > 0 {
 		timeout = time.Duration(instance.Timeout) * time.Second
@@ -144,7 +144,7 @@ func callNzbgetAPI(instance config.UserPassAppInstance, method string, target in
 	parsedURL.User = url.UserPassword(instance.User, instance.Password)
 	apiURL := fmt.Sprintf("%s/jsonrpc", parsedURL.String())
 
-	jsonReq, err := json.Marshal(jsonRPCRequest{Method: method, Params: []interface{}{}, ID: 1})
+	jsonReq, err := json.Marshal(jsonRPCRequest{Method: method, Params: []any{}, ID: 1})
 	if err != nil {
 		return fmt.Errorf("failed to create JSON request: %w", err)
 	}

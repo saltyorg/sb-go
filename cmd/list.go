@@ -90,7 +90,7 @@ func handleList(ctx context.Context) {
 
 			tags = make([]string, 0)
 			switch v := tagsInterface.(type) {
-			case []interface{}:
+			case []any:
 				for _, tag := range v {
 					if strTag, ok := tag.(string); ok {
 						tags = append(tags, strTag)
@@ -138,14 +138,11 @@ func printInColumns(tags []string, padding int) {
 	}
 	maxTagLength += padding
 
-	numColumns := consoleWidth / maxTagLength
-	if numColumns < 1 {
-		numColumns = 1
-	}
+	numColumns := max(consoleWidth/maxTagLength, 1)
 	numRows := (len(tags) + numColumns - 1) / numColumns
 
-	for row := 0; row < numRows; row++ {
-		for col := 0; col < numColumns; col++ {
+	for row := range numRows {
+		for col := range numColumns {
 			idx := row + col*numRows
 			if idx < len(tags) {
 				fmt.Printf("%-*s", maxTagLength, tags[idx])
