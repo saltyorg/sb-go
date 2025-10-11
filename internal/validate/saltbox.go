@@ -176,7 +176,8 @@ func validateConfigWithSchema(configPath, schemaPath string) error {
 			for _, apiErr := range apiErrors {
 				errorMsg.WriteString(fmt.Sprintf("\n  - %v", apiErr))
 			}
-			return fmt.Errorf(errorMsg.String())
+			// Fixed: Use %s format specifier to prevent format string vulnerability
+			return fmt.Errorf("%s", errorMsg.String())
 		}
 		asyncDuration := time.Since(asyncStartTime)
 		debugPrintf("DEBUG: Async API validations completed successfully in %v\n", asyncDuration)

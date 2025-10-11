@@ -270,7 +270,8 @@ func formatValidationError(err error, config *SettingsConfig) error {
 			}
 		}
 
-		formattedError := fmt.Errorf(sb.String())
+		// Fixed: Use %s format specifier to prevent format string vulnerability
+		formattedError := fmt.Errorf("%s", sb.String())
 		debugPrintf("DEBUG: formatValidationError - formatted error: %v\n", formattedError)
 		return formattedError
 	}
@@ -317,7 +318,8 @@ func formatRemoteValidationError(err error, remoteName string, remoteIndex int) 
 			sb.WriteString("  - " + errorMsg + "\n")
 		}
 
-		formattedError := fmt.Errorf(sb.String())
+		// Fixed: Use %s format specifier to prevent format string vulnerability
+		formattedError := fmt.Errorf("%s", sb.String())
 		debugPrintf("DEBUG: formatRemoteValidationError - formatted error: %v\n", formattedError)
 		return formattedError
 	}

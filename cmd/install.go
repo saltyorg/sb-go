@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -132,7 +131,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 				fmt.Printf("%d. %s\n", i+1, suggestion)
 			}
 			fmt.Println("----------------------------------------")
-			os.Exit(1)
+			return fmt.Errorf("invalid tags provided, see suggestions above")
 		}
 	}
 
@@ -161,8 +160,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	}
 
 	if len(parsedTags) == 0 {
-		fmt.Println("No valid tags were provided for installation.")
-		os.Exit(1)
+		return fmt.Errorf("no valid tags were provided for installation")
 	}
 
 	return nil

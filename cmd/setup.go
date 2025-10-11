@@ -37,7 +37,7 @@ var setupCmd = &cobra.Command{
 
 			if response != "yes" && response != "y" {
 				fmt.Println("Setup aborted by user.")
-				os.Exit(0)
+				return
 			}
 		}
 
@@ -45,28 +45,28 @@ var setupCmd = &cobra.Command{
 			return utils.CheckUbuntuSupport()
 		}); err != nil {
 			fmt.Println(err)
-			os.Exit(1)
+			return
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking CPU architecture", func() error {
 			return utils.CheckArchitecture(ctx)
 		}); err != nil {
 			fmt.Println(err)
-			os.Exit(1)
+			return
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for LXC container", func() error {
 			return utils.CheckLXC(ctx)
 		}); err != nil {
 			fmt.Println(err)
-			os.Exit(1)
+			return
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for desktop environment", func() error {
 			return utils.CheckDesktopEnvironment(ctx)
 		}); err != nil {
 			fmt.Println(err)
-			os.Exit(1)
+			return
 		}
 
 		// Perform initial setup tasks
@@ -92,7 +92,7 @@ var setupCmd = &cobra.Command{
 		} else {
 			if err := spinners.RunInfoSpinner("Initial setup tasks completed"); err != nil {
 				fmt.Println(err)
-				os.Exit(1)
+				return
 			}
 		}
 	},

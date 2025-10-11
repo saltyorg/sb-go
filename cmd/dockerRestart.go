@@ -73,10 +73,14 @@ var restartCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to stop containers: %v", err)
 			}
+			defer resp.Body.Close()
+
+			// Check status code before reading body to prevent memory exhaustion attacks
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("failed to stop containers (status code: %d)", resp.StatusCode)
+			}
 
 			body, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
-
 			if err != nil {
 				return fmt.Errorf("failed to read response: %v", err)
 			}
@@ -110,10 +114,14 @@ var restartCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to start containers: %v", err)
 			}
+			defer startResp.Body.Close()
+
+			// Check status code before reading body to prevent memory exhaustion attacks
+			if startResp.StatusCode != http.StatusOK {
+				return fmt.Errorf("failed to start containers (status code: %d)", startResp.StatusCode)
+			}
 
 			startBody, err := io.ReadAll(startResp.Body)
-			startResp.Body.Close()
-
 			if err != nil {
 				return fmt.Errorf("failed to read response: %v", err)
 			}
