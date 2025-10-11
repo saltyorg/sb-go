@@ -176,6 +176,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 			return fmt.Errorf("error creating cache: %w", err)
 		}
 		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache); err != nil {
+			handleInterruptError(err)
 			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}
@@ -233,6 +234,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 			return fmt.Errorf("error creating cache: %w", err)
 		}
 		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache); err != nil {
+			handleInterruptError(err)
 			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}

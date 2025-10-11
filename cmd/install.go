@@ -183,6 +183,7 @@ func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []stri
 
 	err := ansible.RunAnsiblePlaybook(ctx, repoPath, playbookPath, ansibleBinaryPath, allArgs, true)
 	if err != nil {
+		handleInterruptError(err)
 		return fmt.Errorf("error running playbook: %w", err)
 	}
 	return nil
@@ -347,8 +348,11 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 		fmt.Printf("DEBUG: Attempting to update/populate cache for %s\n", repoPath)
 	}
 	_, err := ansible.RunAndCacheAnsibleTags(ctx, repoPath, playbookPath, "", cacheInstance) // Use empty string for extraSkipTags
-	if err != nil && verbosity > 0 {
-		fmt.Printf("DEBUG: Error updating cache for %s: %v\n", repoPath, err)
+	if err != nil {
+		handleInterruptError(err)
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: Error updating cache for %s: %v\n", repoPath, err)
+		}
 	}
 
 	// Retrieve again

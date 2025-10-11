@@ -42,7 +42,7 @@ func InitialSetup(ctx context.Context, verbose bool) {
 
 	// Create /srv/git directory
 	dir := constants.SaltboxGitPath
-	if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Creating directory %s", dir), func() error {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Creating directory %s", dir), func() error {
 		return os.MkdirAll(dir, 0755)
 	}); err != nil {
 		fmt.Printf("Error creating %s: %v\n", dir, err)
@@ -51,7 +51,7 @@ func InitialSetup(ctx context.Context, verbose bool) {
 
 	// Create /srv/ansible directory
 	dir = constants.AnsibleVenvPath
-	if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Creating directory %s", dir), func() error {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Creating directory %s", dir), func() error {
 		return os.MkdirAll(dir, 0755)
 	}); err != nil {
 		fmt.Printf("Error creating %s: %v\n", dir, err)
@@ -232,7 +232,7 @@ func PythonVenv(ctx context.Context, verbose bool) {
 	}
 
 	// --- Check for venv Python and wait ---
-	if err := spinners.RunTaskWithSpinner("Checking for venv Python", func() error {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for venv Python", func() error {
 		venvPythonPath := constants.AnsibleVenvPythonPath()
 		maxWait := 10 * time.Second
 		startTime := time.Now()
@@ -342,7 +342,7 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) {
 		os.Exit(1)
 	}
 
-	if err := CopyDefaultConfigFiles(); err != nil {
+	if err := CopyDefaultConfigFiles(ctx); err != nil {
 		fmt.Printf("Error copying default configuration files: %v\n", err)
 		os.Exit(1)
 	}
@@ -387,8 +387,8 @@ func InstallPipDependencies(ctx context.Context, verbose bool) {
 }
 
 // CopyRequiredBinaries copies select binaries from the virtual environment to /usr/local/bin.
-func CopyRequiredBinaries() {
-	if err := spinners.RunTaskWithSpinner("Copying required binaries to /usr/local/bin", func() error {
+func CopyRequiredBinaries(ctx context.Context) {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Copying required binaries to /usr/local/bin", func() error {
 		venvBinDir := filepath.Join(constants.AnsibleVenvPath, "venv", "bin")
 		destDir := "/usr/local/bin"
 		files, err := os.ReadDir(venvBinDir)
@@ -441,7 +441,7 @@ func CopyRequiredBinaries() {
 }
 
 // CopyDefaultConfigFiles copies default config files into the Saltbox folder.
-func CopyDefaultConfigFiles() error {
+func CopyDefaultConfigFiles(ctx context.Context) error {
 	saltboxPath := constants.SaltboxRepoPath
 	defaultsDir := filepath.Join(saltboxPath, "defaults")
 	files, err := filepath.Glob(filepath.Join(defaultsDir, "*.default"))
@@ -480,7 +480,7 @@ func CopyDefaultConfigFiles() error {
 		// Check if the destination file already exists.
 		if _, err := os.Stat(destPath); os.IsNotExist(err) {
 			// Destination file doesn't exist, proceed with copying.
-			if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Copying %s", baseName), func() error {
+			if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Copying %s", baseName), func() error {
 				return processFile(srcPath, destPath, baseName, destName)
 			}); err != nil {
 				return err

@@ -69,6 +69,7 @@ func handleList(ctx context.Context) {
 			// Always run ansible list tags for saltbox_mod
 			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance)
 			if err != nil {
+				handleInterruptError(err)
 				fmt.Printf("Error running ansible list tags for %s: %v\n", info.RepoPath, err)
 				continue
 			}
@@ -76,6 +77,7 @@ func handleList(ctx context.Context) {
 			// Use cache for other repositories
 			cacheRebuilt, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance)
 			if err != nil {
+				handleInterruptError(err)
 				fmt.Printf("Error running and caching ansible tags for %s: %v\n", info.RepoPath, err)
 				continue
 			}

@@ -18,6 +18,7 @@ var startCmd = &cobra.Command{
 	Short: "Start Docker containers managed by Saltbox",
 	Long:  `Start Docker containers managed by Saltbox in dependency order.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
 
 		serviceCheckTask := func() error {
@@ -43,7 +44,7 @@ var startCmd = &cobra.Command{
 			StopFailMessage: "Docker controller service check failed",
 		}
 
-		if err := spinners.RunTaskWithSpinnerCustom(opts, serviceCheckTask); err != nil {
+		if err := spinners.RunTaskWithSpinnerCustomContext(ctx, opts, serviceCheckTask); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}
@@ -95,7 +96,7 @@ var startCmd = &cobra.Command{
 			StopFailMessage: "Failed to start Docker containers",
 		}
 
-		if err := spinners.RunTaskWithSpinnerCustom(startOpts, startContainersTask); err != nil {
+		if err := spinners.RunTaskWithSpinnerCustomContext(ctx, startOpts, startContainersTask); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}

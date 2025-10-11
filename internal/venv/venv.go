@@ -113,7 +113,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 
 	} else {
 		// Check the Python version
-		if err := spinners.RunTaskWithSpinner("Checking Python version", func() error {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking Python version", func() error {
 			var err error
 			pythonMissing, err = checkPythonVersion(ansibleVenvPath, venvPythonPath)
 			return err

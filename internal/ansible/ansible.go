@@ -15,6 +15,17 @@ import (
 	"github.com/saltyorg/sb-go/internal/git"
 )
 
+// isInterruptError checks if an error is due to user interrupt (Ctrl+C).
+// It detects context cancellation and signal-based termination.
+func isInterruptError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) ||
+		strings.Contains(err.Error(), "signal: killed") ||
+		strings.Contains(err.Error(), "signal: interrupt")
+}
+
 // RunAnsiblePlaybook executes an Ansible playbook using the specified binary and arguments.
 // It constructs the command based on the provided playbook path, extra arguments, and repository directory.
 // If verbose is true, the command output is streamed directly to the console; otherwise, output is captured for error reporting.
@@ -187,6 +198,11 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 		cmd.Stderr = &stderr
 		err := cmd.Run()
 		if err != nil {
+			// Check if it's a user interrupt
+			if isInterruptError(err) {
+				fmt.Fprintf(os.Stderr, "\r\033[K\nCommand interrupted by user\n")
+				os.Exit(130)
+			}
 			return true, fmt.Errorf("ansible-playbook failed: %s, stderr: %s", err, stderr.String())
 		}
 
@@ -233,6 +249,11 @@ func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTa
 	cmd.Stderr = &stderr
 	err = cmd.Run()
 	if err != nil {
+		// Check if it's a user interrupt
+		if isInterruptError(err) {
+			fmt.Fprintf(os.Stderr, "\r\033[K\nCommand interrupted by user\n")
+			os.Exit(130)
+		}
 		return nil, fmt.Errorf("ansible-playbook failed: %s, stderr: %s", err, stderr.String())
 	}
 

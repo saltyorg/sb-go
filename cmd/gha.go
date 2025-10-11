@@ -39,7 +39,7 @@ var ghaCmd = &cobra.Command{
 			fmt.Printf("Error downloading and installing saltbox.fact: %v\n", err)
 			os.Exit(1)
 		}
-		if err := setup.CopyDefaultConfigFiles(); err != nil {
+		if err := setup.CopyDefaultConfigFiles(ctx); err != nil {
 			fmt.Printf("Error copying default configuration files: %v\n", err)
 			os.Exit(1)
 		}

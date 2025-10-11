@@ -1,6 +1,7 @@
 package fact
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -105,7 +106,8 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 	var expectedSize int64
 
 	// Fetch the latest release info from GitHub with retry logic
-	if err := spinners.RunTaskWithSpinner("Fetching latest saltbox.fact release info", func() error {
+	// Note: Using context.Background() here - consider adding context parameter in future refactor
+	if err := spinners.RunTaskWithSpinnerContext(context.Background(), "Fetching latest saltbox.fact release info", func() error {
 		return retryWithBackoff(func() error {
 			response, err := http.Get(apiURL)
 			if err != nil {
@@ -228,7 +230,8 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 			taskMessage = fmt.Sprintf("Reinstalling saltbox.fact with version %s", latestVersion)
 		}
 
-		if err := spinners.RunTaskWithSpinner(taskMessage, func() error {
+		// Note: Using context.Background() here - consider adding context parameter in future refactor
+		if err := spinners.RunTaskWithSpinnerContext(context.Background(), taskMessage, func() error {
 			return retryWithBackoff(func() error {
 				response, err := http.Get(downloadURL)
 				if err != nil {

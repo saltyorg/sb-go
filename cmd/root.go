@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -38,4 +41,24 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+// isInterruptError checks if an error is due to user interrupt (Ctrl+C).
+// It detects context cancellation and signal-based termination.
+func isInterruptError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, context.Canceled) ||
+		strings.Contains(err.Error(), "signal: killed") ||
+		strings.Contains(err.Error(), "signal: interrupt")
+}
+
+// handleInterruptError checks if the error is from a user interrupt and exits cleanly.
+// Returns true if it was an interrupt error and the program should exit.
+func handleInterruptError(err error) {
+	if isInterruptError(err) {
+		fmt.Fprintf(os.Stderr, "\r\033[K\nCommand interrupted by user\n")
+		os.Exit(130)
+	}
 }

@@ -32,12 +32,6 @@ func SetVerboseMode(verbose bool) {
 	VerboseMode = verbose
 }
 
-// RunTaskWithSpinner provides a spinner with default options or text output in verbose mode
-// Deprecated: Use RunTaskWithSpinnerContext instead for proper cancellation support
-func RunTaskWithSpinner(message string, taskFunc TaskFunc) error {
-	return RunTaskWithSpinnerContext(context.Background(), message, taskFunc)
-}
-
 // RunTaskWithSpinnerContext provides a spinner with default options or text output in verbose mode.
 // It accepts a context for cancellation support, allowing tasks to be interrupted gracefully.
 func RunTaskWithSpinnerContext(ctx context.Context, message string, taskFunc TaskFunc) error {
@@ -65,12 +59,6 @@ func RunTaskWithSpinnerContext(ctx context.Context, message string, taskFunc Tas
 	return runTaskWithSpinnerContext(ctx, opts, taskFunc)
 }
 
-// RunTaskWithSpinnerCustom provides a spinner with custom options.
-// Deprecated: Use RunTaskWithSpinnerCustomContext instead for proper cancellation support
-func RunTaskWithSpinnerCustom(opts SpinnerOptions, taskFunc TaskFunc) error {
-	return RunTaskWithSpinnerCustomContext(context.Background(), opts, taskFunc)
-}
-
 // RunTaskWithSpinnerCustomContext provides a spinner with custom options.
 // It accepts a context for cancellation support, allowing tasks to be interrupted gracefully.
 func RunTaskWithSpinnerCustomContext(ctx context.Context, opts SpinnerOptions, taskFunc TaskFunc) error {
@@ -96,12 +84,7 @@ func RunTaskWithSpinnerCustomContext(ctx context.Context, opts SpinnerOptions, t
 	return runTaskWithSpinnerContext(ctx, opts, taskFunc)
 }
 
-// Internal function to handle the actual spinner logic (deprecated, kept for compatibility).
-func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
-	return runTaskWithSpinnerContext(context.Background(), opts, taskFunc)
-}
-
-// Internal function to handle the actual spinner logic with context support.
+// runTaskWithSpinnerContext is an internal function to handle the actual spinner logic with context support.
 func runTaskWithSpinnerContext(ctx context.Context, opts SpinnerOptions, taskFunc TaskFunc) error {
 	// Create a channel to receive the task error
 	errCh := make(chan error, 1)

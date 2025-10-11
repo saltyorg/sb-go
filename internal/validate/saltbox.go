@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -108,7 +109,8 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 			fmt.Println(failureMessage)
 		}
 	} else {
-		validationError = spinners.RunTaskWithSpinnerCustom(spinners.SpinnerOptions{
+		// Note: Using context.Background() here - consider adding context parameter in future refactor
+		validationError = spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
 			TaskName:        fmt.Sprintf("Validating %s", job.name),
 			StopMessage:     successMessage,
 			StopFailMessage: failureMessage,

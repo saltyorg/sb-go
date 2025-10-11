@@ -41,28 +41,28 @@ var setupCmd = &cobra.Command{
 			}
 		}
 
-		if err := spinners.RunTaskWithSpinner("Checking Ubuntu version", func() error {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking Ubuntu version", func() error {
 			return utils.CheckUbuntuSupport()
 		}); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
-		if err := spinners.RunTaskWithSpinner("Checking CPU architecture", func() error {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking CPU architecture", func() error {
 			return utils.CheckArchitecture()
 		}); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
-		if err := spinners.RunTaskWithSpinner("Checking for LXC container", func() error {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for LXC container", func() error {
 			return utils.CheckLXC()
 		}); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
-		if err := spinners.RunTaskWithSpinner("Checking for desktop environment", func() error {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for desktop environment", func() error {
 			return utils.CheckDesktopEnvironment()
 		}); err != nil {
 			fmt.Println(err)
@@ -85,7 +85,7 @@ var setupCmd = &cobra.Command{
 		setup.InstallPipDependencies(ctx, verbose)
 
 		// Copy ansible* files to /usr/local/bin
-		setup.CopyRequiredBinaries()
+		setup.CopyRequiredBinaries(ctx)
 
 		if verbose {
 			fmt.Println("Initial setup tasks completed")
