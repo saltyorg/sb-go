@@ -98,7 +98,11 @@ func validateBinary(filePath string, expectedSize int64, verbose bool) error {
 
 // getCurrentFactVersion runs the existing saltbox.fact and extracts its version
 func getCurrentFactVersion(targetPath string) (string, error) {
-	cmd := exec.Command(targetPath)
+	// Use context with timeout for executing the binary
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, targetPath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to run saltbox.fact: %w", err)

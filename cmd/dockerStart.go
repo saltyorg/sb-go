@@ -22,7 +22,7 @@ var startCmd = &cobra.Command{
 		verbose, _ := cmd.Flags().GetBool("verbose")
 
 		serviceCheckTask := func() error {
-			exists, running, err := isServiceExistAndRunning()
+			exists, running, err := isServiceExistAndRunning(ctx)
 			if err != nil {
 				return fmt.Errorf("error checking service status: %v", err)
 			}

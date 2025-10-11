@@ -24,7 +24,7 @@ var stopCmd = &cobra.Command{
 		ignoreContainers, _ := cmd.Flags().GetStringSlice("ignore")
 
 		serviceCheckTask := func() error {
-			exists, running, err := isServiceExistAndRunning()
+			exists, running, err := isServiceExistAndRunning(ctx)
 			if err != nil {
 				return fmt.Errorf("error checking service status: %v", err)
 			}

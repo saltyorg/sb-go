@@ -49,21 +49,21 @@ var setupCmd = &cobra.Command{
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking CPU architecture", func() error {
-			return utils.CheckArchitecture()
+			return utils.CheckArchitecture(ctx)
 		}); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for LXC container", func() error {
-			return utils.CheckLXC()
+			return utils.CheckLXC(ctx)
 		}); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for desktop environment", func() error {
-			return utils.CheckDesktopEnvironment()
+			return utils.CheckDesktopEnvironment(ctx)
 		}); err != nil {
 			fmt.Println(err)
 			os.Exit(1)

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/utils"
 
@@ -431,7 +433,11 @@ func validateRcloneRemote(remoteName string) error {
 	}
 	debugPrintf("DEBUG: validateRcloneRemote - rclone config file exists\n")
 
-	cmd := exec.Command("sudo", "-u", rcloneUser, "rclone", "config", "show")
+	// Use context with timeout for external command execution
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sudo", "-u", rcloneUser, "rclone", "config", "show")
 	cmd.Env = append(os.Environ(), fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath))
 	debugPrintf("DEBUG: validateRcloneRemote - command: '%s'\n", cmd.String())
 

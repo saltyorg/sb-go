@@ -473,7 +473,11 @@ func validateRcloneRemote(value any, _ map[string]any) error {
 	}
 
 	// Check if the remote exists in rclone config
-	cmd := exec.Command("sudo", "-u", rcloneUser, "rclone", "config", "show")
+	// Use context with timeout for external command execution
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sudo", "-u", rcloneUser, "rclone", "config", "show")
 	cmd.Env = append(os.Environ(), fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath))
 
 	output, err := cmd.CombinedOutput()

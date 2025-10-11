@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -207,7 +209,11 @@ func fetchLogs(service string, reverse bool, cursor string) tea.Cmd {
 			args = append(args, "-r")
 		}
 
-		cmd := exec.Command(args[0], args[1:]...)
+		// Use context with timeout for the journalctl command
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			output = fmt.Appendf(nil, "Error fetching logs: %v", err)
@@ -285,7 +291,11 @@ func handleLogs() error {
 }
 
 func getFilteredSystemdServices(filters []string) ([]string, error) {
-	cmd := exec.Command("systemctl", "list-unit-files", "--type=service", "--state=enabled")
+	// Use context with timeout for systemctl command
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "systemctl", "list-unit-files", "--type=service", "--state=enabled")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list systemd services: %w", err)

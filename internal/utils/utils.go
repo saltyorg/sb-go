@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
@@ -16,7 +18,7 @@ import (
 )
 
 // RelaunchAsRoot relaunches the current process with sudo.
-func RelaunchAsRoot() error {
+func RelaunchAsRoot(ctx context.Context) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
@@ -24,7 +26,7 @@ func RelaunchAsRoot() error {
 
 	args := os.Args[1:] // Exclude the program name itself.
 
-	relaunchCmd := exec.Command("sudo", append([]string{executable}, args...)...)
+	relaunchCmd := exec.CommandContext(ctx, "sudo", append([]string{executable}, args...)...)
 
 	relaunchCmd.Stdout = os.Stdout
 	relaunchCmd.Stderr = os.Stderr
@@ -79,8 +81,12 @@ func CheckUbuntuSupport() error {
 }
 
 // CheckArchitecture checks if the CPU architecture is supported.
-func CheckArchitecture() error {
-	cmd := exec.Command("uname", "-m")
+func CheckArchitecture(ctx context.Context) error {
+	// Create a context with timeout for the command
+	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "uname", "-m")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Return the error but include the output for debugging.  No longer continuing.
@@ -98,8 +104,12 @@ func CheckArchitecture() error {
 }
 
 // CheckLXC checks if the system is running inside an LXC container.
-func CheckLXC() error {
-	cmd := exec.Command("systemd-detect-virt", "-c")
+func CheckLXC(ctx context.Context) error {
+	// Create a context with timeout for the command
+	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "systemd-detect-virt", "-c")
 	output, err := cmd.CombinedOutput()
 
 	// systemd-detect-virt returns "none" when *not* in a container, and an exit code of 0
@@ -131,8 +141,12 @@ func CheckLXC() error {
 }
 
 // CheckDesktopEnvironment checks if a desktop environment is installed.
-func CheckDesktopEnvironment() error {
-	cmd := exec.Command("dpkg", "-l", "ubuntu-desktop")
+func CheckDesktopEnvironment(ctx context.Context) error {
+	// Create a context with timeout for the command
+	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "dpkg", "-l", "ubuntu-desktop")
 	err := cmd.Run()
 	if err == nil {
 		return fmt.Errorf("UNSUPPORTED DESKTOP INSTALL - Install cancelled: Only Ubuntu Server is supported")

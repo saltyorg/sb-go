@@ -56,7 +56,7 @@ var dockerCmd = &cobra.Command{
 
 // isServiceExistAndRunning checks whether the Docker controller service file exists
 // and whether the service is currently active.
-func isServiceExistAndRunning() (bool, bool, error) {
+func isServiceExistAndRunning(ctx context.Context) (bool, bool, error) {
 	// Verify the existence of the service file.
 	_, err := os.Stat(constants.DockerControllerServiceFile)
 	if err != nil {
@@ -68,11 +68,11 @@ func isServiceExistAndRunning() (bool, bool, error) {
 	}
 
 	// Use a context with timeout to execute the systemctl command.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	// Run "systemctl is-active" to determine if the service is running.
-	cmd := exec.CommandContext(ctx, "systemctl", "is-active", "saltbox_managed_docker_controller.service")
+	cmd := exec.CommandContext(cmdCtx, "systemctl", "is-active", "saltbox_managed_docker_controller.service")
 	output, err := cmd.Output()
 	if err != nil {
 		// The service exists but is not running.
@@ -85,11 +85,11 @@ func isServiceExistAndRunning() (bool, bool, error) {
 
 // getJobStatus sends an HTTP GET request to the given URL, reads the JSON response,
 // and returns the parsed StatusResponse.
-func getJobStatus(url string, client *http.Client) (StatusResponse, error) {
+func getJobStatus(ctx context.Context, url string, client *http.Client) (StatusResponse, error) {
 	var statusResp StatusResponse
 
 	// Create a new HTTP request with context.
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return statusResp, err
 	}
@@ -128,7 +128,7 @@ func waitForJobCompletion(jobID string) (bool, error) {
 
 	// Poll the job status endpoint.
 	for range maxRetries {
-		statusResp, err := getJobStatus(url, client)
+		statusResp, err := getJobStatus(context.Background(), url, client)
 		if err != nil {
 			return false, err
 		}

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/saltyorg/sb-go/cmd"
 	"github.com/saltyorg/sb-go/internal/signals"
@@ -12,7 +14,11 @@ import (
 
 func main() {
 	if os.Geteuid() != 0 {
-		if err := utils.RelaunchAsRoot(); err != nil {
+		// Use a context with timeout for the relaunch operation
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := utils.RelaunchAsRoot(ctx); err != nil {
 			//fmt.Println("Error relaunching:", err)
 			os.Exit(1)
 		}

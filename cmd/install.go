@@ -24,7 +24,8 @@ var installCmd = &cobra.Command{
 	Long:  `Runs Ansible playbooks with specified tags`,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := utils.CheckLXC(); err != nil {
+		ctx := cmd.Context()
+		if err := utils.CheckLXC(ctx); err != nil {
 			return err
 		}
 
