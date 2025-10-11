@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
 
@@ -75,11 +77,40 @@ func openEditor(path string) {
 		editor = "nano" // Default to nano if EDITOR is not set
 	}
 
-	cmd := exec.Command(editor, path)
+	// Validate and sanitize editor command
+	// Split on whitespace to get the base command
+	editorParts := strings.Fields(editor)
+	if len(editorParts) == 0 {
+		fmt.Printf("Error: Invalid EDITOR environment variable\n")
+		return
+	}
+
+	// Get the absolute path of the editor executable
+	editorPath, err := exec.LookPath(editorParts[0])
+	if err != nil {
+		// If not in PATH, check if it's an absolute path
+		if filepath.IsAbs(editorParts[0]) {
+			editorPath = editorParts[0]
+		} else {
+			fmt.Printf("Error: Editor '%s' not found in PATH\n", editorParts[0])
+			return
+		}
+	}
+
+	// Construct command with validated editor and additional args if any
+	var cmd *exec.Cmd
+	if len(editorParts) > 1 {
+		// Include any additional arguments from EDITOR variable
+		args := append(editorParts[1:], path)
+		cmd = exec.Command(editorPath, args...)
+	} else {
+		cmd = exec.Command(editorPath, path)
+	}
+
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		fmt.Printf("Error opening editor: %v\n", err)
 	}

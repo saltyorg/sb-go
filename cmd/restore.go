@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
 
@@ -256,25 +257,103 @@ func init() {
 	restoreCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 }
 
-func validateAndRestore(user, password, restoreURL, dir, folder string, verbose bool) (int, error) {
-	files := []string{"accounts.yml", "adv_settings.yml", "backup_config.yml", "hetzner_vlan.yml", "localhost.yml", "motd.yml", "providers.yml", "rclone.conf", "settings.yml"}
+// setupRestoreFolders creates the necessary temporary and restore folders
+func setupRestoreFolders(dir, folder string, verbose bool) error {
 	if verbose {
 		fmt.Printf("DEBUG: Creating temporary folder: %s\n", folder)
 	}
 	if err := os.MkdirAll(folder, 0700); err != nil {
-		return 0, fmt.Errorf("failed to create temporary folder %s: %w", folder, err)
+		return fmt.Errorf("failed to create temporary folder %s: %w", folder, err)
 	}
 	if verbose {
 		fmt.Printf("DEBUG: Temp folder created\n")
 	}
-	defer os.RemoveAll(folder) // Clean up the temp folder afterward
 
 	if verbose {
 		fmt.Printf("DEBUG: Creating restore folder: %s\n", dir)
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return 0, fmt.Errorf("failed to create restore folder %s: %w", dir, err)
+		return fmt.Errorf("failed to create restore folder %s: %w", dir, err)
 	}
+	return nil
+}
+
+// validateFileHeader checks if the downloaded file has the expected "Salted" header
+func validateFileHeader(filePath string, verbose bool) error {
+	header := make([]byte, 10)
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	n, err := f.Read(header)
+	f.Close()
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("failed to read header: %w", err)
+	}
+	if verbose {
+		fmt.Printf("DEBUG: Read %d bytes for header. Header: %s\n", n, string(header))
+	}
+	if !strings.Contains(string(header), "Salted") {
+		return fmt.Errorf("invalid file header")
+	}
+	return nil
+}
+
+// processRestoredFile decrypts and moves a restored file to its destination
+func processRestoredFile(file, folder, dir, password string, verbose bool) error {
+	encryptedFilePath := filepath.Join(folder, file+".enc")
+	decryptedFilePath := filepath.Join(folder, file)
+
+	if _, err := os.Stat(encryptedFilePath); err != nil {
+		if verbose {
+			fmt.Printf("DEBUG: Encrypted file does not exist, skipping: %s\n", encryptedFilePath)
+		}
+		return fmt.Errorf("encrypted file not found")
+	}
+
+	if err := decryptFile(encryptedFilePath, decryptedFilePath, password, verbose); err != nil {
+		var paddingErr *paddingError
+		if errors.As(err, &paddingErr) {
+			return fmt.Errorf("decryption failed (likely incorrect password): %w", err)
+		}
+		return fmt.Errorf("decryption failed: %w", err)
+	}
+
+	if verbose {
+		fmt.Printf("DEBUG: Removing encrypted file: %s\n", encryptedFilePath)
+	}
+	if err := os.Remove(encryptedFilePath); err != nil {
+		return fmt.Errorf("failed to remove encrypted file: %w", err)
+	}
+
+	sourcePath := filepath.Join(folder, file)
+	destPath := filepath.Join(dir, file)
+	if verbose {
+		fmt.Printf("DEBUG: Source Path: %s\n", sourcePath)
+		fmt.Printf("DEBUG: Destination Path: %s\n", destPath)
+	}
+
+	if _, err := os.Stat(sourcePath); err != nil {
+		if verbose {
+			fmt.Printf("DEBUG: Source file does not exist, skipping move: %s\n", sourcePath)
+		}
+		return fmt.Errorf("source file not found")
+	}
+
+	if err := os.Rename(sourcePath, destPath); err != nil {
+		return fmt.Errorf("failed to move file: %w", err)
+	}
+
+	return nil
+}
+
+func validateAndRestore(user, password, restoreURL, dir, folder string, verbose bool) (int, error) {
+	files := []string{"accounts.yml", "adv_settings.yml", "backup_config.yml", "hetzner_vlan.yml", "localhost.yml", "motd.yml", "providers.yml", "rclone.conf", "settings.yml"}
+
+	if err := setupRestoreFolders(dir, folder, verbose); err != nil {
+		return 0, err
+	}
+	defer os.RemoveAll(folder) // Clean up the temp folder afterward
 
 	userHash := fmt.Sprintf("%x", sha1.Sum([]byte(user)))
 	if verbose {
@@ -301,88 +380,27 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 		}
 		if err := downloadFile(url, outFile); err != nil {
 			fmt.Println(" [FAIL]")
-			// Don't return immediately, continue to the next file
 			continue
 		}
 
-		header := make([]byte, 10)
-		f, err := os.Open(outFile)
-		if err != nil {
+		if err := validateFileHeader(outFile, verbose); err != nil {
 			fmt.Println(" [FAIL]")
-			// Don't return, continue to the next file
 			continue
 		}
-		n, err := f.Read(header)
-		f.Close()
-		if err != nil && err != io.EOF {
-			fmt.Println(" [FAIL]")
-			//Don't return, continue
-			continue
-		}
-		if verbose {
-			fmt.Printf("DEBUG: Read %d bytes for header. Header: %s\n", n, string(header))
-		}
-		if strings.Contains(string(header), "Salted") {
-			fmt.Println(" [DONE]")
-			// Download was ok. Don't increment here.
-		} else {
-			fmt.Println(" [FAIL]")
-			// Header not found.  Don't return; try the next file
-			continue
-		}
+		fmt.Println(" [DONE]")
 
-		encryptedFilePath := filepath.Join(folder, file+".enc")
-		decryptedFilePath := filepath.Join(folder, file)
-
-		if _, err := os.Stat(encryptedFilePath); err != nil {
-			if verbose {
-				fmt.Printf("DEBUG: Encrypted file does not exist, skipping: %s\n", encryptedFilePath)
-			}
-			continue
-		}
-		// Don't print here, wait for a decryption result.
-
-		if err := decryptFile(encryptedFilePath, decryptedFilePath, password, verbose); err != nil {
-			// Decryption failed. Print fail and continue to the next file.
+		if err := processRestoredFile(file, folder, dir, password, verbose); err != nil {
 			fmt.Printf("%-20.20s [FAIL]\n", file)
-			var paddingErr *paddingError
-			if errors.As(err, &paddingErr) {
+			if strings.Contains(err.Error(), "incorrect password") {
 				fmt.Println("Decryption failed. This likely means the password was incorrect")
 			} else {
-				fmt.Printf("  (Technical error: %v)\n", err) // More detailed error
+				fmt.Printf("  (Technical error: %v)\n", err)
 			}
-			continue // Continue to the next file
-		}
-
-		if verbose {
-			fmt.Printf("DEBUG: Removing encrypted file: %s\n", encryptedFilePath)
-		}
-		err = os.Remove(encryptedFilePath)
-		if err != nil {
-			fmt.Printf("%-20.20s [FAIL] - Could not remove encrypted file: %v\n", file, err)
 			continue
 		}
+
 		fmt.Printf("%-20.20s [DONE]\n", file)
 		successfulDownloads++
-
-		sourcePath := filepath.Join(folder, file)
-		destPath := filepath.Join(dir, file)
-		if verbose {
-			fmt.Printf("DEBUG: Source Path: %s\n", sourcePath)
-			fmt.Printf("DEBUG: Destination Path: %s\n", destPath)
-		}
-
-		if _, err := os.Stat(sourcePath); err != nil {
-			if verbose {
-				fmt.Printf("DEBUG: Source file does not exist, skipping move: %s\n", sourcePath)
-			}
-			continue // Continue to the next file
-		}
-
-		if err := os.Rename(sourcePath, destPath); err != nil {
-			fmt.Printf("Failed to move %s: [FAIL]\n", file)
-			continue
-		}
 	}
 	return successfulDownloads, nil
 }
@@ -391,7 +409,10 @@ func validateURL(url string, verbose bool) bool {
 	if verbose {
 		fmt.Printf("DEBUG: Validating URL: %s\n", url)
 	}
-	resp, err := http.Head(url)
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Head(url)
 	if err != nil {
 		if verbose {
 			fmt.Printf("DEBUG: URL validation failed: %v\n", err)
@@ -406,7 +427,10 @@ func validateURL(url string, verbose bool) bool {
 }
 
 func downloadFile(url, filepath string) error {
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}

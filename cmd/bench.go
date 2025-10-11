@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -42,8 +43,10 @@ func runBenchmark(ctx context.Context) error {
 	// Ensure cleanup happens when the function returns normally
 	defer cleanup()
 
-	// Create HTTP client
-	client := &http.Client{}
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 
 	// Create request with context for cancellation support
 	req, err := http.NewRequestWithContext(ctx, "GET", "https://bench.sh", nil)

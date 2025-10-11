@@ -264,63 +264,66 @@ func getPlexStreamInfo(instance config.PlexInstance) (PlexStreamInfo, error) {
 	return result, nil
 }
 
+// buildPlexStreamTypeBreakdown creates the stream type breakdown string
+func buildPlexStreamTypeBreakdown(info PlexStreamInfo) []string {
+	var streamTypes []string
+
+	if info.DirectPlay > 0 {
+		count := ValueStyle.Render(fmt.Sprintf("%d", info.DirectPlay))
+		streamTypes = append(streamTypes, fmt.Sprintf("%s direct play", count))
+	}
+
+	if info.Transcode > 0 {
+		count := ValueStyle.Render(fmt.Sprintf("%d", info.Transcode))
+		streamTypes = append(streamTypes, fmt.Sprintf("%s transcode", count))
+	}
+
+	if info.DirectStream > 0 {
+		count := ValueStyle.Render(fmt.Sprintf("%d", info.DirectStream))
+		streamTypes = append(streamTypes, fmt.Sprintf("%s direct stream", count))
+	}
+
+	if info.OtherStream > 0 {
+		count := ValueStyle.Render(fmt.Sprintf("%d", info.OtherStream))
+		streamTypes = append(streamTypes, fmt.Sprintf("%s other", count))
+	}
+
+	return streamTypes
+}
+
+// formatPlexStreamSummary formats a single Plex stream info into a summary string
+func formatPlexStreamSummary(info PlexStreamInfo) string {
+	if info.ActiveStreams == 0 {
+		return "No active streams"
+	}
+
+	streamOrStreams := "stream"
+	if info.ActiveStreams != 1 {
+		streamOrStreams = "streams"
+	}
+
+	streamTypes := buildPlexStreamTypeBreakdown(info)
+	activeCount := ValueStyle.Render(fmt.Sprintf("%d", info.ActiveStreams))
+	summary := fmt.Sprintf("%s active %s", activeCount, streamOrStreams)
+
+	if len(streamTypes) > 0 {
+		summary += fmt.Sprintf(" (%s)", strings.Join(streamTypes, ", "))
+	}
+
+	return summary
+}
+
 // formatPlexOutput formats the Plex streaming information for display
 func formatPlexOutput(infos []PlexStreamInfo) string {
 	var output strings.Builder
 
 	// If there's only one Plex instance, we can omit the name for cleaner output
 	if len(infos) == 1 {
-		info := infos[0]
-
-		// No active streams
-		if info.ActiveStreams == 0 {
-			output.WriteString("No active streams")
-			return output.String()
-		}
-
-		// Format stream counts
-		streamOrStreams := "stream"
-		if info.ActiveStreams != 1 {
-			streamOrStreams = "streams"
-		}
-
-		// Build stream type breakdown
-		var streamTypes []string
-
-		if info.DirectPlay > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.DirectPlay))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s direct play", count))
-		}
-
-		if info.Transcode > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.Transcode))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s transcode", count))
-		}
-
-		if info.DirectStream > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.DirectStream))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s direct stream", count))
-		}
-
-		if info.OtherStream > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.OtherStream))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s other", count))
-		}
-
-		// Format the summary line
-		activeCount := ValueStyle.Render(fmt.Sprintf("%d", info.ActiveStreams))
-		summary := fmt.Sprintf("%s active %s", activeCount, streamOrStreams)
-
-		if len(streamTypes) > 0 {
-			summary += fmt.Sprintf(" (%s)", strings.Join(streamTypes, ", "))
-		}
-
-		output.WriteString(summary)
+		output.WriteString(formatPlexStreamSummary(infos[0]))
 		return output.String()
 	}
 
 	// Multiple Plex instances - show names for each
-	// Find the length of the longest name
 	maxNameLen := 0
 	for _, info := range infos {
 		if len(info.Name) > maxNameLen {
@@ -329,60 +332,15 @@ func formatPlexOutput(infos []PlexStreamInfo) string {
 	}
 
 	for i, info := range infos {
-		// Add a newline between servers
 		if i > 0 {
 			output.WriteString("\n")
 		}
 
-		// Align the server names
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-
 		appNameColored := GreenStyle.Render(paddedName)
 
-		// No active streams
-		if info.ActiveStreams == 0 {
-			output.WriteString(fmt.Sprintf("%sNo active streams", appNameColored))
-			continue
-		}
-
-		// Format stream counts
-		streamOrStreams := "stream"
-		if info.ActiveStreams != 1 {
-			streamOrStreams = "streams"
-		}
-
-		// Build stream type breakdown
-		var streamTypes []string
-
-		if info.DirectPlay > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.DirectPlay))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s direct play", count))
-		}
-
-		if info.Transcode > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.Transcode))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s transcode", count))
-		}
-
-		if info.DirectStream > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.DirectStream))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s direct stream", count))
-		}
-
-		if info.OtherStream > 0 {
-			count := ValueStyle.Render(fmt.Sprintf("%d", info.OtherStream))
-			streamTypes = append(streamTypes, fmt.Sprintf("%s other", count))
-		}
-
-		// Format the summary line
-		activeCount := ValueStyle.Render(fmt.Sprintf("%d", info.ActiveStreams))
-		summary := fmt.Sprintf("%s active %s", activeCount, streamOrStreams)
-
-		if len(streamTypes) > 0 {
-			summary += fmt.Sprintf(" (%s)", strings.Join(streamTypes, ", "))
-		}
-
+		summary := formatPlexStreamSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))
 	}
 

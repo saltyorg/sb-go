@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -65,7 +66,34 @@ func handleInventory() error {
 }
 
 func runEditor(editor, filePath string) error {
-	cmd := exec.Command(editor, filePath)
+	// Validate and sanitize editor command
+	// Split on whitespace to get the base command
+	editorParts := strings.Fields(editor)
+	if len(editorParts) == 0 {
+		return fmt.Errorf("invalid editor command")
+	}
+
+	// Get the absolute path of the editor executable
+	editorPath, err := exec.LookPath(editorParts[0])
+	if err != nil {
+		// If not in PATH, check if it's an absolute path
+		if filepath.IsAbs(editorParts[0]) {
+			editorPath = editorParts[0]
+		} else {
+			return fmt.Errorf("editor '%s' not found in PATH", editorParts[0])
+		}
+	}
+
+	// Construct command with validated editor and additional args if any
+	var cmd *exec.Cmd
+	if len(editorParts) > 1 {
+		// Include any additional arguments from editor variable
+		args := append(editorParts[1:], filePath)
+		cmd = exec.Command(editorPath, args...)
+	} else {
+		cmd = exec.Command(editorPath, filePath)
+	}
+
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

@@ -406,27 +406,24 @@ func CopyRequiredBinaries(ctx context.Context) {
 				// Open source file
 				srcFile, err := os.Open(srcPath)
 				if err != nil {
-					return fmt.Errorf("error opening source file %s: %w", srcPath, err) // Wrap error
+					return fmt.Errorf("error opening source file %s: %w", srcPath, err)
 				}
+				defer srcFile.Close()
 
 				// Create destination file
 				destFile, err := os.Create(destPath)
 				if err != nil {
-					srcFile.Close() // Close srcFile before exiting
 					return fmt.Errorf("error creating destination file %s: %w", destPath, err)
 				}
+				defer destFile.Close()
 
 				// Set permissions on destination file
 				if err := os.Chmod(destPath, 0755); err != nil {
-					srcFile.Close()
-					destFile.Close()
 					return fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err)
 				}
 
 				// Copy contents
 				_, err = io.Copy(destFile, srcFile)
-				srcFile.Close()  // Close srcFile *after* the copy
-				destFile.Close() // Close destFile *after* copy
 
 				if err != nil {
 					return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)

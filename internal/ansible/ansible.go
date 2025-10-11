@@ -12,19 +12,9 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
+	sbErrors "github.com/saltyorg/sb-go/internal/errors"
 	"github.com/saltyorg/sb-go/internal/git"
 )
-
-// isInterruptError checks if an error is due to user interrupt (Ctrl+C).
-// It detects context cancellation and signal-based termination.
-func isInterruptError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return errors.Is(err, context.Canceled) ||
-		strings.Contains(err.Error(), "signal: killed") ||
-		strings.Contains(err.Error(), "signal: interrupt")
-}
 
 // RunAnsiblePlaybook executes an Ansible playbook using the specified binary and arguments.
 // It constructs the command based on the provided playbook path, extra arguments, and repository directory.
@@ -57,19 +47,19 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 
 	if err != nil {
 		// Check if the error is due to context cancellation (signal interruption)
-		if errors.Is(err, context.Canceled) {
-			// Clear the line (removes ^C) and add a blank line before the message
-			fmt.Fprintf(os.Stderr, "\r\033[K\nPlaybook execution was interrupted by user\n")
-			os.Exit(130) // Standard exit code for SIGINT (128 + 2)
+		if sbErrors.HandleInterruptError(err) {
+			// Shutdown was initiated, return error to propagate
+			return fmt.Errorf("playbook execution interrupted by user")
 		}
 
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			// Check if the exit code indicates the process was killed by a signal (negative exit codes)
 			if exitErr.ExitCode() < 0 {
-				// Clear the line (removes ^C) and add a blank line before the message
-				fmt.Fprintf(os.Stderr, "\r\033[K\nPlaybook execution was interrupted by user\n")
-				os.Exit(130) // Standard exit code for SIGINT (128 + 2)
+				// This is likely a signal interruption
+				if sbErrors.HandleInterruptError(err) {
+					return fmt.Errorf("playbook execution interrupted by user")
+				}
 			}
 			if !verbose {
 				return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), stderrBuf.String())
@@ -199,9 +189,8 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 		err := cmd.Run()
 		if err != nil {
 			// Check if it's a user interrupt
-			if isInterruptError(err) {
-				fmt.Fprintf(os.Stderr, "\r\033[K\nCommand interrupted by user\n")
-				os.Exit(130)
+			if sbErrors.HandleInterruptError(err) {
+				return true, fmt.Errorf("command interrupted by user")
 			}
 			return true, fmt.Errorf("ansible-playbook failed: %s, stderr: %s", err, stderr.String())
 		}
@@ -250,9 +239,8 @@ func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTa
 	err = cmd.Run()
 	if err != nil {
 		// Check if it's a user interrupt
-		if isInterruptError(err) {
-			fmt.Fprintf(os.Stderr, "\r\033[K\nCommand interrupted by user\n")
-			os.Exit(130)
+		if sbErrors.HandleInterruptError(err) {
+			return nil, fmt.Errorf("command interrupted by user")
 		}
 		return nil, fmt.Errorf("ansible-playbook failed: %s, stderr: %s", err, stderr.String())
 	}

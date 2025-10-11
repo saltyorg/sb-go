@@ -96,20 +96,93 @@ func validateBinary(filePath string, expectedSize int64, verbose bool) error {
 	return nil
 }
 
-// DownloadAndInstallSaltboxFact downloads and installs the latest saltbox.fact file.
-func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
-	downloadURL := "https://github.com/saltyorg/ansible-facts/releases/latest/download/saltbox-facts"
-	targetPath := "/srv/git/saltbox/ansible_facts.d/saltbox.fact"
-	apiURL := "https://svm.saltbox.dev/version?url=https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
+// getCurrentFactVersion runs the existing saltbox.fact and extracts its version
+func getCurrentFactVersion(targetPath string) (string, error) {
+	cmd := exec.Command(targetPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to run saltbox.fact: %w", err)
+	}
 
+	var currentData map[string]any
+	if err = json.Unmarshal(output, &currentData); err != nil {
+		return "", fmt.Errorf("failed to parse output: %w", err)
+	}
+
+	currentVersion, ok := currentData["saltbox_facts_version"].(string)
+	if !ok {
+		return "", fmt.Errorf("no version info found")
+	}
+
+	return currentVersion, nil
+}
+
+// checkIfUpdateNeeded determines if saltbox.fact needs to be updated
+func checkIfUpdateNeeded(targetPath, latestVersion string, alwaysUpdate bool) (bool, error) {
+	if alwaysUpdate {
+		if err := spinners.RunInfoSpinner("Reinstall forced."); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		if err := spinners.RunInfoSpinner("saltbox.fact not found. Proceeding with update."); err != nil {
+			return false, err
+		}
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("error checking for existing saltbox.fact: %w", err)
+	}
+
+	currentVersion, err := getCurrentFactVersion(targetPath)
+	if err != nil {
+		if err := spinners.RunWarningSpinner(fmt.Sprintf("%v. Proceeding with update.", err)); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	currentSemVer, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
+	if err != nil {
+		if err := spinners.RunWarningSpinner(fmt.Sprintf("Failed to parse current version: %v. Updating...", err)); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	latestSemVer, err := semver.NewVersion(strings.TrimPrefix(latestVersion, "v"))
+	if err != nil {
+		if err := spinners.RunWarningSpinner(fmt.Sprintf("Failed to parse latest version: %v. Updating...", err)); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	if currentSemVer.Compare(latestSemVer) >= 0 {
+		if err := spinners.RunInfoSpinner(fmt.Sprintf("saltbox.fact is up to date (version %s)", currentVersion)); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	if err := spinners.RunInfoSpinner(fmt.Sprintf("New version available. Updating from %s to %s", currentVersion, latestVersion)); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// fetchLatestReleaseInfo fetches the latest release information from GitHub
+func fetchLatestReleaseInfo(apiURL string) (string, int64, error) {
 	var latestVersion string
 	var expectedSize int64
 
-	// Fetch the latest release info from GitHub with retry logic
-	// Note: Using context.Background() here - consider adding context parameter in future refactor
-	if err := spinners.RunTaskWithSpinnerContext(context.Background(), "Fetching latest saltbox.fact release info", func() error {
+	err := spinners.RunTaskWithSpinnerContext(context.Background(), "Fetching latest saltbox.fact release info", func() error {
 		return retryWithBackoff(func() error {
-			response, err := http.Get(apiURL)
+			client := &http.Client{
+				Timeout: 30 * time.Second,
+			}
+			response, err := client.Get(apiURL)
 			if err != nil {
 				return fmt.Errorf("error fetching latest release info: %w", err)
 			}
@@ -148,78 +221,27 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 
 			return nil
 		}, 3, 1*time.Second) // 3 retries with 1-second base delay
-	}); err != nil {
+	})
+
+	return latestVersion, expectedSize, err
+}
+
+// DownloadAndInstallSaltboxFact downloads and installs the latest saltbox.fact file.
+func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
+	downloadURL := "https://github.com/saltyorg/ansible-facts/releases/latest/download/saltbox-facts"
+	targetPath := "/srv/git/saltbox/ansible_facts.d/saltbox.fact"
+	apiURL := "https://svm.saltbox.dev/version?url=https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
+
+	// Fetch the latest release info from GitHub with retry logic
+	latestVersion, expectedSize, err := fetchLatestReleaseInfo(apiURL)
+	if err != nil {
 		return err
 	}
 
 	// Check if we need to update
-	needsUpdate := alwaysUpdate
-	if !needsUpdate {
-		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
-			if err := spinners.RunInfoSpinner("saltbox.fact not found. Proceeding with update."); err != nil {
-				return err
-			}
-			needsUpdate = true
-		} else if err != nil {
-			return fmt.Errorf("error checking for existing saltbox.fact: %w", err)
-		} else {
-			// Run the existing saltbox.fact and parse its output
-			cmd := exec.Command(targetPath)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				if err := spinners.RunWarningSpinner("Failed to run current saltbox.fact. Proceeding with update."); err != nil {
-					return err
-				}
-				needsUpdate = true
-			} else {
-				var currentData map[string]any
-				if err = json.Unmarshal(output, &currentData); err != nil {
-					if err := spinners.RunWarningSpinner("Failed to parse current saltbox.fact output. Proceeding with update."); err != nil {
-						return err
-					}
-					needsUpdate = true
-				} else {
-					currentVersion, ok := currentData["saltbox_facts_version"].(string)
-					if !ok {
-						if err := spinners.RunWarningSpinner("Current saltbox.fact doesn't have version info. Updating..."); err != nil {
-							return err
-						}
-						needsUpdate = true
-					} else {
-						currentSemVer, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
-						if err != nil {
-							if err := spinners.RunWarningSpinner(fmt.Sprintf("Failed to parse current version: %v. Updating...", err)); err != nil {
-								return err
-							}
-							needsUpdate = true
-						} else {
-							latestSemVer, err := semver.NewVersion(strings.TrimPrefix(latestVersion, "v"))
-							if err != nil {
-								if err := spinners.RunWarningSpinner(fmt.Sprintf("Failed to parse latest version: %v. Updating...", err)); err != nil {
-									return err
-								}
-								needsUpdate = true
-							} else {
-								if currentSemVer.Compare(latestSemVer) >= 0 {
-									if err := spinners.RunInfoSpinner(fmt.Sprintf("saltbox.fact is up to date (version %s)", currentVersion)); err != nil {
-										return err
-									}
-									return nil
-								}
-								if err := spinners.RunInfoSpinner(fmt.Sprintf("New version available. Updating from %s to %s", currentVersion, latestVersion)); err != nil {
-									return err
-								}
-								needsUpdate = true
-							}
-						}
-					}
-				}
-			}
-		}
-	} else {
-		if err := spinners.RunInfoSpinner("Reinstall forced."); err != nil {
-			return err
-		}
+	needsUpdate, err := checkIfUpdateNeeded(targetPath, latestVersion, alwaysUpdate)
+	if err != nil {
+		return err
 	}
 
 	if //goland:noinspection GoDfaConstantCondition
@@ -233,7 +255,10 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 		// Note: Using context.Background() here - consider adding context parameter in future refactor
 		if err := spinners.RunTaskWithSpinnerContext(context.Background(), taskMessage, func() error {
 			return retryWithBackoff(func() error {
-				response, err := http.Get(downloadURL)
+				client := &http.Client{
+					Timeout: 30 * time.Second,
+				}
+				response, err := client.Get(downloadURL)
 				if err != nil {
 					return fmt.Errorf("error downloading saltbox.fact: %w", err)
 				}

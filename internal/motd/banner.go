@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -86,33 +87,66 @@ func GenerateBanner(title, font, boxType string) string {
 		return fmt.Sprintf("--- %s ---\n", title)
 	}
 
-	// Prepare the command
-	var cmdStr string
-
 	// If no box type or "none", just use toilet
 	if boxType == "" || boxType == "none" {
-		cmdStr = fmt.Sprintf("toilet -f %s '%s'", font, title)
-	} else {
-		// Check if boxes is installed
-		if _, err := exec.LookPath("boxes"); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: boxes command not found, using toilet only\n")
-			cmdStr = fmt.Sprintf("toilet -f %s '%s'", font, title)
-		} else {
-			cmdStr = fmt.Sprintf("toilet -f %s '%s' | boxes -d %s -a hc -p h8",
-				font, title, boxType)
+		cmd := exec.Command("toilet", "-f", font, title)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating banner: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Command output: %s\n", string(output))
+			return fmt.Sprintf("--- %s ---\n", title)
 		}
+		return string(output)
 	}
 
-	// Run the command
-	cmd := exec.Command("bash", "-c", cmdStr)
-	output, err := cmd.CombinedOutput()
+	// Check if boxes is installed
+	if _, err := exec.LookPath("boxes"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: boxes command not found, using toilet only\n")
+		cmd := exec.Command("toilet", "-f", font, title)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating banner: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Command output: %s\n", string(output))
+			return fmt.Sprintf("--- %s ---\n", title)
+		}
+		return string(output)
+	}
+
+	// Use toilet and pipe to boxes - using proper piping instead of shell concatenation
+	toiletCmd := exec.Command("toilet", "-f", font, title)
+	boxesCmd := exec.Command("boxes", "-d", boxType, "-a", "hc", "-p", "h8")
+
+	// Pipe toilet output to boxes
+	pipe, err := toiletCmd.StdoutPipe()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating banner: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Command output: %s\n", string(output))
+		fmt.Fprintf(os.Stderr, "Error creating pipe: %v\n", err)
+		return fmt.Sprintf("--- %s ---\n", title)
+	}
+	boxesCmd.Stdin = pipe
+
+	// Start both commands
+	var boxesOutput bytes.Buffer
+	boxesCmd.Stdout = &boxesOutput
+	var boxesStderr bytes.Buffer
+	boxesCmd.Stderr = &boxesStderr
+
+	if err := boxesCmd.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error starting boxes: %v\n", err)
 		return fmt.Sprintf("--- %s ---\n", title)
 	}
 
-	return string(output)
+	if err := toiletCmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running toilet: %v\n", err)
+		return fmt.Sprintf("--- %s ---\n", title)
+	}
+
+	if err := boxesCmd.Wait(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running boxes: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Boxes stderr: %s\n", boxesStderr.String())
+		return fmt.Sprintf("--- %s ---\n", title)
+	}
+
+	return boxesOutput.String()
 }
 
 // GenerateBannerFromFile processes the content of a file with toilet
