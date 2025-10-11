@@ -1,4 +1,4 @@
-package validate2
+package validate
 
 import (
 	"fmt"
