@@ -3,6 +3,7 @@ package apt
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -20,15 +21,16 @@ import (
 // Depending on the verbose flag, command output is either streamed directly to the console or captured in buffers.
 // In case of an error, the returned function provides a detailed error message including the exit code and,
 // if not in verbose mode, the captured stderr output.
-func InstallPackage(packages []string, verbose bool) func() error {
+// The context parameter allows for cancellation of the installation process.
+func InstallPackage(ctx context.Context, packages []string, verbose bool) func() error {
 	return func() error {
 		// Build the command arguments starting with "sudo apt-get install -y"
 		command := []string{"sudo", "apt-get", "install", "-y"}
 		// Append each package name individually to the command.
 		command = append(command, packages...) // The ... is crucial here!
 
-		// Create the command to run.
-		cmd := exec.Command(command[0], command[1:]...)
+		// Create the command to run with context for cancellation support.
+		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 		// Set the environment to non-interactive mode.
 		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 
@@ -81,11 +83,12 @@ func InstallPackage(packages []string, verbose bool) func() error {
 // The verbose flag determines whether the command output is streamed to the console or captured in buffers.
 // If the command fails, a detailed error message is returned, including the exit code and (when not verbose)
 // the stderr output.
-func UpdatePackageLists(verbose bool) func() error {
+// The context parameter allows for cancellation of the update process.
+func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 	return func() error {
 		// Build the command to update package lists.
 		command := []string{"sudo", "apt-get", "update"}
-		cmd := exec.Command(command[0], command[1:]...)
+		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 		// Set non-interactive mode.
 		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 
@@ -132,11 +135,12 @@ func UpdatePackageLists(verbose bool) func() error {
 // Depending on the codename (e.g., matching "jammy" or "noble"), it adds a predefined list of repository entries
 // to the main sources file ("/etc/apt/sources.list") using the helper function addRepo.
 // If the release codename is unsupported or any step fails, an error is returned.
+// The context parameter allows for cancellation of the operation.
 //
 //goland:noinspection HttpUrlsUsage
-func AddAptRepositories() error {
+func AddAptRepositories(ctx context.Context) error {
 	// Get the Ubuntu release codename.
-	cmd := exec.Command("lsb_release", "-sc")
+	cmd := exec.CommandContext(ctx, "lsb_release", "-sc")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error getting Ubuntu release codename: %w", err)
@@ -223,11 +227,12 @@ func addRepo(repoLine, sourcesFile string) error {
 // directly to the console or captured in buffers for error reporting.
 // If the command fails, an error is returned with details including the exit code and (when not verbose)
 // the captured stderr output.
-func AddPPA(ppa string, verbose bool) func() error {
+// The context parameter allows for cancellation of the operation.
+func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
 	return func() error {
 		// Build the command for adding the PPA.
 		command := []string{"sudo", "add-apt-repository", ppa, "--yes"}
-		cmd := exec.Command(command[0], command[1:]...)
+		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 		// Set non-interactive mode.
 		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 

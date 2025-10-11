@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -19,10 +20,11 @@ import (
 )
 
 // InitialSetup performs the initial setup tasks.
-func InitialSetup(verbose bool) {
+// The context parameter allows for cancellation of long-running operations.
+func InitialSetup(ctx context.Context, verbose bool) {
 	// Update apt cache
-	if err := spinners.RunTaskWithSpinner("Updating apt package cache", func() error {
-		updateCache := apt.UpdatePackageLists(verbose)
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache", func() error {
+		updateCache := apt.UpdatePackageLists(ctx, verbose)
 		return updateCache()
 	}); err != nil {
 		fmt.Println("Error updating apt cache:", err)
@@ -30,8 +32,8 @@ func InitialSetup(verbose bool) {
 	}
 
 	// Install git and curl
-	if err := spinners.RunTaskWithSpinner("Installing git and curl", func() error {
-		installGitCurl := apt.InstallPackage([]string{"git", "curl"}, verbose)
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing git and curl", func() error {
+		installGitCurl := apt.InstallPackage(ctx, []string{"git", "curl"}, verbose)
 		return installGitCurl()
 	}); err != nil {
 		fmt.Println("Error installing git and curl:", err)
@@ -57,8 +59,8 @@ func InitialSetup(verbose bool) {
 	}
 
 	// Install software-properties-common and apt-transport-https
-	if err := spinners.RunTaskWithSpinner("Installing software-properties-common and apt-transport-https", func() error {
-		installPropsTransport := apt.InstallPackage([]string{"software-properties-common", "apt-transport-https"}, verbose)
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing software-properties-common and apt-transport-https", func() error {
+		installPropsTransport := apt.InstallPackage(ctx, []string{"software-properties-common", "apt-transport-https"}, verbose)
 		return installPropsTransport()
 	}); err != nil {
 		fmt.Println("Error installing software-properties-common and apt-transport-https:", err)
@@ -66,16 +68,16 @@ func InitialSetup(verbose bool) {
 	}
 
 	// Add apt repos
-	if err := spinners.RunTaskWithSpinner("Adding apt repositories", func() error {
-		return apt.AddAptRepositories()
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Adding apt repositories", func() error {
+		return apt.AddAptRepositories(ctx)
 	}); err != nil {
 		fmt.Println("Error adding apt repositories:", err)
 		os.Exit(1)
 	}
 
 	// Update apt cache again after adding repositories
-	if err := spinners.RunTaskWithSpinner("Updating apt package cache again", func() error {
-		updateCacheAgain := apt.UpdatePackageLists(verbose)
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache again", func() error {
+		updateCacheAgain := apt.UpdatePackageLists(ctx, verbose)
 		return updateCacheAgain()
 	}); err != nil {
 		fmt.Println("Error updating apt cache:", err)
@@ -83,13 +85,13 @@ func InitialSetup(verbose bool) {
 	}
 
 	// Install additional required packages.
-	if err := spinners.RunTaskWithSpinner("Installing additional required packages", func() error {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing additional required packages", func() error {
 		packages := []string{
 			"locales", "nano", "wget", "jq", "file", "gpg-agent", "libpq-dev",
 			"build-essential", "libssl-dev", "libffi-dev", "python3-dev",
 			"python3-testresources", "python3-apt", "python3-venv", "python3-pip",
 		}
-		installPackages := apt.InstallPackage(packages, verbose)
+		installPackages := apt.InstallPackage(ctx, packages, verbose)
 		return installPackages()
 	}); err != nil {
 		fmt.Println("Error installing additional packages:", err)
@@ -98,12 +100,13 @@ func InitialSetup(verbose bool) {
 }
 
 // ConfigureLocale attempts to set the system-wide locale to "en_US.UTF-8".
-func ConfigureLocale() {
+// The context parameter allows for cancellation of long-running operations.
+func ConfigureLocale(ctx context.Context) {
 	targetLocale := "en_US.UTF-8"
 
 	// Check if the locale is already installed.
 	localeInstalled := false
-	cmdLocaleCheck := exec.Command("locale", "-a")
+	cmdLocaleCheck := exec.CommandContext(ctx, "locale", "-a")
 	outputLocaleCheck, _ := cmdLocaleCheck.CombinedOutput() // Ignore error; presence check.
 	if strings.Contains(string(outputLocaleCheck), targetLocale) {
 		localeInstalled = true
@@ -111,8 +114,8 @@ func ConfigureLocale() {
 
 	// Generate locale if not already installed.
 	if !localeInstalled {
-		if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Generating locale %s", targetLocale), func() error {
-			cmdLocaleGen := exec.Command("locale-gen", targetLocale)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Generating locale %s", targetLocale), func() error {
+			cmdLocaleGen := exec.CommandContext(ctx, "locale-gen", targetLocale)
 			return cmdLocaleGen.Run()
 		}); err != nil {
 			fmt.Println("Error generating locale:", err)
@@ -121,8 +124,8 @@ func ConfigureLocale() {
 	}
 
 	// Use update-locale to set both LANG and LC_ALL system-wide locale variables
-	if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Setting system-wide locale (LC_ALL and LANG) to %s", targetLocale), func() error {
-		cmdUpdateLocale := exec.Command("update-locale", "LC_ALL="+targetLocale, "LANG="+targetLocale)
+	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Setting system-wide locale (LC_ALL and LANG) to %s", targetLocale), func() error {
+		cmdUpdateLocale := exec.CommandContext(ctx, "update-locale", "LC_ALL="+targetLocale, "LANG="+targetLocale)
 		return cmdUpdateLocale.Run()
 	}); err != nil {
 		// Don't exit here; try dpkg-reconfigure as a fallback. Log with an info spinner.
@@ -142,8 +145,8 @@ func ConfigureLocale() {
 
 	if !lcAllSet || !langSet {
 		// Use a spinner for dpkg-reconfigure.
-		if err := spinners.RunTaskWithSpinner("Locale not set correctly, reconfiguring locales...", func() error {
-			cmdReconfigureLocales := exec.Command("dpkg-reconfigure", "locales")
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Locale not set correctly, reconfiguring locales...", func() error {
+			cmdReconfigureLocales := exec.CommandContext(ctx, "dpkg-reconfigure", "locales")
 			return cmdReconfigureLocales.Run()
 		}); err != nil {
 			fmt.Println("Error reconfiguring locales:", err)
@@ -175,7 +178,8 @@ func ConfigureLocale() {
 }
 
 // PythonVenv installs Python from deadsnakes, if required, and creates the Ansible venv.
-func PythonVenv(verbose bool) {
+// The context parameter allows for cancellation of long-running operations.
+func PythonVenv(ctx context.Context, verbose bool) {
 	osRelease, _ := ubuntu.ParseOSRelease("/etc/os-release")
 	versionCodename := osRelease["VERSION_CODENAME"]
 
@@ -186,8 +190,8 @@ func PythonVenv(verbose bool) {
 		_ = spinners.RunInfoSpinner("Ubuntu Jammy detected, deploying venv with Python 3.12.")
 
 		// Add deadsnakes PPA
-		if err := spinners.RunTaskWithSpinner("Adding deadsnakes PPA", func() error {
-			addPPA := apt.AddPPA("ppa:deadsnakes/ppa", verbose)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Adding deadsnakes PPA", func() error {
+			addPPA := apt.AddPPA(ctx, "ppa:deadsnakes/ppa", verbose)
 			return addPPA()
 		}); err != nil {
 			fmt.Println("Error adding deadsnakes PPA", err)
@@ -195,8 +199,8 @@ func PythonVenv(verbose bool) {
 		}
 
 		// Install Python 3.12 and venv
-		if err := spinners.RunTaskWithSpinner("Installing Python 3.12 and venv", func() error {
-			installPython := apt.InstallPackage([]string{"python3.12", "python3.12-dev", "python3.12-venv"}, verbose)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing Python 3.12 and venv", func() error {
+			installPython := apt.InstallPackage(ctx, []string{"python3.12", "python3.12-dev", "python3.12-venv"}, verbose)
 			return installPython()
 		}); err != nil {
 			fmt.Println("Error installing Python 3.12:", err)
@@ -204,8 +208,8 @@ func PythonVenv(verbose bool) {
 		}
 
 		// Create venv
-		if err := spinners.RunTaskWithSpinner("Creating venv", func() error {
-			createVenv := exec.Command("python3.12", "-m", "venv", "venv")
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating venv", func() error {
+			createVenv := exec.CommandContext(ctx, "python3.12", "-m", "venv", "venv")
 			createVenv.Dir = constants.AnsibleVenvPath
 			return createVenv.Run()
 		}); err != nil {
@@ -217,8 +221,8 @@ func PythonVenv(verbose bool) {
 		_ = spinners.RunInfoSpinner("Ubuntu Noble detected, deploying venv with Python 3.12.")
 
 		// Create venv (using system python3)
-		if err := spinners.RunTaskWithSpinner("Creating venv", func() error {
-			createVenv := exec.Command("python3", "-m", "venv", "venv")
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating venv", func() error {
+			createVenv := exec.CommandContext(ctx, "python3", "-m", "venv", "venv")
 			createVenv.Dir = constants.AnsibleVenvPath
 			return createVenv.Run()
 		}); err != nil {
@@ -250,7 +254,8 @@ func PythonVenv(verbose bool) {
 // SaltboxRepo checks out the master branch of the Saltbox GitHub repository.
 // Resets the existing git repository folder if present.
 // Runs submodule update.
-func SaltboxRepo(verbose bool, branch string) {
+// The context parameter allows for cancellation of long-running operations.
+func SaltboxRepo(ctx context.Context, verbose bool, branch string) {
 	saltboxPath := constants.SaltboxRepoPath
 	saltboxRepoURL := constants.SaltboxRepoURL
 	if branch == "" {
@@ -261,16 +266,16 @@ func SaltboxRepo(verbose bool, branch string) {
 	_, err := os.Stat(saltboxPath)
 	if os.IsNotExist(err) {
 		// Clone the repository if it doesn't exist.
-		if err := spinners.RunTaskWithSpinner(fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch), func() error {
-			return git.CloneRepository(saltboxRepoURL, saltboxPath, branch, verbose)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch), func() error {
+			return git.CloneRepository(ctx, saltboxRepoURL, saltboxPath, branch, verbose)
 		}); err != nil {
 			fmt.Printf("Error cloning Saltbox repository: %v\n", err)
 			os.Exit(1)
 		}
 
 		// Run submodule update after cloning.
-		if err := spinners.RunTaskWithSpinner("Updating git submodules", func() error {
-			submoduleCmd := exec.Command("git", "submodule", "update", "--init", "--recursive")
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating git submodules", func() error {
+			submoduleCmd := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive")
 			submoduleCmd.Dir = saltboxPath
 			return submoduleCmd.Run()
 		}); err != nil {
@@ -302,9 +307,9 @@ func SaltboxRepo(verbose bool, branch string) {
 			}
 
 			// Wrap the entire loop in a spinner
-			if err := spinners.RunTaskWithSpinner("Initializing Git repository", func() error {
+			if err := spinners.RunTaskWithSpinnerContext(ctx, "Initializing Git repository", func() error {
 				for _, command := range initCmds {
-					cmd := exec.Command(command[0], command[1:]...)
+					cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 					cmd.Dir = saltboxPath
 					if err := cmd.Run(); err != nil {
 						return fmt.Errorf("error running command %v: %w", command, err) // Wrap the error
@@ -322,8 +327,8 @@ func SaltboxRepo(verbose bool, branch string) {
 			os.Exit(1)
 		} else {
 			// It's a git repo, fetch and reset
-			if err := spinners.RunTaskWithSpinner("Updating existing Saltbox repository", func() error {
-				return git.FetchAndReset(saltboxPath, branch, "root", nil, nil) // Assuming root user
+			if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating existing Saltbox repository", func() error {
+				return git.FetchAndReset(ctx, saltboxPath, branch, "root", nil, nil) // Assuming root user
 			}); err != nil {
 				fmt.Printf("Error updating Saltbox repository: %v\n", err)
 				os.Exit(1)
@@ -344,14 +349,15 @@ func SaltboxRepo(verbose bool, branch string) {
 }
 
 // InstallPipDependencies installs pip dependencies in the Ansible virtual environment.
-func InstallPipDependencies(verbose bool) {
+// The context parameter allows for cancellation of long-running operations.
+func InstallPipDependencies(ctx context.Context, verbose bool) {
 	venvPythonPath := constants.AnsibleVenvPythonPath()
 	python3Cmd := []string{venvPythonPath, "-m", "pip", "install", "--timeout=360", "--no-cache-dir", "--disable-pip-version-check", "--upgrade"}
 
 	// Install pip, setuptools, and wheel
-	if err := spinners.RunTaskWithSpinner("Installing pip, setuptools, and wheel", func() error {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing pip, setuptools, and wheel", func() error {
 		installBaseDeps := append(python3Cmd, "pip", "setuptools", "wheel")
-		cmdInstallBase := exec.Command(installBaseDeps[0], installBaseDeps[1:]...)
+		cmdInstallBase := exec.CommandContext(ctx, installBaseDeps[0], installBaseDeps[1:]...)
 		if verbose {
 			fmt.Println("Running command:", installBaseDeps)
 			cmdInstallBase.Stdout = os.Stdout
@@ -364,10 +370,10 @@ func InstallPipDependencies(verbose bool) {
 	}
 
 	// Install requirements from requirements-saltbox.txt
-	if err := spinners.RunTaskWithSpinner("Installing requirements from requirements-saltbox.txt", func() error {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing requirements from requirements-saltbox.txt", func() error {
 		requirementsPath := filepath.Join(constants.SaltboxRepoPath, "requirements", "requirements-saltbox.txt")
 		installRequirements := append(python3Cmd, "--requirement", requirementsPath)
-		cmdInstallReq := exec.Command(installRequirements[0], installRequirements[1:]...)
+		cmdInstallReq := exec.CommandContext(ctx, installRequirements[0], installRequirements[1:]...)
 		if verbose {
 			fmt.Println("Running command:", installRequirements)
 			cmdInstallReq.Stdout = os.Stdout

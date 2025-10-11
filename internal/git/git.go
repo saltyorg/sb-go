@@ -3,6 +3,7 @@ package git
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -14,13 +15,14 @@ import (
 
 // CloneRepository clones a Git repository to a specified path and branch.
 // The verbose flag controls whether stdout and stderr are directly outputted.
-func CloneRepository(repoURL, destPath, branch string, verbose bool) error {
+// The context parameter allows for cancellation of the clone operation.
+func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verbose bool) error {
 	if _, err := os.Stat(destPath); !os.IsNotExist(err) {
 		return fmt.Errorf("destination path '%s' already exists", destPath)
 	}
 
 	cloneArgs := []string{"clone", "--depth", "1", "-b", branch, repoURL, destPath}
-	cmd := exec.Command("git", cloneArgs...)
+	cmd := exec.CommandContext(ctx, "git", cloneArgs...)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 
@@ -60,9 +62,10 @@ func CloneRepository(repoURL, destPath, branch string, verbose bool) error {
 }
 
 // FetchAndReset performs a git fetch and reset to a specified branch.
-func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool) error {
+// The context parameter allows for cancellation of git operations.
+func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool) error {
 	// Get the current branch name
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = repoPath
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -120,7 +123,7 @@ func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]stri
 	}
 
 	for _, command := range commands {
-		cmd := exec.Command(command[0], command[1:]...)
+		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 		cmd.Dir = repoPath
 		output, err := cmd.CombinedOutput()
 		if err != nil {
@@ -132,7 +135,7 @@ func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]stri
 	// Custom commands
 	if customCommands != nil {
 		for _, command := range customCommands {
-			cmd := exec.Command(command[0], command[1:]...)
+			cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 			cmd.Dir = repoPath
 			output, err := cmd.CombinedOutput()
 			if err != nil {
@@ -149,8 +152,10 @@ func FetchAndReset(repoPath, defaultBranch, user string, customCommands [][]stri
 }
 
 // GetGitCommitHash returns the current Git commit hash of the repository.
+// Note: This function doesn't accept context as it's a quick local operation,
+// but uses context.Background() internally for consistency.
 func GetGitCommitHash(repoPath string) (string, error) {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "HEAD")
 	cmd.Dir = repoPath
 
 	var out bytes.Buffer

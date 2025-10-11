@@ -2,6 +2,7 @@ package announcements
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -399,8 +400,9 @@ func PromptForMigrations(diffs []*AnnouncementDiff) ([]MigrationRequest, error) 
 	return migrationRequests, nil
 }
 
-// ExecuteMigrations runs the requested migration playbook tags
-func ExecuteMigrations(migrationRequests []MigrationRequest) error {
+// ExecuteMigrations runs the requested migration playbook tags.
+// It accepts a context parameter for proper cancellation support.
+func ExecuteMigrations(ctx context.Context, migrationRequests []MigrationRequest) error {
 	if len(migrationRequests) == 0 {
 		return nil
 	}
@@ -429,9 +431,9 @@ func ExecuteMigrations(migrationRequests []MigrationRequest) error {
 			return fmt.Errorf("unknown repository path: %s", migration.RepoPath)
 		}
 
-		// Run the ansible playbook with the migration tag
+		// Run the ansible playbook with the migration tag using the provided context
 		extraArgs := []string{"--tags", migration.Tag}
-		err := ansible.RunAnsiblePlaybook(migration.RepoPath, playbookPath, constants.AnsiblePlaybookBinaryPath, extraArgs, true)
+		err := ansible.RunAnsiblePlaybook(ctx, migration.RepoPath, playbookPath, constants.AnsiblePlaybookBinaryPath, extraArgs, true)
 		if err != nil {
 			return fmt.Errorf("failed to execute migration '%s' for %s repository: %w", migration.Tag, migration.RepoName, err)
 		}

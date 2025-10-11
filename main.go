@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/saltyorg/sb-go/cmd"
+	"github.com/saltyorg/sb-go/internal/signals"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 	"github.com/saltyorg/sb-go/internal/utils"
 )
@@ -25,5 +26,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	cmd.Execute()
+	// Initialize global signal manager and get context for the application
+	sigManager := signals.GetGlobalManager()
+	ctx := sigManager.Context()
+
+	// Execute commands with context
+	cmd.ExecuteContext(ctx)
+
+	// Exit with appropriate code if shutdown was triggered
+	if sigManager.IsShutdown() {
+		os.Exit(sigManager.ExitCode())
+	}
 }

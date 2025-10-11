@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -17,10 +18,11 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
-	err := rootCmd.Execute()
+// ExecuteContext adds all child commands to the root command and sets flags appropriately.
+// It accepts a context that will be available to all commands via cmd.Context() for cancellation and timeouts.
+// This is called by main.main() and only needs to happen once to the rootCmd.
+func ExecuteContext(ctx context.Context) {
+	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
 		os.Exit(1)
 	}

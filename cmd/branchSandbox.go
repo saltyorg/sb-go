@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/saltyorg/sb-go/internal/ansible"
@@ -18,8 +19,9 @@ var branchSandboxCmd = &cobra.Command{
 	Long:  `Change the branch used by Sandbox`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		branchName := args[0]
-		return changeSandboxBranch(branchName)
+		return changeSandboxBranch(ctx, branchName)
 	},
 }
 
@@ -27,7 +29,7 @@ func init() {
 	rootCmd.AddCommand(branchSandboxCmd)
 }
 
-func changeSandboxBranch(branchName string) error {
+func changeSandboxBranch(ctx context.Context, branchName string) error {
 	fmt.Println("Switching Sandbox repository branch...")
 
 	customCommands := [][]string{
@@ -39,7 +41,7 @@ func changeSandboxBranch(branchName string) error {
 		return err
 	}
 
-	err = git.FetchAndReset(constants.SandboxRepoPath, branchName, saltboxUser, customCommands, nil)
+	err = git.FetchAndReset(ctx, constants.SandboxRepoPath, branchName, saltboxUser, customCommands, nil)
 	if err != nil {
 		return err
 	}
@@ -50,7 +52,7 @@ func changeSandboxBranch(branchName string) error {
 		return fmt.Errorf("error creating cache: %w", err)
 	}
 
-	_, err = ansible.RunAndCacheAnsibleTags(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance)
+	_, err = ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance)
 	if err != nil {
 		return err
 	}

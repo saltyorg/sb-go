@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -23,6 +24,7 @@ var updateCmd = &cobra.Command{
 	Short: "Update Saltbox & Sandbox",
 	Long:  `Update Saltbox & Sandbox`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		keepBranch, _ := cmd.Flags().GetBool("keep-branch")
 		resetBranch, _ := cmd.Flags().GetBool("reset-branch")
@@ -36,7 +38,7 @@ var updateCmd = &cobra.Command{
 			branchReset = &trueVal
 		}
 
-		return handleUpdate(verbose, branchReset)
+		return handleUpdate(ctx, verbose, branchReset)
 	},
 }
 
@@ -47,7 +49,7 @@ func init() {
 	updateCmd.PersistentFlags().Bool("reset-branch", false, "Skip branch reset prompt and reset to default branch")
 }
 
-func handleUpdate(verbose bool, branchReset *bool) error {
+func handleUpdate(ctx context.Context, verbose bool, branchReset *bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
@@ -60,10 +62,10 @@ func handleUpdate(verbose bool, branchReset *bool) error {
 	}
 
 	// Update repositories
-	if err := updateSaltbox(verbose, branchReset); err != nil {
+	if err := updateSaltbox(ctx, verbose, branchReset); err != nil {
 		return fmt.Errorf("error updating Saltbox: %w", err)
 	}
-	if err := updateSandbox(branchReset); err != nil {
+	if err := updateSandbox(ctx, branchReset); err != nil {
 		return fmt.Errorf("error updating Sandbox: %w", err)
 	}
 
@@ -87,8 +89,8 @@ func handleUpdate(verbose bool, branchReset *bool) error {
 		return fmt.Errorf("error prompting for migrations: %w", err)
 	}
 
-	// Execute migration requests
-	if err := announcements.ExecuteMigrations(migrationRequests); err != nil {
+	// Execute migration requests with context
+	if err := announcements.ExecuteMigrations(ctx, migrationRequests); err != nil {
 		return fmt.Errorf("error executing migrations: %w", err)
 	}
 
@@ -116,7 +118,7 @@ func validateSaltboxConfig(verbose bool) error {
 }
 
 // updateSaltbox updates the Saltbox repository and configuration.
-func updateSaltbox(verbose bool, branchReset *bool) error {
+func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	// Check if Saltbox repo exists
 	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
 		return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
@@ -129,7 +131,7 @@ func updateSaltbox(verbose bool, branchReset *bool) error {
 	}
 
 	// Manage Ansible venv - this function already has internal spinners
-	if err := venv.ManageAnsibleVenv(false, saltboxUser, verbose); err != nil {
+	if err := venv.ManageAnsibleVenv(ctx, false, saltboxUser, verbose); err != nil {
 		return fmt.Errorf("error managing Ansible venv: %w", err)
 	}
 
@@ -149,7 +151,7 @@ func updateSaltbox(verbose bool, branchReset *bool) error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(constants.SaltboxRepoPath, "master", saltboxUser, customCommands, branchReset); err != nil {
+	if err := git.FetchAndReset(ctx, constants.SaltboxRepoPath, "master", saltboxUser, customCommands, branchReset); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
@@ -173,7 +175,7 @@ func updateSaltbox(verbose bool, branchReset *bool) error {
 		if err != nil {
 			return fmt.Errorf("error creating cache: %w", err)
 		}
-		if _, err := ansible.RunAndCacheAnsibleTags(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache); err != nil {
+		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache); err != nil {
 			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}
@@ -183,7 +185,7 @@ func updateSaltbox(verbose bool, branchReset *bool) error {
 }
 
 // updateSandbox updates the Sandbox repository and configuration.
-func updateSandbox(branchReset *bool) error {
+func updateSandbox(ctx context.Context, branchReset *bool) error {
 	// Check if Sandbox repo exists
 	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
 		return fmt.Errorf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)
@@ -211,7 +213,7 @@ func updateSandbox(branchReset *bool) error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(constants.SandboxRepoPath, "master", saltboxUser, customCommands, branchReset); err != nil {
+	if err := git.FetchAndReset(ctx, constants.SandboxRepoPath, "master", saltboxUser, customCommands, branchReset); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
@@ -230,7 +232,7 @@ func updateSandbox(branchReset *bool) error {
 		if err != nil {
 			return fmt.Errorf("error creating cache: %w", err)
 		}
-		if _, err := ansible.RunAndCacheAnsibleTags(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache); err != nil {
+		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache); err != nil {
 			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}

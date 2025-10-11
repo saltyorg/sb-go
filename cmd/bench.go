@@ -1,13 +1,13 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
-	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -18,14 +18,15 @@ var benchCmd = &cobra.Command{
 	Short: "Runs bench.sh benchmark",
 	Long:  `Runs bench.sh benchmark`,
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := runBenchmark(); err != nil {
+		ctx := cmd.Context()
+		if err := runBenchmark(ctx); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "An error occurred while executing the benchmark: %v\n", err)
 			os.Exit(1)
 		}
 	},
 }
 
-func runBenchmark() error {
+func runBenchmark(ctx context.Context) error {
 	// Create a variable to track our temporary file
 	var tempFileName string
 
@@ -44,8 +45,8 @@ func runBenchmark() error {
 	// Create HTTP client
 	client := &http.Client{}
 
-	// Create request
-	req, err := http.NewRequest("GET", "https://bench.sh", nil)
+	// Create request with context for cancellation support
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://bench.sh", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -93,40 +94,17 @@ func runBenchmark() error {
 		return fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
-	// Create command
-	command := exec.Command("bash", tempFileName)
+	// Create command with context for automatic cancellation
+	command := exec.CommandContext(ctx, "bash", tempFileName)
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 
-	// Set up signal handling
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
+	// Run the command
+	err = command.Run()
 
-	// Flag to track if we've been interrupted
-	interrupted := false
-
-	// Start the command
-	if err := command.Start(); err != nil {
-		return fmt.Errorf("failed to start bench.sh: %w", err)
-	}
-
-	// Handle interrupt in a goroutine
-	go func() {
-		<-signalChan
-
-		interrupted = true
-
-		if signalErr := command.Process.Signal(os.Interrupt); signalErr != nil {
-			fmt.Println("Error sending interrupt signal:", signalErr)
-		}
-	}()
-
-	// Wait for the command to complete
-	err = command.Wait()
-
-	// Custom handling for interruption
-	if interrupted {
-		fmt.Println("\nScript was interrupted by the user.")
+	// Check if context was canceled (user interrupted)
+	if errors.Is(ctx.Err(), context.Canceled) {
+		fmt.Println("\nCommand was interrupted by the user.")
 		return nil
 	}
 

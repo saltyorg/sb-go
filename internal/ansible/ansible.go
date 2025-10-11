@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"regexp"
 	"strings"
-	"syscall"
 
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -21,29 +19,14 @@ import (
 // It constructs the command based on the provided playbook path, extra arguments, and repository directory.
 // If verbose is true, the command output is streamed directly to the console; otherwise, output is captured for error reporting.
 // On error, it returns a detailed error message including the exit code and, if available, the captured stderr.
-// The function handles SIGINT (Ctrl+C) and SIGTERM signals to gracefully interrupt the playbook execution.
-func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraArgs []string, verbose bool) error {
+// The function uses the provided context for cancellation support, allowing graceful interruption via signals.
+func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBinaryPath string, extraArgs []string, verbose bool) error {
 	command := []string{ansibleBinaryPath, playbookPath, "--become"}
 	command = append(command, extraArgs...)
 
 	if verbose {
 		fmt.Println("Executing Ansible playbook with command:", strings.Join(command, " "))
 	}
-
-	// Create a context that can be cancelled by signals
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Set up signal handling
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		if verbose {
-			fmt.Println("\nReceived interrupt signal, stopping playbook...")
-		}
-		cancel()
-	}()
 
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Dir = repoPath
@@ -60,10 +43,6 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 	}
 
 	err := cmd.Run()
-
-	// Clean up signal handling
-	signal.Stop(sigChan)
-	close(sigChan)
 
 	if err != nil {
 		// Check if the error is due to context cancellation (signal interruption)
@@ -104,7 +83,8 @@ func RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath string, extraA
 // If the repoPath corresponds to a specific known path (i.e., saltbox_mod), a fixed command configuration is used.
 // The function returns an exec.Cmd (or nil if cached tags are available), a function to parse the command output,
 // and an error if any configuration or cache retrieval fails.
-func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (*exec.Cmd, func(string) ([]string, error), error) {
+// The context parameter allows for cancellation of the command execution.
+func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (*exec.Cmd, func(string) ([]string, error), error) {
 	// parseOutput extracts tags from the ansible-playbook output using a regular expression.
 	parseOutput := func(output string) ([]string, error) {
 		re := regexp.MustCompile(`TASK TAGS:\s*\[(.*?)]`)
@@ -128,7 +108,7 @@ func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache 
 
 	// If repoPath matches the specific saltbox_mod repository, use a predetermined command configuration.
 	if repoPath == constants.SaltboxModRepoPath {
-		cmd := exec.Command(constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
+		cmd := exec.CommandContext(ctx, constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
 		cmd.Dir = repoPath
 		return cmd, parseOutput, nil
 	}
@@ -161,7 +141,7 @@ func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache 
 	}
 
 	// No valid cache found; build the command to list tags.
-	cmd := exec.Command(constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
+	cmd := exec.CommandContext(ctx, constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
 	cmd.Dir = repoPath
 	return cmd, parseOutput, nil
 }
@@ -172,8 +152,9 @@ func PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache 
 // If cached tags are used, it updates the cache (to ensure consistency) and returns false.
 // If a fresh command is executed, it caches the new tags along with the current commit hash and returns true.
 // The boolean return value indicates whether the cache was rebuilt (true) or if cached tags were used (false).
-func RunAndCacheAnsibleTags(repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (bool, error) {
-	cmd, tagParser, err := PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags, cache)
+// The context parameter allows for cancellation of the command execution.
+func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (bool, error) {
+	cmd, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
 	if err != nil {
 		return false, err
 	}
@@ -233,8 +214,9 @@ func RunAndCacheAnsibleTags(repoPath, playbookPath, extraSkipTags string, cache 
 // then parses and returns the list of tags.
 // This function does not support using cached tags; it always runs a fresh command.
 // An error is returned if command execution or output parsing fails.
-func RunAnsibleListTags(repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) ([]string, error) {
-	cmd, tagParser, err := PrepareAnsibleListTags(repoPath, playbookPath, extraSkipTags, cache)
+// The context parameter allows for cancellation of the command execution.
+func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) ([]string, error) {
+	cmd, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -18,7 +19,8 @@ var listCmd = &cobra.Command{
 	Short: "List available Saltbox, Sandbox or Saltbox-mod tags",
 	Long:  `List available Saltbox, Sandbox or Saltbox-mod tags`,
 	Run: func(cmd *cobra.Command, args []string) {
-		handleList()
+		ctx := cmd.Context()
+		handleList(ctx)
 	},
 }
 
@@ -29,7 +31,7 @@ func init() {
 	listCmd.Flags().BoolVarP(&includeMod, "include-mod", "m", false, "Include Saltbox-mod tags")
 }
 
-func handleList() {
+func handleList(ctx context.Context) {
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
 		fmt.Printf("Error creating cache: %v\n", err)
@@ -65,14 +67,14 @@ func handleList() {
 
 		if info.RepoPath == constants.SaltboxModRepoPath {
 			// Always run ansible list tags for saltbox_mod
-			tags, err = ansible.RunAnsibleListTags(info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance)
+			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance)
 			if err != nil {
 				fmt.Printf("Error running ansible list tags for %s: %v\n", info.RepoPath, err)
 				continue
 			}
 		} else {
 			// Use cache for other repositories
-			cacheRebuilt, err := ansible.RunAndCacheAnsibleTags(info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance)
+			cacheRebuilt, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance)
 			if err != nil {
 				fmt.Printf("Error running and caching ansible tags for %s: %v\n", info.RepoPath, err)
 				continue

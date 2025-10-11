@@ -15,7 +15,7 @@ var diagCmd = &cobra.Command{
 	Short: "Runs Saltbox diagnostics role",
 	Long:  `Runs Saltbox diagnostics role`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleDiag()
+		return handleDiag(cmd)
 	},
 }
 
@@ -23,9 +23,11 @@ func init() {
 	rootCmd.AddCommand(diagCmd)
 }
 
-func handleDiag() error {
+func handleDiag(cmd *cobra.Command) error {
+	ctx := cmd.Context()
 	tags := []string{"--tags", "diag"}
 	err := ansible.RunAnsiblePlaybook(
+		ctx,
 		constants.SaltboxRepoPath,
 		constants.SaltboxPlaybookPath(),
 		constants.AnsiblePlaybookBinaryPath,

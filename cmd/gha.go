@@ -18,20 +18,22 @@ var ghaCmd = &cobra.Command{
 	Long:   `Install GHA dependencies`,
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := cmd.Context()
+
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(true)
 
 		// Perform initial setup tasks
-		setup.InitialSetup(true)
+		setup.InitialSetup(ctx, true)
 
 		// Configure the locale
-		setup.ConfigureLocale()
+		setup.ConfigureLocale(ctx)
 
 		// Setup Python venv
-		setup.PythonVenv(true)
+		setup.PythonVenv(ctx, true)
 
 		// Install pip3 Dependencies
-		setup.InstallPipDependencies(true)
+		setup.InstallPipDependencies(ctx, true)
 
 		if err := fact.DownloadAndInstallSaltboxFact(false, true); err != nil {
 			fmt.Printf("Error downloading and installing saltbox.fact: %v\n", err)

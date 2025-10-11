@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -52,7 +53,7 @@ var installCmd = &cobra.Command{
 			extraArgs = append(extraArgs, vFlag)
 		}
 
-		return handleInstall(tags, extraVars, skipTags, extraArgs, verbosity, noCache)
+		return handleInstall(cmd, tags, extraVars, skipTags, extraArgs, verbosity, noCache)
 	},
 }
 
@@ -64,7 +65,8 @@ func init() {
 	installCmd.Flags().Bool("no-cache", false, "Skip cache validation and always perform tag checks")
 }
 
-func handleInstall(tags []string, extraVars []string, skipTags []string, extraArgs []string, verbosity int, noCache bool) error {
+func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTags []string, extraArgs []string, verbosity int, noCache bool) error {
+	ctx := cmd.Context()
 	var saltboxTags []string
 	var sandboxTags []string
 	var saltboxModTags []string
@@ -114,11 +116,11 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 		var allSuggestions []string
 
 		if len(saltboxTags) > 0 {
-			allSuggestions = append(allSuggestions, validateAndSuggest(constants.SaltboxRepoPath, saltboxTags, "", "sandbox-", cacheInstance, verbosity)...)
+			allSuggestions = append(allSuggestions, validateAndSuggest(ctx, constants.SaltboxRepoPath, saltboxTags, "", "sandbox-", cacheInstance, verbosity)...)
 		}
 
 		if len(sandboxTags) > 0 {
-			allSuggestions = append(allSuggestions, validateAndSuggest(constants.SandboxRepoPath, sandboxTags, "sandbox-", "", cacheInstance, verbosity)...)
+			allSuggestions = append(allSuggestions, validateAndSuggest(ctx, constants.SandboxRepoPath, sandboxTags, "sandbox-", "", cacheInstance, verbosity)...)
 		}
 
 		if len(allSuggestions) > 0 {
@@ -139,19 +141,19 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 	ansibleBinaryPath := constants.AnsiblePlaybookBinaryPath
 
 	if len(saltboxTags) > 0 {
-		if err := runPlaybook(constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), saltboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
+		if err := runPlaybook(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), saltboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
 			return err
 		}
 	}
 
 	if len(saltboxModTags) > 0 {
-		if err := runPlaybook(constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), saltboxModTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
+		if err := runPlaybook(ctx, constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), saltboxModTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
 			return err
 		}
 	}
 
 	if len(sandboxTags) > 0 {
-		if err := runPlaybook(constants.SandboxRepoPath, constants.SandboxPlaybookPath(), sandboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
+		if err := runPlaybook(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), sandboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
 			return err
 		}
 	}
@@ -164,7 +166,7 @@ func handleInstall(tags []string, extraVars []string, skipTags []string, extraAr
 	return nil
 }
 
-func runPlaybook(repoPath, playbookPath string, tags []string, ansibleBinaryPath string, extraVars []string, skipTags []string, extraArgs []string) error {
+func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []string, ansibleBinaryPath string, extraVars []string, skipTags []string, extraArgs []string) error {
 	tagsArg := strings.Join(tags, ",")
 	allArgs := []string{"--tags", tagsArg}
 
@@ -178,18 +180,18 @@ func runPlaybook(repoPath, playbookPath string, tags []string, ansibleBinaryPath
 
 	allArgs = append(allArgs, extraArgs...)
 
-	err := ansible.RunAnsiblePlaybook(repoPath, playbookPath, ansibleBinaryPath, allArgs, true)
+	err := ansible.RunAnsiblePlaybook(ctx, repoPath, playbookPath, ansibleBinaryPath, allArgs, true)
 	if err != nil {
 		return fmt.Errorf("error running playbook: %w", err)
 	}
 	return nil
 }
 
-func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) []string {
+func validateAndSuggest(ctx context.Context, repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) []string {
 	var suggestions []string
 
 	// Ensure the cache exists and is populated.
-	validTags := getValidTags(repoPath, cacheInstance, verbosity)
+	validTags := getValidTags(ctx, repoPath, cacheInstance, verbosity)
 
 	if verbosity > 0 {
 		fmt.Printf("DEBUG: Valid tags for %s (after getValidTags): %v\n", repoPath, validTags)
@@ -199,7 +201,7 @@ func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, o
 	if repoPath == constants.SandboxRepoPath {
 		otherRepoPath = constants.SaltboxRepoPath
 	}
-	otherValidTags := getValidTags(otherRepoPath, cacheInstance, verbosity)
+	otherValidTags := getValidTags(ctx, otherRepoPath, cacheInstance, verbosity)
 	if verbosity > 0 {
 		fmt.Printf("DEBUG: Valid tags for other repo %s (after getValidTags): %v\n", otherRepoPath, otherValidTags)
 	}
@@ -302,7 +304,7 @@ func validateAndSuggest(repoPath string, providedTags []string, currentPrefix, o
 }
 
 // getValidTags retrieves valid tags from the cache, handling potential errors, and updates the cache if needed
-func getValidTags(repoPath string, cacheInstance *cache.Cache, verbosity int) []string {
+func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cache, verbosity int) []string {
 	playbookPath := ""
 	switch repoPath {
 	case constants.SaltboxRepoPath:
@@ -354,7 +356,7 @@ func getValidTags(repoPath string, cacheInstance *cache.Cache, verbosity int) []
 	if verbosity > 0 {
 		fmt.Printf("DEBUG: Attempting to update/populate cache for %s\n", repoPath)
 	}
-	_, err := ansible.RunAndCacheAnsibleTags(repoPath, playbookPath, "", cacheInstance) // Use empty string for extraSkipTags
+	_, err := ansible.RunAndCacheAnsibleTags(ctx, repoPath, playbookPath, "", cacheInstance) // Use empty string for extraSkipTags
 	if err != nil && verbosity > 0 {
 		fmt.Printf("DEBUG: Error updating cache for %s: %v\n", repoPath, err)
 	}

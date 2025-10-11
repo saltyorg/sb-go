@@ -1,6 +1,7 @@
 package venv
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,7 +14,8 @@ import (
 )
 
 // ManageAnsibleVenv manages the Ansible virtual environment.
-func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) error {
+// The context parameter allows for cancellation of long-running operations.
+func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser string, verbose bool) error {
 	ansibleVenvPath := constants.AnsibleVenvPath
 	venvPythonPath := constants.AnsibleVenvPythonPath()
 	pythonMissing := false
@@ -49,7 +51,7 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 		// Detect OS release
 		fmt.Println("Detecting OS release...")
 		var release string
-		release, err = detectOSRelease()
+		release, err = detectOSRelease(ctx)
 		if err != nil {
 			return fmt.Errorf("error detecting OS release: %w", err)
 		}
@@ -58,7 +60,7 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 		if recreate {
 			// Remove existing venv
 			fmt.Println("Removing existing venv...")
-			if err := removeExistingVenv(ansibleVenvPath); err != nil {
+			if err := removeExistingVenv(ctx, ansibleVenvPath); err != nil {
 				return fmt.Errorf("error removing existing venv: %w", err)
 			}
 		}
@@ -66,38 +68,38 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 		if _, err := os.Stat(ansibleVenvPath); os.IsNotExist(err) {
 			// Create venv
 			fmt.Println("Creating virtual environment...")
-			if err := createVirtualEnv(ansibleVenvPath, release, verbose); err != nil {
+			if err := createVirtualEnv(ctx, ansibleVenvPath, release, verbose); err != nil {
 				return fmt.Errorf("error creating virtual environment: %w", err)
 			}
 		}
 
 		// Upgrade pip
 		fmt.Println("Upgrading pip...")
-		if err := upgradePip(ansibleVenvPath, verbose); err != nil {
+		if err := upgradePip(ctx, ansibleVenvPath, verbose); err != nil {
 			return fmt.Errorf("error upgrading pip: %w", err)
 		}
 
 		// Install libpq-dev dependency
 		fmt.Println("Installing libpq-dev...")
-		if err := apt.InstallPackage([]string{"libpq-dev"}, verbose)(); err != nil {
+		if err := apt.InstallPackage(ctx, []string{"libpq-dev"}, verbose)(); err != nil {
 			return fmt.Errorf("error installing libpq-dev: %w", err)
 		}
 
 		// Install requirements
 		fmt.Println("Installing pip requirements...")
-		if err := installRequirements(ansibleVenvPath, verbose); err != nil {
+		if err := installRequirements(ctx, ansibleVenvPath, verbose); err != nil {
 			return fmt.Errorf("error installing pip requirements: %w", err)
 		}
 
 		// Copy binaries
 		fmt.Println("Copying binaries...")
-		if err := copyBinaries(ansibleVenvPath, verbose); err != nil {
+		if err := copyBinaries(ctx, ansibleVenvPath, verbose); err != nil {
 			return fmt.Errorf("error copying binaries: %w", err)
 		}
 
 		// Set ownership
 		fmt.Printf("Setting ownership to user: %s...\n", saltboxUser)
-		if err := setOwnership(ansibleVenvPath, saltboxUser, verbose); err != nil {
+		if err := setOwnership(ctx, ansibleVenvPath, saltboxUser, verbose); err != nil {
 			return fmt.Errorf("error setting ownership: %w", err)
 		}
 
@@ -143,9 +145,9 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 
 		// Detect OS release
 		var release string
-		if err := spinners.RunTaskWithSpinner("Detecting OS release", func() error {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Detecting OS release", func() error {
 			var err error
-			release, err = detectOSRelease()
+			release, err = detectOSRelease(ctx)
 			return err
 		}); err != nil {
 			return fmt.Errorf("error detecting OS release: %w", err)
@@ -153,8 +155,8 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 
 		if recreate {
 			// Remove existing venv
-			if err := spinners.RunTaskWithSpinner("Removing existing venv", func() error {
-				return removeExistingVenv(ansibleVenvPath)
+			if err := spinners.RunTaskWithSpinnerContext(ctx, "Removing existing venv", func() error {
+				return removeExistingVenv(ctx, ansibleVenvPath)
 			}); err != nil {
 				return fmt.Errorf("error removing existing venv: %w", err)
 			}
@@ -162,44 +164,44 @@ func ManageAnsibleVenv(forceRecreate bool, saltboxUser string, verbose bool) err
 
 		if _, err := os.Stat(ansibleVenvPath); os.IsNotExist(err) {
 			// Create venv
-			if err := spinners.RunTaskWithSpinner("Creating virtual environment", func() error {
-				return createVirtualEnv(ansibleVenvPath, release, verbose)
+			if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating virtual environment", func() error {
+				return createVirtualEnv(ctx, ansibleVenvPath, release, verbose)
 			}); err != nil {
 				return fmt.Errorf("error creating virtual environment: %w", err)
 			}
 		}
 
 		// Upgrade pip
-		if err := spinners.RunTaskWithSpinner("Upgrading pip", func() error {
-			return upgradePip(ansibleVenvPath, verbose)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Upgrading pip", func() error {
+			return upgradePip(ctx, ansibleVenvPath, verbose)
 		}); err != nil {
 			return fmt.Errorf("error upgrading pip: %w", err)
 		}
 
 		// Install libpq-dev dependency
-		if err := spinners.RunTaskWithSpinner("Installing libpq-dev", func() error {
-			return apt.InstallPackage([]string{"libpq-dev"}, verbose)()
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing libpq-dev", func() error {
+			return apt.InstallPackage(ctx, []string{"libpq-dev"}, verbose)()
 		}); err != nil {
 			return fmt.Errorf("error installing libpq-dev: %w", err)
 		}
 
 		// Install requirements
-		if err := spinners.RunTaskWithSpinner("Installing pip requirements", func() error {
-			return installRequirements(ansibleVenvPath, verbose)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing pip requirements", func() error {
+			return installRequirements(ctx, ansibleVenvPath, verbose)
 		}); err != nil {
 			return fmt.Errorf("error installing pip requirements: %w", err)
 		}
 
 		// Copy binaries
-		if err := spinners.RunTaskWithSpinner("Copying binaries", func() error {
-			return copyBinaries(ansibleVenvPath, verbose)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Copying binaries", func() error {
+			return copyBinaries(ctx, ansibleVenvPath, verbose)
 		}); err != nil {
 			return fmt.Errorf("error copying binaries: %w", err)
 		}
 
 		// Set ownership
-		if err := spinners.RunTaskWithSpinner("Setting ownership", func() error {
-			return setOwnership(ansibleVenvPath, saltboxUser, verbose)
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Setting ownership", func() error {
+			return setOwnership(ctx, ansibleVenvPath, saltboxUser, verbose)
 		}); err != nil {
 			return fmt.Errorf("error setting ownership: %w", err)
 		}
@@ -231,8 +233,8 @@ func checkPythonVersion(ansibleVenvPath, venvPythonPath string) (bool, error) {
 }
 
 // detectOSRelease detects the OS release.
-func detectOSRelease() (string, error) {
-	cmd := exec.Command("lsb_release", "-cs")
+func detectOSRelease(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, "lsb_release", "-cs")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("error running lsb_release: %w", err)
@@ -241,28 +243,28 @@ func detectOSRelease() (string, error) {
 }
 
 // removeExistingVenv removes the existing virtual environment.
-func removeExistingVenv(ansibleVenvPath string) error {
-	cmd := exec.Command("rm", "-rf", ansibleVenvPath)
+func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
+	cmd := exec.CommandContext(ctx, "rm", "-rf", ansibleVenvPath)
 	return cmd.Run()
 }
 
 // createVirtualEnv creates the virtual environment.
-func createVirtualEnv(ansibleVenvPath, release string, verbose bool) error {
+func createVirtualEnv(ctx context.Context, ansibleVenvPath, release string, verbose bool) error {
 	env := os.Environ()
 	env = append(env, "DEBIAN_FRONTEND=noninteractive")
 	pythonCmd := fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion)
 
 	if release == "focal" || release == "jammy" {
-		if err := runCommand([]string{"add-apt-repository", "ppa:deadsnakes/ppa", "--yes"}, env, verbose); err != nil {
+		if err := runCommand(ctx, []string{"add-apt-repository", "ppa:deadsnakes/ppa", "--yes"}, env, verbose); err != nil {
 			return fmt.Errorf("error adding python ppa: %w", err)
 		}
-		if err := runCommand([]string{"apt-get", "update"}, env, verbose); err != nil {
+		if err := runCommand(ctx, []string{"apt-get", "update"}, env, verbose); err != nil {
 			return fmt.Errorf("error running apt update: %w", err)
 		}
-		if err := runCommand([]string{"apt-get", "install", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion), fmt.Sprintf("python%s-dev", constants.AnsibleVenvPythonVersion), fmt.Sprintf("python%s-venv", constants.AnsibleVenvPythonVersion), "-y"}, env, verbose); err != nil {
+		if err := runCommand(ctx, []string{"apt-get", "install", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion), fmt.Sprintf("python%s-dev", constants.AnsibleVenvPythonVersion), fmt.Sprintf("python%s-venv", constants.AnsibleVenvPythonVersion), "-y"}, env, verbose); err != nil {
 			return fmt.Errorf("error installing python: %w", err)
 		}
-		if err := runCommand([]string{pythonCmd, "-m", "ensurepip"}, env, verbose); err != nil {
+		if err := runCommand(ctx, []string{pythonCmd, "-m", "ensurepip"}, env, verbose); err != nil {
 			return fmt.Errorf("error ensuring pip: %w", err)
 		}
 	}
@@ -270,31 +272,31 @@ func createVirtualEnv(ansibleVenvPath, release string, verbose bool) error {
 		return fmt.Errorf("error creating venv dir: %w", err)
 	}
 
-	cmd := exec.Command(pythonCmd, "-m", "venv", "venv")
+	cmd := exec.CommandContext(ctx, pythonCmd, "-m", "venv", "venv")
 	cmd.Dir = ansibleVenvPath
 	return cmd.Run()
 }
 
 // upgradePip upgrades pip, setuptools, and wheel.
-func upgradePip(ansibleVenvPath string, verbose bool) error {
+func upgradePip(ctx context.Context, ansibleVenvPath string, verbose bool) error {
 	pythonPath := filepath.Join(ansibleVenvPath, "venv", "bin", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion))
 	command := []string{pythonPath, "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--upgrade", "pip", "setuptools", "wheel"}
 	env := os.Environ() // Inherit current environment
 
-	return runCommand(command, env, verbose)
+	return runCommand(ctx, command, env, verbose)
 }
 
 // installRequirements installs the requirements.
-func installRequirements(ansibleVenvPath string, verbose bool) error {
+func installRequirements(ctx context.Context, ansibleVenvPath string, verbose bool) error {
 	pythonPath := filepath.Join(ansibleVenvPath, "venv", "bin", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion))
 	command := []string{pythonPath, "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--upgrade", "--requirement", constants.AnsibleRequirementsPath}
 	env := os.Environ()
 
-	return runCommand(command, env, verbose)
+	return runCommand(ctx, command, env, verbose)
 }
 
 // copyBinaries copies the binaries.
-func copyBinaries(ansibleVenvPath string, verbose bool) error {
+func copyBinaries(ctx context.Context, ansibleVenvPath string, verbose bool) error {
 	binaries := []string{"ansible*", "certbot", "apprise"}
 	env := os.Environ()
 
@@ -304,7 +306,7 @@ func copyBinaries(ansibleVenvPath string, verbose bool) error {
 
 		command := []string{"sh", "-c", fmt.Sprintf("cp %s %s", src, dst)}
 
-		if err := runCommand(command, env, verbose); err != nil {
+		if err := runCommand(ctx, command, env, verbose); err != nil {
 			return fmt.Errorf("error copying %s: %w", binary, err)
 		}
 	}
@@ -312,16 +314,16 @@ func copyBinaries(ansibleVenvPath string, verbose bool) error {
 }
 
 // setOwnership sets the ownership.
-func setOwnership(ansibleVenvPath, saltboxUser string, verbose bool) error {
+func setOwnership(ctx context.Context, ansibleVenvPath, saltboxUser string, verbose bool) error {
 	command := []string{"chown", "-R", fmt.Sprintf("%s:%s", saltboxUser, saltboxUser), ansibleVenvPath}
 	env := os.Environ()
 
-	return runCommand(command, env, verbose)
+	return runCommand(ctx, command, env, verbose)
 }
 
 // runCommand runs a command with the given environment.
-func runCommand(command []string, env []string, verbose bool) error {
-	cmd := exec.Command(command[0], command[1:]...)
+func runCommand(ctx context.Context, command []string, env []string, verbose bool) error {
+	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Env = env
 	if verbose {
 		fmt.Println("Running command:", command)

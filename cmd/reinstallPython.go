@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,8 +21,9 @@ var reinstallPythonCmd = &cobra.Command{
 	Short: "Reinstall the deadsnakes Python version used by Saltbox and related Ansible virtual environment",
 	Long:  `Reinstall the deadsnakes Python version used by Saltbox and related Ansible virtual environment`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
-		return handleReinstallPython(verbose)
+		return handleReinstallPython(ctx, verbose)
 	},
 }
 
@@ -30,18 +32,18 @@ func init() {
 	reinstallPythonCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 }
 
-func handleReinstallPython(verbose bool) error {
+func handleReinstallPython(ctx context.Context, verbose bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
-	release, err := detectOSRelease()
+	release, err := detectOSRelease(ctx)
 	if err != nil {
 		return fmt.Errorf("error detecting OS release: %w", err)
 	}
 
 	if release == "focal" || release == "jammy" {
 		_ = spinners.RunInfoSpinner("Removing Python 3.12 packages and recreating Ansible venv.")
-		if err := removePython(verbose); err != nil {
+		if err := removePython(ctx, verbose); err != nil {
 			return fmt.Errorf("error removing Python packages: %w", err)
 		}
 
@@ -50,7 +52,7 @@ func handleReinstallPython(verbose bool) error {
 			return fmt.Errorf("error getting saltbox user: %w", err)
 		}
 
-		if err := venv.ManageAnsibleVenv(true, saltboxUser, verbose); err != nil {
+		if err := venv.ManageAnsibleVenv(ctx, true, saltboxUser, verbose); err != nil {
 			return fmt.Errorf("error managing Ansible venv: %w", err)
 		}
 	} else {
@@ -60,8 +62,8 @@ func handleReinstallPython(verbose bool) error {
 	return nil
 }
 
-func detectOSRelease() (string, error) {
-	cmd := exec.Command("lsb_release", "-cs")
+func detectOSRelease(ctx context.Context) (string, error) {
+	cmd := exec.CommandContext(ctx, "lsb_release", "-cs")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("error running lsb_release: %w", err)
@@ -69,7 +71,7 @@ func detectOSRelease() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-func removePython(verbose bool) error {
+func removePython(ctx context.Context, verbose bool) error {
 	packages := []string{
 		"libpython3.12-minimal",
 		"python3.12-minimal",
@@ -114,7 +116,7 @@ func removePython(verbose bool) error {
 		}
 	}
 
-	cmd := exec.Command("apt", append([]string{"remove", "-y"}, packagesToRemove...)...)
+	cmd := exec.CommandContext(ctx, "apt", append([]string{"remove", "-y"}, packagesToRemove...)...)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -132,7 +134,8 @@ func removePython(verbose bool) error {
 // isPkgInstalled checks if a package is installed using dpkg-query
 func isPkgInstalled(pkgName string) (bool, error) {
 	// Use dpkg-query to check if the package is installed
-	cmd := exec.Command("dpkg-query", "--show", "--showformat='${Status}'", pkgName)
+	// Note: uses context.Background() as this is a quick local check
+	cmd := exec.CommandContext(context.Background(), "dpkg-query", "--show", "--showformat='${Status}'", pkgName)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout

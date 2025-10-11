@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -16,8 +17,9 @@ var reinstallVenvCmd = &cobra.Command{
 	Short: "Reinstall the Ansible virtual environment",
 	Long:  `Reinstall the Ansible virtual environment`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
-		return handleReinstallVenv(verbose)
+		return handleReinstallVenv(ctx, verbose)
 	},
 }
 
@@ -27,7 +29,7 @@ func init() {
 }
 
 // handleReinstallVenv handles the reinstallation of the Ansible virtual environment.
-func handleReinstallVenv(verbose bool) error {
+func handleReinstallVenv(ctx context.Context, verbose bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
@@ -44,7 +46,7 @@ func handleReinstallVenv(verbose bool) error {
 
 	// Manage Ansible venv with the force recreate flag set to true
 	// This function already has internal spinners
-	if err := venv.ManageAnsibleVenv(true, saltboxUser, verbose); err != nil {
+	if err := venv.ManageAnsibleVenv(ctx, true, saltboxUser, verbose); err != nil {
 		return fmt.Errorf("error managing Ansible venv: %w", err)
 	}
 

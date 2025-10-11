@@ -1,10 +1,8 @@
 package spinners
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/saltyorg/sb-go/internal/styles"
 
@@ -35,7 +33,14 @@ func SetVerboseMode(verbose bool) {
 }
 
 // RunTaskWithSpinner provides a spinner with default options or text output in verbose mode
+// Deprecated: Use RunTaskWithSpinnerContext instead for proper cancellation support
 func RunTaskWithSpinner(message string, taskFunc TaskFunc) error {
+	return RunTaskWithSpinnerContext(context.Background(), message, taskFunc)
+}
+
+// RunTaskWithSpinnerContext provides a spinner with default options or text output in verbose mode.
+// It accepts a context for cancellation support, allowing tasks to be interrupted gracefully.
+func RunTaskWithSpinnerContext(ctx context.Context, message string, taskFunc TaskFunc) error {
 	if VerboseMode {
 		// In verbose mode, just print the message and execute the task directly
 		fmt.Println(message + "...")
@@ -57,11 +62,18 @@ func RunTaskWithSpinner(message string, taskFunc TaskFunc) error {
 		StopMessage:     message,
 		StopFailMessage: message,
 	}
-	return runTaskWithSpinner(opts, taskFunc)
+	return runTaskWithSpinnerContext(ctx, opts, taskFunc)
 }
 
 // RunTaskWithSpinnerCustom provides a spinner with custom options.
+// Deprecated: Use RunTaskWithSpinnerCustomContext instead for proper cancellation support
 func RunTaskWithSpinnerCustom(opts SpinnerOptions, taskFunc TaskFunc) error {
+	return RunTaskWithSpinnerCustomContext(context.Background(), opts, taskFunc)
+}
+
+// RunTaskWithSpinnerCustomContext provides a spinner with custom options.
+// It accepts a context for cancellation support, allowing tasks to be interrupted gracefully.
+func RunTaskWithSpinnerCustomContext(ctx context.Context, opts SpinnerOptions, taskFunc TaskFunc) error {
 	if opts.TaskName == "" {
 		return fmt.Errorf("taskName is required")
 	}
@@ -81,11 +93,16 @@ func RunTaskWithSpinnerCustom(opts SpinnerOptions, taskFunc TaskFunc) error {
 	if opts.StopFailMessage == "" {
 		opts.StopFailMessage = opts.TaskName
 	}
-	return runTaskWithSpinner(opts, taskFunc)
+	return runTaskWithSpinnerContext(ctx, opts, taskFunc)
 }
 
-// Internal function to handle the actual spinner logic.
+// Internal function to handle the actual spinner logic (deprecated, kept for compatibility).
 func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
+	return runTaskWithSpinnerContext(context.Background(), opts, taskFunc)
+}
+
+// Internal function to handle the actual spinner logic with context support.
+func runTaskWithSpinnerContext(ctx context.Context, opts SpinnerOptions, taskFunc TaskFunc) error {
 	// Create a channel to receive the task error
 	errCh := make(chan error, 1)
 
@@ -99,10 +116,9 @@ func runTaskWithSpinner(opts SpinnerOptions, taskFunc TaskFunc) error {
 	// Create and run the program with the wrapped task
 	p := tea.NewProgram(newSpinnerModel(opts, wrappedTaskFunc))
 
+	// Monitor context cancellation and send quit message to the program
 	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-		<-sigCh
+		<-ctx.Done()
 		p.Send(quitMsg{})
 	}()
 
