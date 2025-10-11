@@ -10,6 +10,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/agnivade/levenshtein"
@@ -142,19 +143,19 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	ansibleBinaryPath := constants.AnsiblePlaybookBinaryPath
 
 	if len(saltboxTags) > 0 {
-		if err := runPlaybook(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), saltboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
+		if err := runPlaybook(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), saltboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs, verbosity > 0); err != nil {
 			return err
 		}
 	}
 
 	if len(saltboxModTags) > 0 {
-		if err := runPlaybook(ctx, constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), saltboxModTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
+		if err := runPlaybook(ctx, constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), saltboxModTags, ansibleBinaryPath, extraVars, skipTags, extraArgs, verbosity > 0); err != nil {
 			return err
 		}
 	}
 
 	if len(sandboxTags) > 0 {
-		if err := runPlaybook(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), sandboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
+		if err := runPlaybook(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), sandboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs, verbosity > 0); err != nil {
 			return err
 		}
 	}
@@ -166,7 +167,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	return nil
 }
 
-func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []string, ansibleBinaryPath string, extraVars []string, skipTags []string, extraArgs []string) error {
+func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []string, ansibleBinaryPath string, extraVars []string, skipTags []string, extraArgs []string, verbose bool) error {
 	tagsArg := strings.Join(tags, ",")
 	allArgs := []string{"--tags", tagsArg}
 
@@ -180,7 +181,7 @@ func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []stri
 
 	allArgs = append(allArgs, extraArgs...)
 
-	err := ansible.RunAnsiblePlaybook(ctx, repoPath, playbookPath, ansibleBinaryPath, allArgs, true)
+	err := ansible.RunAnsiblePlaybook(ctx, repoPath, playbookPath, ansibleBinaryPath, allArgs, verbose)
 	if err != nil {
 		handleInterruptError(err)
 		return fmt.Errorf("error running playbook: %w", err)
@@ -306,37 +307,53 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 	}
 
 	// Check if the cache exists and is *complete* *before* attempting to update.
+	// Also verify that the commit hash matches the current repository state.
 	repoCache, ok := cacheInstance.GetRepoCache(repoPath)
 	if ok {
 		if verbosity > 0 {
 			fmt.Printf("DEBUG: Cache found for %s\n", repoPath)
 		}
-		cachedTagsInterface, ok := repoCache["tags"]
-		if ok {
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: 'tags' key found in cache for %s\n", repoPath)
-			}
-			cachedTags, ok := cachedTagsInterface.([]any)
-			if ok {
-				if verbosity > 0 {
-					fmt.Printf("DEBUG: Cache is valid type for: %s\n", repoPath)
-				}
-				cachedTagsStrings := make([]string, 0, len(cachedTags))
-				for _, tag := range cachedTags {
-					if strTag, ok := tag.(string); ok {
-						cachedTagsStrings = append(cachedTagsStrings, strTag)
+		// Check if commit hash matches
+		if cachedCommit, commitOK := repoCache["commit"].(string); commitOK {
+			currentCommit, err := git.GetGitCommitHash(repoPath)
+			if err == nil && cachedCommit == currentCommit {
+				// Commit matches, check if tags exist
+				cachedTagsInterface, ok := repoCache["tags"]
+				if ok {
+					if verbosity > 0 {
+						fmt.Printf("DEBUG: 'tags' key found in cache for %s with matching commit\n", repoPath)
 					}
+					cachedTags, ok := cachedTagsInterface.([]any)
+					if ok {
+						if verbosity > 0 {
+							fmt.Printf("DEBUG: Cache is valid type for: %s\n", repoPath)
+						}
+						cachedTagsStrings := make([]string, 0, len(cachedTags))
+						for _, tag := range cachedTags {
+							if strTag, ok := tag.(string); ok {
+								cachedTagsStrings = append(cachedTagsStrings, strTag)
+							}
+						}
+						// If we got here, the cache is valid. Return
+						if verbosity > 0 {
+							fmt.Printf("DEBUG: Cache valid. Returning %v\n", cachedTagsStrings)
+						}
+						return cachedTagsStrings
+					} else if verbosity > 0 {
+						fmt.Printf("DEBUG: Cache is invalid type for %s\n", repoPath)
+					}
+				} else if verbosity > 0 {
+					fmt.Printf("DEBUG: 'tags' key NOT found in cache for %s\n", repoPath)
 				}
-				// If we got here, the cache is valid. Return
-				if verbosity > 0 {
-					fmt.Printf("DEBUG: Cache valid. Returning %v\n", cachedTagsStrings)
-				}
-				return cachedTagsStrings
 			} else if verbosity > 0 {
-				fmt.Printf("DEBUG: Cache is invalid type for %s\n", repoPath)
+				if err != nil {
+					fmt.Printf("DEBUG: Error getting current commit for %s: %v\n", repoPath, err)
+				} else {
+					fmt.Printf("DEBUG: Commit mismatch for %s (cached: %s, current: %s)\n", repoPath, cachedCommit, currentCommit)
+				}
 			}
 		} else if verbosity > 0 {
-			fmt.Printf("DEBUG: 'tags' key NOT found in cache for %s\n", repoPath)
+			fmt.Printf("DEBUG: No valid commit hash in cache for %s\n", repoPath)
 		}
 	} else if verbosity > 0 {
 		fmt.Printf("DEBUG: Cache NOT found for %s\n", repoPath)

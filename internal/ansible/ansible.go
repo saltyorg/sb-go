@@ -29,51 +29,58 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 		fmt.Println("Executing Ansible playbook with command:", strings.Join(command, " "))
 	}
 
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Dir = repoPath
-
-	var stdoutBuf, stderrBuf bytes.Buffer
-
+	// For verbose mode, we need to use the real command with stdio
 	if verbose {
+		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+		cmd.Dir = repoPath
 		cmd.Stdout = os.Stdout
 		cmd.Stdin = os.Stdin
 		cmd.Stderr = os.Stderr
-	} else {
-		cmd.Stdout = &stdoutBuf
-		cmd.Stderr = &stderrBuf
+
+		err := cmd.Run()
+
+		if err != nil {
+			// Check if the error is due to context cancellation (signal interruption)
+			if sbErrors.HandleInterruptError(err) {
+				return fmt.Errorf("playbook execution interrupted by user")
+			}
+
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				if exitErr.ExitCode() < 0 {
+					if sbErrors.HandleInterruptError(err) {
+						return fmt.Errorf("playbook execution interrupted by user")
+					}
+				}
+				return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d", playbookPath, exitErr.ExitCode())
+			}
+			return fmt.Errorf("\nError: Playbook %s run failed: %w", playbookPath, err)
+		}
+
+		fmt.Printf("\nPlaybook %s executed successfully.\n", playbookPath)
+		return nil
 	}
 
-	err := cmd.Run()
+	// For non-verbose mode, use the executor interface (allows mocking)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	err := defaultExecutor.ExecuteWithIO(ctx, command[0], command[1:], &stdoutBuf, &stderrBuf, nil)
 
 	if err != nil {
 		// Check if the error is due to context cancellation (signal interruption)
 		if sbErrors.HandleInterruptError(err) {
-			// Shutdown was initiated, return error to propagate
 			return fmt.Errorf("playbook execution interrupted by user")
 		}
 
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			// Check if the exit code indicates the process was killed by a signal (negative exit codes)
 			if exitErr.ExitCode() < 0 {
-				// This is likely a signal interruption
 				if sbErrors.HandleInterruptError(err) {
 					return fmt.Errorf("playbook execution interrupted by user")
 				}
 			}
-			if !verbose {
-				return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), stderrBuf.String())
-			}
-			return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d", playbookPath, exitErr.ExitCode())
+			return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), stderrBuf.String())
 		}
-		if !verbose {
-			return fmt.Errorf("\nError: Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, stderrBuf.String())
-		}
-		return fmt.Errorf("\nError: Playbook %s run failed: %w", playbookPath, err)
-	}
-
-	if verbose {
-		fmt.Printf("\nPlaybook %s executed successfully.\n", playbookPath)
+		return fmt.Errorf("\nError: Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, stderrBuf.String())
 	}
 
 	return nil
@@ -84,10 +91,10 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 // It builds the command using repoPath, playbookPath, and extraSkipTags. Additionally, if a cache is provided,
 // the function checks whether cached tags can be used by comparing the repository's commit hash.
 // If the repoPath corresponds to a specific known path (i.e., saltbox_mod), a fixed command configuration is used.
-// The function returns an exec.Cmd (or nil if cached tags are available), a function to parse the command output,
+// The function returns command args (or nil if cached tags are available), a function to parse the command output,
 // and an error if any configuration or cache retrieval fails.
 // The context parameter allows for cancellation of the command execution.
-func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (*exec.Cmd, func(string) ([]string, error), error) {
+func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) ([]string, func(string) ([]string, error), error) {
 	// parseOutput extracts tags from the ansible-playbook output using a regular expression.
 	parseOutput := func(output string) ([]string, error) {
 		re := regexp.MustCompile(`TASK TAGS:\s*\[(.*?)]`)
@@ -107,13 +114,6 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 		}
 
 		return tags, nil
-	}
-
-	// If repoPath matches the specific saltbox_mod repository, use a predetermined command configuration.
-	if repoPath == constants.SaltboxModRepoPath {
-		cmd := exec.CommandContext(ctx, constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
-		cmd.Dir = repoPath
-		return cmd, parseOutput, nil
 	}
 
 	// Check if the cache is available and valid by comparing the stored commit hash with the current one.
@@ -143,10 +143,9 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 		}
 	}
 
-	// No valid cache found; build the command to list tags.
-	cmd := exec.CommandContext(ctx, constants.AnsiblePlaybookBinaryPath, playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags))
-	cmd.Dir = repoPath
-	return cmd, parseOutput, nil
+	// No valid cache found; build the command args to list tags.
+	args := []string{playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags)}
+	return args, parseOutput, nil
 }
 
 // RunAndCacheAnsibleTags runs the ansible-playbook command to list available tags,
@@ -157,12 +156,12 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 // The boolean return value indicates whether the cache was rebuilt (true) or if cached tags were used (false).
 // The context parameter allows for cancellation of the command execution.
 func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (bool, error) {
-	cmd, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
+	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
 	if err != nil {
 		return false, err
 	}
 
-	if cmd == nil && tagParser != nil {
+	if args == nil && tagParser != nil {
 		// Cached tags are available; retrieve and update the cache.
 		tags, err := tagParser("")
 		if err != nil {
@@ -181,21 +180,18 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 		return false, nil // Cache was used, not rebuilt
 	}
 
-	if cmd != nil {
-		var out bytes.Buffer
-		var stderr bytes.Buffer
-		cmd.Stdout = &out
-		cmd.Stderr = &stderr
-		err := cmd.Run()
+	if args != nil {
+		// Use the executor interface to run the command
+		output, err := defaultExecutor.ExecuteContext(ctx, constants.AnsiblePlaybookBinaryPath, args...)
 		if err != nil {
 			// Check if it's a user interrupt
 			if sbErrors.HandleInterruptError(err) {
 				return true, fmt.Errorf("command interrupted by user")
 			}
-			return true, fmt.Errorf("ansible-playbook failed: %s, stderr: %s", err, stderr.String())
+			return true, fmt.Errorf("ansible-playbook failed: %w", err)
 		}
 
-		tags, err := tagParser(out.String())
+		tags, err := tagParser(string(output))
 		if err != nil {
 			return true, err
 		}
@@ -223,29 +219,26 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 // An error is returned if command execution or output parsing fails.
 // The context parameter allows for cancellation of the command execution.
 func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) ([]string, error) {
-	cmd, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
+	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
 	if err != nil {
 		return nil, err
 	}
 
-	if cmd == nil {
+	if args == nil {
 		return nil, fmt.Errorf("RunAnsibleListTags should not use cache")
 	}
 
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-	err = cmd.Run()
+	// Use the executor interface to run the command
+	output, err := defaultExecutor.ExecuteContext(ctx, constants.AnsiblePlaybookBinaryPath, args...)
 	if err != nil {
 		// Check if it's a user interrupt
 		if sbErrors.HandleInterruptError(err) {
 			return nil, fmt.Errorf("command interrupted by user")
 		}
-		return nil, fmt.Errorf("ansible-playbook failed: %s, stderr: %s", err, stderr.String())
+		return nil, fmt.Errorf("ansible-playbook failed: %w", err)
 	}
 
-	tags, err := tagParser(out.String())
+	tags, err := tagParser(string(output))
 	if err != nil {
 		return nil, err
 	}

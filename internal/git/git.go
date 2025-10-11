@@ -155,23 +155,15 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 // Note: This function doesn't accept context as it's a quick local operation,
 // but uses context.Background() internally for consistency.
 func GetGitCommitHash(repoPath string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "HEAD")
-	cmd.Dir = repoPath
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
+	output, err := defaultExecutor.ExecuteCommand(context.Background(), repoPath, "git", BuildRevParseArgs()...)
 
 	if err != nil {
 		if _, statErr := os.Stat(repoPath); statErr != nil {
 			return "", fmt.Errorf("the folder '%s' does not exist. This indicates an incomplete install", repoPath)
 		}
 
-		return "", fmt.Errorf("error occurred while trying to get the git commit hash: %s", stderr.String())
+		return "", fmt.Errorf("error occurred while trying to get the git commit hash: %s", string(output))
 	}
 
-	return strings.TrimSpace(out.String()), nil
+	return ParseCommitHash(output), nil
 }
