@@ -1,6 +1,7 @@
 package python
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -30,13 +31,7 @@ func TestDeadsnakesPackages(t *testing.T) {
 
 	// Check each expected package is in the list
 	for _, expected := range expectedPackages {
-		found := false
-		for _, pkg := range packages {
-			if pkg == expected {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(packages, expected)
 		if !found {
 			t.Errorf("Expected package %s not found in list", expected)
 		}
