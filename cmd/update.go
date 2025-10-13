@@ -53,7 +53,7 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
-	//doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
+	doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
 
 	// Load announcement files before updates
 	saltboxAnnouncementsBefore, sandboxAnnouncementsBefore, err := announcements.LoadAllAnnouncementFiles()
