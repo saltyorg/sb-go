@@ -58,7 +58,7 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 	spinners.SetVerboseMode(verbose)
 
 	if !skipSelfUpdate {
-		doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
+		doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox", false)
 	}
 
 	// Load announcement files before updates
@@ -217,7 +217,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 		if err != nil {
 			return fmt.Errorf("error creating cache: %w", err)
 		}
-		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache); err != nil {
+		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache, 0); err != nil {
 			handleInterruptError(err)
 			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
@@ -275,7 +275,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 		if err != nil {
 			return fmt.Errorf("error creating cache: %w", err)
 		}
-		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache); err != nil {
+		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache, 0); err != nil {
 			handleInterruptError(err)
 			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}

@@ -9,22 +9,28 @@ import (
 // CommandExecutor is an interface for executing commands
 // This allows for easy mocking in tests
 type CommandExecutor interface {
-	ExecuteContext(ctx context.Context, name string, args ...string) ([]byte, error)
-	ExecuteWithIO(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error
+	ExecuteContext(ctx context.Context, dir string, name string, args ...string) ([]byte, error)
+	ExecuteWithIO(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error
 }
 
 // RealCommandExecutor implements CommandExecutor using actual exec.Command
 type RealCommandExecutor struct{}
 
 // ExecuteContext executes a command and returns the combined output
-func (e *RealCommandExecutor) ExecuteContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+func (e *RealCommandExecutor) ExecuteContext(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	return cmd.CombinedOutput()
 }
 
 // ExecuteWithIO executes a command with custom IO streams
-func (e *RealCommandExecutor) ExecuteWithIO(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
+func (e *RealCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
 	cmd := exec.CommandContext(ctx, name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	if stdout != nil {
 		if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
 			cmd.Stdout = w
@@ -45,22 +51,22 @@ func (e *RealCommandExecutor) ExecuteWithIO(ctx context.Context, name string, ar
 
 // MockCommandExecutor is a mock implementation for testing
 type MockCommandExecutor struct {
-	ExecuteContextFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
-	ExecuteWithIOFunc  func(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error
+	ExecuteContextFunc func(ctx context.Context, dir string, name string, args ...string) ([]byte, error)
+	ExecuteWithIOFunc  func(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error
 }
 
 // ExecuteContext mock implementation
-func (m *MockCommandExecutor) ExecuteContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+func (m *MockCommandExecutor) ExecuteContext(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
 	if m.ExecuteContextFunc != nil {
-		return m.ExecuteContextFunc(ctx, name, args...)
+		return m.ExecuteContextFunc(ctx, dir, name, args...)
 	}
 	return []byte{}, nil
 }
 
 // ExecuteWithIO mock implementation
-func (m *MockCommandExecutor) ExecuteWithIO(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
+func (m *MockCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
 	if m.ExecuteWithIOFunc != nil {
-		return m.ExecuteWithIOFunc(ctx, name, args, stdout, stderr, stdin)
+		return m.ExecuteWithIOFunc(ctx, dir, name, args, stdout, stderr, stdin)
 	}
 	// Write some mock output if stdout is provided
 	if stdout != nil {

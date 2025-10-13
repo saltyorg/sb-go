@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -13,6 +14,12 @@ import (
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/spf13/cobra"
 )
+
+// isAnsiblePlaybookAvailable checks if ansible-playbook is installed
+func isAnsiblePlaybookAvailable() bool {
+	_, err := exec.LookPath(constants.AnsiblePlaybookBinaryPath)
+	return err == nil
+}
 
 // MockGitExecutor for git operations
 type MockGitExecutor struct {
@@ -32,21 +39,21 @@ func (m *MockGitExecutor) ExecuteCommand(ctx context.Context, dir string, name s
 
 // MockAnsibleExecutor for ansible operations
 type MockAnsibleExecutor struct {
-	ExecuteContextFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
-	ExecuteWithIOFunc  func(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error
+	ExecuteContextFunc func(ctx context.Context, dir string, name string, args ...string) ([]byte, error)
+	ExecuteWithIOFunc  func(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error
 }
 
-func (m *MockAnsibleExecutor) ExecuteContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+func (m *MockAnsibleExecutor) ExecuteContext(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
 	if m.ExecuteContextFunc != nil {
-		return m.ExecuteContextFunc(ctx, name, args...)
+		return m.ExecuteContextFunc(ctx, dir, name, args...)
 	}
 	// Default: return mock ansible output
 	return []byte("TASK TAGS: [tag1, tag2, tag3]"), nil
 }
 
-func (m *MockAnsibleExecutor) ExecuteWithIO(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
+func (m *MockAnsibleExecutor) ExecuteWithIO(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
 	if m.ExecuteWithIOFunc != nil {
-		return m.ExecuteWithIOFunc(ctx, name, args, stdout, stderr, stdin)
+		return m.ExecuteWithIOFunc(ctx, dir, name, args, stdout, stderr, stdin)
 	}
 	// Default: write mock output
 	if stdout != nil {
@@ -227,7 +234,7 @@ func TestGetValidTags_Integration(t *testing.T) {
 
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
-				ExecuteContextFunc: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+				ExecuteContextFunc: func(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
 					// Return tags in ansible format
 					tagsStr := ""
 					for i, tag := range tt.mockTags {
@@ -340,13 +347,12 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
-				ExecuteContextFunc: func(ctx context.Context, name string, args ...string) ([]byte, error) {
-					// Determine which tags to return based on the command
+				ExecuteContextFunc: func(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
+					// Determine which tags to return based on the working directory
 					var tags []string
-					// Simple heuristic: check the working directory or command args
-					// In real scenarios, we'd parse the args more carefully
+					// Use the dir parameter to determine which repo's tags to return
 					tags = tt.saltboxTags
-					if tt.repoPath == constants.SandboxRepoPath {
+					if dir == constants.SandboxRepoPath {
 						tags = tt.sandboxTags
 					}
 
@@ -391,6 +397,10 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 
 // TestRunPlaybook_Integration tests the runPlaybook function structure
 func TestRunPlaybook_Integration(t *testing.T) {
+	if !isAnsiblePlaybookAvailable() {
+		t.Skip("Skipping TestRunPlaybook_Integration: ansible-playbook not found in PATH")
+	}
+
 	// Save original executor
 	originalAnsibleExecutor := ansible.GetExecutor()
 	defer ansible.SetExecutor(originalAnsibleExecutor)
@@ -451,7 +461,7 @@ func TestRunPlaybook_Integration(t *testing.T) {
 
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
-				ExecuteWithIOFunc: func(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
+				ExecuteWithIOFunc: func(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
 					// Write success output
 					if stdout != nil {
 						if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
@@ -480,6 +490,10 @@ func TestRunPlaybook_Integration(t *testing.T) {
 
 // TestHandleInstall_Integration tests parts of handleInstall with mocks
 func TestHandleInstall_Integration(t *testing.T) {
+	if !isAnsiblePlaybookAvailable() {
+		t.Skip("Skipping TestHandleInstall_Integration: ansible-playbook not found in PATH")
+	}
+
 	// Save original executors
 	originalGitExecutor := git.GetExecutor()
 	originalAnsibleExecutor := ansible.GetExecutor()
@@ -532,10 +546,10 @@ func TestHandleInstall_Integration(t *testing.T) {
 
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
-				ExecuteContextFunc: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+				ExecuteContextFunc: func(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
 					return []byte("TASK TAGS: [plex, sonarr, radarr, overseerr, tautulli, jellyfin, emby]"), nil
 				},
-				ExecuteWithIOFunc: func(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
+				ExecuteWithIOFunc: func(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
 					if stdout != nil {
 						if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
 							w.Write([]byte("PLAY RECAP\n"))

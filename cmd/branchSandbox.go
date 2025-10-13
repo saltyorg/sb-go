@@ -52,7 +52,7 @@ func changeSandboxBranch(ctx context.Context, branchName string) error {
 		return fmt.Errorf("error creating cache: %w", err)
 	}
 
-	_, err = ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance)
+	_, err = ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
 	if err != nil {
 		return err
 	}

@@ -55,7 +55,7 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: 0
         run: |
-          ldflags="-w -s -X '${GITHUB_REPO}/internal/runtime.Version=${VERSION}' -X '${GITHUB_REPO}/internal/runtime.GitCommit=${GIT_COMMIT}'"
+          ldflags="-w -s -X '${GITHUB_REPO}/internal/runtime.Version=${VERSION}' -X '${GITHUB_REPO}/internal/runtime.GitCommit=${GIT_COMMIT}' -X 'github.com/saltyorg/sb-go/internal/runtime.DisableSelfUpdate=false'"
           
           # For GitHub releases, use the selfupdate naming convention
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then

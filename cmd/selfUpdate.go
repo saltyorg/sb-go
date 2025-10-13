@@ -21,13 +21,24 @@ var debug bool
 // Auto-accept flag to skip confirmation
 var autoAccept bool
 
+// Force update flag to bypass DisableSelfUpdate build flag
+var forceUpdate bool
+
 // selfUpdateCmd represents the selfUpdate command
 var selfUpdateCmd = &cobra.Command{
 	Use:   "self-update",
 	Short: "Update Saltbox CLI",
 	Long:  `Update Saltbox CLI`,
 	Run: func(cmd *cobra.Command, args []string) {
-		doSelfUpdate(autoAccept, debug, "")
+		// Check if self-update is disabled at build time (unless force flag is used)
+		if runtime.DisableSelfUpdate == "true" && !forceUpdate {
+			_ = spinners.RunWarningSpinner("Self-update is disabled in this build")
+			if runtime.DisableSelfUpdate == "true" {
+				_ = spinners.RunInfoSpinner("Use --force-update to override this restriction")
+			}
+			return
+		}
+		doSelfUpdate(autoAccept, debug, "", forceUpdate)
 	},
 }
 
@@ -35,6 +46,11 @@ func init() {
 	rootCmd.AddCommand(selfUpdateCmd)
 	selfUpdateCmd.Flags().BoolVarP(&debug, "verbose", "v", false, "Enable verbose debug output")
 	selfUpdateCmd.Flags().BoolVarP(&autoAccept, "yes", "y", false, "Automatically accept update without confirmation")
+
+	// Only add a force-update flag if self-update is disabled at build time
+	if runtime.DisableSelfUpdate == "true" {
+		selfUpdateCmd.Flags().BoolVar(&forceUpdate, "force-update", false, "Force update even when self-update is disabled")
+	}
 }
 
 // promptForConfirmation asks the user for confirmation (y/n)
@@ -52,7 +68,26 @@ func promptForConfirmation(prompt string) bool {
 	return response == "y" || response == "yes"
 }
 
-func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string) {
+func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force bool) {
+	// Check if self-update is disabled at build time (unless force is true)
+	if runtime.DisableSelfUpdate == "true" && !force {
+		if verbose {
+			fmt.Println("Debug: Self-update is disabled (build flag)")
+		} else {
+			_ = spinners.RunWarningSpinner("Self-update is disabled in this build")
+		}
+		return
+	}
+
+	// Log if force update is being used
+	if force && runtime.DisableSelfUpdate == "true" {
+		if verbose {
+			fmt.Println("Debug: Force update flag is active, bypassing DisableSelfUpdate build flag")
+		} else {
+			_ = spinners.RunInfoSpinner("Forcing self-update despite build configuration")
+		}
+	}
+
 	if verbose {
 		fmt.Println("Debug: Starting self-update process")
 		fmt.Printf("Debug: Current version: %s\n", runtime.Version)

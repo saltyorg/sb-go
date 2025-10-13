@@ -363,7 +363,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 	if verbosity > 0 {
 		fmt.Printf("DEBUG: Attempting to update/populate cache for %s\n", repoPath)
 	}
-	_, err := ansible.RunAndCacheAnsibleTags(ctx, repoPath, playbookPath, "", cacheInstance) // Use empty string for extraSkipTags
+	_, err := ansible.RunAndCacheAnsibleTags(ctx, repoPath, playbookPath, "", cacheInstance, verbosity) // Use empty string for extraSkipTags
 	if err != nil {
 		handleInterruptError(err)
 		if verbosity > 0 {

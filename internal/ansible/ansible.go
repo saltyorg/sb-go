@@ -63,7 +63,7 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 
 	// For non-verbose mode, use the executor interface (allows mocking)
 	var stdoutBuf, stderrBuf bytes.Buffer
-	err := defaultExecutor.ExecuteWithIO(ctx, command[0], command[1:], &stdoutBuf, &stderrBuf, nil)
+	err := defaultExecutor.ExecuteWithIO(ctx, repoPath, command[0], command[1:], &stdoutBuf, &stderrBuf, nil)
 
 	if err != nil {
 		// Check if the error is due to context cancellation (signal interruption)
@@ -94,7 +94,8 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 // The function returns command args (or nil if cached tags are available), a function to parse the command output,
 // and an error if any configuration or cache retrieval fails.
 // The context parameter allows for cancellation of the command execution.
-func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) ([]string, func(string) ([]string, error), error) {
+// The verbosity parameter controls debug output (0 = no debug, >0 = debug).
+func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache, verbosity int) ([]string, func(string) ([]string, error), error) {
 	// parseOutput extracts tags from the ansible-playbook output using a regular expression.
 	parseOutput := func(output string) ([]string, error) {
 		re := regexp.MustCompile(`TASK TAGS:\s*\[(.*?)]`)
@@ -119,16 +120,26 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 	// Check if the cache is available and valid by comparing the stored commit hash with the current one.
 	repoCache, ok := cache.GetRepoCache(repoPath)
 	if ok {
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: PrepareAnsibleListTags: Cache found for %s\n", repoPath)
+		}
 		if commit, commitOK := repoCache["commit"].(string); commitOK {
 			currentCommit, err := git.GetGitCommitHash(repoPath)
 			if err != nil {
 				return nil, nil, err
 			}
 
+			if verbosity > 0 {
+				fmt.Printf("DEBUG: PrepareAnsibleListTags: Cached commit: %s, Current commit: %s\n", commit, currentCommit)
+			}
+
 			if commit == currentCommit {
 				// Cached tags are valid; create a parser function that returns them directly.
 				cachedTags, tagsOk := repoCache["tags"].([]any)
 				if tagsOk {
+					if verbosity > 0 {
+						fmt.Printf("DEBUG: PrepareAnsibleListTags: Using cached tags (%d tags)\n", len(cachedTags))
+					}
 					stringTags := make([]string, len(cachedTags))
 					for i, tag := range cachedTags {
 						if strTag, ok := tag.(string); ok {
@@ -138,9 +149,17 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 						}
 					}
 					return nil, func(string) ([]string, error) { return stringTags, nil }, nil
+				} else if verbosity > 0 {
+					fmt.Printf("DEBUG: PrepareAnsibleListTags: Cached tags not in expected format\n")
 				}
+			} else if verbosity > 0 {
+				fmt.Printf("DEBUG: PrepareAnsibleListTags: Commit hash mismatch, will rebuild cache\n")
 			}
+		} else if verbosity > 0 {
+			fmt.Printf("DEBUG: PrepareAnsibleListTags: No valid commit in cache\n")
 		}
+	} else if verbosity > 0 {
+		fmt.Printf("DEBUG: PrepareAnsibleListTags: No cache found for %s\n", repoPath)
 	}
 
 	// No valid cache found; build the command args to list tags.
@@ -155,14 +174,18 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 // If a fresh command is executed, it caches the new tags along with the current commit hash and returns true.
 // The boolean return value indicates whether the cache was rebuilt (true) or if cached tags were used (false).
 // The context parameter allows for cancellation of the command execution.
-func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) (bool, error) {
-	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
+// The verbosity parameter controls debug output (0 = no debug, >0 = debug).
+func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache, verbosity int) (bool, error) {
+	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache, verbosity)
 	if err != nil {
 		return false, err
 	}
 
 	if args == nil && tagParser != nil {
 		// Cached tags are available; retrieve and update the cache.
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Using cached tags for %s\n", repoPath)
+		}
 		tags, err := tagParser("")
 		if err != nil {
 			return false, err
@@ -177,28 +200,60 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 			"tags":   tags,
 		}
 		cache.SetRepoCache(repoPath, repoCache)
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Cache updated with %d tags\n", len(tags))
+		}
 		return false, nil // Cache was used, not rebuilt
 	}
 
 	if args != nil {
 		// Use the executor interface to run the command
-		output, err := defaultExecutor.ExecuteContext(ctx, constants.AnsiblePlaybookBinaryPath, args...)
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Running ansible-playbook for %s\n", repoPath)
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Command: %s %v\n", constants.AnsiblePlaybookBinaryPath, args)
+		}
+		output, err := defaultExecutor.ExecuteContext(ctx, repoPath, constants.AnsiblePlaybookBinaryPath, args...)
 		if err != nil {
 			// Check if it's a user interrupt
 			if sbErrors.HandleInterruptError(err) {
 				return true, fmt.Errorf("command interrupted by user")
 			}
-			return true, fmt.Errorf("ansible-playbook failed: %w", err)
+			if verbosity > 0 {
+				fmt.Printf("DEBUG: RunAndCacheAnsibleTags: ansible-playbook failed with error: %v\n", err)
+				fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Command output:\n%s\n", string(output))
+			}
+			return true, fmt.Errorf("ansible-playbook failed: %w\nOutput: %s", err, string(output))
+		}
+
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Raw ansible output length: %d bytes\n", len(output))
+			if verbosity > 1 {
+				fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Raw output:\n%s\n", string(output))
+			}
 		}
 
 		tags, err := tagParser(string(output))
 		if err != nil {
+			if verbosity > 0 {
+				fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Failed to parse tags: %v\n", err)
+			}
 			return true, err
+		}
+
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Parsed %d tags from ansible output\n", len(tags))
 		}
 
 		currentCommit, err := git.GetGitCommitHash(repoPath)
 		if err != nil {
+			if verbosity > 0 {
+				fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Failed to get git commit hash: %v\n", err)
+			}
 			return true, err
+		}
+
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Current commit hash: %s\n", currentCommit)
 		}
 
 		repoCache := map[string]any{
@@ -207,6 +262,9 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 		}
 		cache.SetRepoCache(repoPath, repoCache)
 
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Cache rebuilt with %d tags, commit: %s\n", len(tags), currentCommit)
+		}
 		return true, nil // Cache was rebuilt with new tag information
 	}
 
@@ -218,8 +276,9 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 // This function does not support using cached tags; it always runs a fresh command.
 // An error is returned if command execution or output parsing fails.
 // The context parameter allows for cancellation of the command execution.
-func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache) ([]string, error) {
-	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache)
+// The verbosity parameter controls debug output (0 = no debug, >0 = debug).
+func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache, verbosity int) ([]string, error) {
+	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache, verbosity)
 	if err != nil {
 		return nil, err
 	}
@@ -229,18 +288,40 @@ func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTa
 	}
 
 	// Use the executor interface to run the command
-	output, err := defaultExecutor.ExecuteContext(ctx, constants.AnsiblePlaybookBinaryPath, args...)
+	if verbosity > 0 {
+		fmt.Printf("DEBUG: RunAnsibleListTags: Running ansible-playbook for %s\n", repoPath)
+		fmt.Printf("DEBUG: RunAnsibleListTags: Command: %s %v\n", constants.AnsiblePlaybookBinaryPath, args)
+	}
+	output, err := defaultExecutor.ExecuteContext(ctx, repoPath, constants.AnsiblePlaybookBinaryPath, args...)
 	if err != nil {
 		// Check if it's a user interrupt
 		if sbErrors.HandleInterruptError(err) {
 			return nil, fmt.Errorf("command interrupted by user")
 		}
-		return nil, fmt.Errorf("ansible-playbook failed: %w", err)
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAnsibleListTags: ansible-playbook failed with error: %v\n", err)
+			fmt.Printf("DEBUG: RunAnsibleListTags: Command output:\n%s\n", string(output))
+		}
+		return nil, fmt.Errorf("ansible-playbook failed: %w\nOutput: %s", err, string(output))
+	}
+
+	if verbosity > 0 {
+		fmt.Printf("DEBUG: RunAnsibleListTags: Raw ansible output length: %d bytes\n", len(output))
+		if verbosity > 1 {
+			fmt.Printf("DEBUG: RunAnsibleListTags: Raw output:\n%s\n", string(output))
+		}
 	}
 
 	tags, err := tagParser(string(output))
 	if err != nil {
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: RunAnsibleListTags: Failed to parse tags: %v\n", err)
+		}
 		return nil, err
+	}
+
+	if verbosity > 0 {
+		fmt.Printf("DEBUG: RunAnsibleListTags: Parsed %d tags from ansible output\n", len(tags))
 	}
 
 	return tags, nil
