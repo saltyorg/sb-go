@@ -15,11 +15,11 @@ import (
 // TestTagParsing tests the tag parsing and categorization logic
 func TestTagParsing(t *testing.T) {
 	tests := []struct {
-		name                string
-		inputTags           []string
-		expectedSaltbox     []string
-		expectedSandbox     []string
-		expectedSaltboxMod  []string
+		name               string
+		inputTags          []string
+		expectedSaltbox    []string
+		expectedSandbox    []string
+		expectedSaltboxMod []string
 	}{
 		{
 			name:               "only saltbox tags",
@@ -130,14 +130,14 @@ func TestValidateAndSuggest(t *testing.T) {
 	os.WriteFile(cacheFile, data, 0644)
 
 	tests := []struct {
-		name           string
-		repoPath       string
-		providedTags   []string
-		currentPrefix  string
-		otherPrefix    string
+		name            string
+		repoPath        string
+		providedTags    []string
+		currentPrefix   string
+		otherPrefix     string
 		wantSuggestions int
 		checkExactMatch bool
-		exactText      string
+		exactText       string
 	}{
 		{
 			name:            "valid tags - no suggestions",
@@ -209,12 +209,12 @@ func TestValidateAndSuggest(t *testing.T) {
 // TestGetValidTags tests the getValidTags function logic
 func TestGetValidTags(t *testing.T) {
 	tests := []struct {
-		name         string
-		repoPath     string
-		setupCache   bool
-		cachedTags   []any
-		expectedLen  int
-		expectEmpty  bool
+		name        string
+		repoPath    string
+		setupCache  bool
+		cachedTags  []any
+		expectedLen int
+		expectEmpty bool
 	}{
 		{
 			name:        "valid cache with tags",

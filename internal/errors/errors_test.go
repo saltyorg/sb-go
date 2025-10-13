@@ -240,31 +240,31 @@ func TestExitWithError(t *testing.T) {
 	tests := []struct {
 		name     string
 		format   string
-		args     []interface{}
+		args     []any
 		expected string
 	}{
 		{
 			name:     "simple error message",
 			format:   "error occurred",
-			args:     []interface{}{},
+			args:     []any{},
 			expected: "error occurred\n",
 		},
 		{
 			name:     "formatted error message",
 			format:   "error: %s",
-			args:     []interface{}{"file not found"},
+			args:     []any{"file not found"},
 			expected: "error: file not found\n",
 		},
 		{
 			name:     "multiple format args",
 			format:   "error at line %d: %s",
-			args:     []interface{}{42, "syntax error"},
+			args:     []any{42, "syntax error"},
 			expected: "error at line 42: syntax error\n",
 		},
 		{
 			name:     "error with path",
 			format:   "failed to open file: %s",
-			args:     []interface{}{"/path/to/file.txt"},
+			args:     []any{"/path/to/file.txt"},
 			expected: "failed to open file: /path/to/file.txt\n",
 		},
 	}
@@ -306,7 +306,7 @@ func TestIsInterruptError_Concurrency(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()

@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/spinners"
-	"github.com/saltyorg/sb-go/internal/ubuntu"
+	"github.com/saltyorg/sb-go/internal/uv"
 )
 
 // InitialSetup performs the initial setup tasks.
@@ -177,58 +176,43 @@ func ConfigureLocale(ctx context.Context) {
 	}
 }
 
-// PythonVenv installs Python from deadsnakes, if required, and creates the Ansible venv.
+// PythonVenv installs Python using uv and creates the Ansible venv.
 // The context parameter allows for cancellation of long-running operations.
 func PythonVenv(ctx context.Context, verbose bool) {
-	osRelease, _ := ubuntu.ParseOSRelease("/etc/os-release")
-	versionCodename := osRelease["VERSION_CODENAME"]
+	_ = spinners.RunInfoSpinner("Installing Python 3.12 using uv")
 
-	jammyRegex := regexp.MustCompile(`^jammy$`)
-	nobleRegex := regexp.MustCompile(`^noble$`)
+	// Download and install uv
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Downloading and installing uv", func() error {
+		return uv.DownloadAndInstallUV(ctx, verbose)
+	}); err != nil {
+		fmt.Println("Error installing uv:", err)
+		os.Exit(1)
+	}
 
-	if jammyRegex.MatchString(versionCodename) {
-		_ = spinners.RunInfoSpinner("Ubuntu Jammy detected, deploying venv with Python 3.12.")
+	// Create /srv/python directory
+	pythonDir := constants.PythonInstallDir
+	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Creating directory %s", pythonDir), func() error {
+		return os.MkdirAll(pythonDir, 0755)
+	}); err != nil {
+		fmt.Printf("Error creating %s: %v\n", pythonDir, err)
+		os.Exit(1)
+	}
 
-		// Add deadsnakes PPA
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Adding deadsnakes PPA", func() error {
-			addPPA := apt.AddPPA(ctx, "ppa:deadsnakes/ppa", verbose)
-			return addPPA()
-		}); err != nil {
-			fmt.Println("Error adding deadsnakes PPA", err)
-			os.Exit(1)
-		}
+	// Install Python 3.12 using uv
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing Python 3.12 using uv", func() error {
+		return uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose)
+	}); err != nil {
+		fmt.Println("Error installing Python 3.12:", err)
+		os.Exit(1)
+	}
 
-		// Install Python 3.12 and venv
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing Python 3.12 and venv", func() error {
-			installPython := apt.InstallPackage(ctx, []string{"python3.12", "python3.12-dev", "python3.12-venv"}, verbose)
-			return installPython()
-		}); err != nil {
-			fmt.Println("Error installing Python 3.12:", err)
-			os.Exit(1)
-		}
-
-		// Create venv
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating venv", func() error {
-			createVenv := exec.CommandContext(ctx, "python3.12", "-m", "venv", "venv")
-			createVenv.Dir = constants.AnsibleVenvPath
-			return createVenv.Run()
-		}); err != nil {
-			fmt.Println("Error creating venv:", err)
-			os.Exit(1)
-		}
-
-	} else if nobleRegex.MatchString(versionCodename) {
-		_ = spinners.RunInfoSpinner("Ubuntu Noble detected, deploying venv with Python 3.12.")
-
-		// Create venv (using system python3)
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating venv", func() error {
-			createVenv := exec.CommandContext(ctx, "python3", "-m", "venv", "venv")
-			createVenv.Dir = constants.AnsibleVenvPath
-			return createVenv.Run()
-		}); err != nil {
-			fmt.Println("Error creating venv:", err)
-			os.Exit(1)
-		}
+	// Create venv using uv
+	venvPath := filepath.Join(constants.AnsibleVenvPath, "venv")
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating venv", func() error {
+		return uv.CreateVenv(ctx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
+	}); err != nil {
+		fmt.Println("Error creating venv:", err)
+		os.Exit(1)
 	}
 
 	// --- Check for venv Python and wait ---

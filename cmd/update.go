@@ -11,6 +11,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/git"
+	"github.com/saltyorg/sb-go/internal/python"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
 	"github.com/saltyorg/sb-go/internal/validate"
@@ -128,6 +129,21 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
 		return fmt.Errorf("error getting saltbox user: %w", err)
+	}
+
+	// Clean up old deadsnakes packages on Ubuntu 20.04 and 22.04
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for old deadsnakes Python packages", func() error {
+		cleaned, err := python.CleanupDeadsnakesIfNeeded(ctx, verbose)
+		if err != nil {
+			return err
+		}
+		if cleaned && verbose {
+			fmt.Println("Removed old deadsnakes Python packages")
+		}
+		return nil
+	}); err != nil {
+		// Don't fail the update if cleanup fails, just log a warning
+		_ = spinners.RunWarningSpinner(fmt.Sprintf("Warning: Failed to clean up deadsnakes packages: %v", err))
 	}
 
 	// Manage Ansible venv - this function already has internal spinners

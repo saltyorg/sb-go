@@ -35,7 +35,7 @@ func HandleInterruptError(err error) bool {
 
 // ExitWithError prints an error message and triggers shutdown via signal manager with exit code 1.
 // This should be used instead of direct os.Exit(1) calls to ensure proper cleanup.
-func ExitWithError(format string, args ...interface{}) {
+func ExitWithError(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	sigManager := signals.GetGlobalManager()
 	sigManager.Shutdown(1)

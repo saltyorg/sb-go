@@ -159,7 +159,7 @@ func AddAptRepositories(ctx context.Context) error {
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("error reading %s: %w", sourcesDir, err)
 	}
-	
+
 	for _, entry := range entries {
 		filePath := filepath.Join(sourcesDir, entry.Name())
 		// On Noble, skip deleting ubuntu.sources

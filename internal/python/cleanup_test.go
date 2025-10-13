@@ -1,0 +1,67 @@
+package python
+
+import (
+	"testing"
+
+	"github.com/saltyorg/sb-go/internal/constants"
+)
+
+// TestDeadsnakesPackages tests that the correct package list is generated
+func TestDeadsnakesPackages(t *testing.T) {
+	pythonVersion := "3.12"
+	packages := DeadsnakesPackages(pythonVersion)
+
+	// Check that we have the expected packages
+	expectedPackages := []string{
+		"python3.12",
+		"python3.12-dev",
+		"python3.12-distutils",
+		"python3.12-venv",
+		"libpython3.12",
+		"libpython3.12-dev",
+		"libpython3.12-minimal",
+		"libpython3.12-stdlib",
+		"python3.12-minimal",
+	}
+
+	if len(packages) != len(expectedPackages) {
+		t.Errorf("Expected %d packages, got %d", len(expectedPackages), len(packages))
+	}
+
+	// Check each expected package is in the list
+	for _, expected := range expectedPackages {
+		found := false
+		for _, pkg := range packages {
+			if pkg == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected package %s not found in list", expected)
+		}
+	}
+}
+
+// TestDeadsnakesPackagesWithVersion tests package generation with different versions
+func TestDeadsnakesPackagesWithVersion(t *testing.T) {
+	testCases := []struct {
+		version  string
+		expected string
+	}{
+		{"3.10", "python3.10"},
+		{"3.11", "python3.11"},
+		{constants.AnsibleVenvPythonVersion, "python" + constants.AnsibleVenvPythonVersion},
+	}
+
+	for _, tc := range testCases {
+		packages := DeadsnakesPackages(tc.version)
+		if len(packages) == 0 {
+			t.Errorf("Expected packages for version %s, got empty list", tc.version)
+		}
+		// Check first package matches expected
+		if packages[0] != tc.expected {
+			t.Errorf("Expected first package to be %s, got %s", tc.expected, packages[0])
+		}
+	}
+}

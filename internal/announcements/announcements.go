@@ -225,7 +225,7 @@ func (av *announcementViewer) renderCurrentAnnouncement() error {
 
 	// Build content with repo header and formatted date, then the raw message
 	content := fmt.Sprintf("# %s Announcement - %s\n%s", repoName, formattedDate, announcement.Message)
-	
+
 	const glamourGutter = 2
 	glamourRenderWidth := 78 - av.viewport.Style.GetHorizontalFrameSize() - glamourGutter
 

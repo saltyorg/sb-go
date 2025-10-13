@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -283,13 +284,7 @@ func TestRunPlaybookArguments(t *testing.T) {
 			}
 
 			// Verify --tags is present
-			hasTagsFlag := false
-			for _, arg := range allArgs {
-				if arg == "--tags" {
-					hasTagsFlag = true
-					break
-				}
-			}
+			hasTagsFlag := slices.Contains(allArgs, "--tags")
 			if !hasTagsFlag {
 				t.Error("--tags flag should be present")
 			}
@@ -492,10 +487,10 @@ func TestHandleInstallFunctionStructure(t *testing.T) {
 
 func TestValidateAndSuggestStructure(t *testing.T) {
 	tests := []struct {
-		name         string
-		repoPath     string
+		name          string
+		repoPath      string
 		currentPrefix string
-		otherPrefix  string
+		otherPrefix   string
 		expectedNames [2]string
 	}{
 		{

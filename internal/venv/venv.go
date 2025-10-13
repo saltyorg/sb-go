@@ -11,6 +11,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/uv"
 )
 
 // ManageAnsibleVenv manages the Ansible virtual environment.
@@ -248,33 +249,35 @@ func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
 	return cmd.Run()
 }
 
-// createVirtualEnv creates the virtual environment.
+// createVirtualEnv creates the virtual environment using uv.
 func createVirtualEnv(ctx context.Context, ansibleVenvPath, release string, verbose bool) error {
-	env := os.Environ()
-	env = append(env, "DEBIAN_FRONTEND=noninteractive")
-	pythonCmd := fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion)
-
-	if release == "focal" || release == "jammy" {
-		if err := runCommand(ctx, []string{"add-apt-repository", "ppa:deadsnakes/ppa", "--yes"}, env, verbose); err != nil {
-			return fmt.Errorf("error adding python ppa: %w", err)
-		}
-		if err := runCommand(ctx, []string{"apt-get", "update"}, env, verbose); err != nil {
-			return fmt.Errorf("error running apt update: %w", err)
-		}
-		if err := runCommand(ctx, []string{"apt-get", "install", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion), fmt.Sprintf("python%s-dev", constants.AnsibleVenvPythonVersion), fmt.Sprintf("python%s-venv", constants.AnsibleVenvPythonVersion), "-y"}, env, verbose); err != nil {
-			return fmt.Errorf("error installing python: %w", err)
-		}
-		if err := runCommand(ctx, []string{pythonCmd, "-m", "ensurepip"}, env, verbose); err != nil {
-			return fmt.Errorf("error ensuring pip: %w", err)
-		}
+	// Ensure uv is installed
+	if err := uv.DownloadAndInstallUV(ctx, verbose); err != nil {
+		return fmt.Errorf("error installing uv: %w", err)
 	}
+
+	// Create /srv/python directory if it doesn't exist
+	if err := os.MkdirAll(constants.PythonInstallDir, 0755); err != nil {
+		return fmt.Errorf("error creating python install dir: %w", err)
+	}
+
+	// Install Python using uv
+	if err := uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose); err != nil {
+		return fmt.Errorf("error installing python: %w", err)
+	}
+
+	// Create the venv directory
 	if err := os.MkdirAll(ansibleVenvPath, 0755); err != nil {
 		return fmt.Errorf("error creating venv dir: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, pythonCmd, "-m", "venv", "venv")
-	cmd.Dir = ansibleVenvPath
-	return cmd.Run()
+	// Create venv using uv
+	venvPath := filepath.Join(ansibleVenvPath, "venv")
+	if err := uv.CreateVenv(ctx, venvPath, constants.AnsibleVenvPythonVersion, verbose); err != nil {
+		return fmt.Errorf("error creating venv: %w", err)
+	}
+
+	return nil
 }
 
 // upgradePip upgrades pip, setuptools, and wheel.

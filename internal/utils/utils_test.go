@@ -28,10 +28,10 @@ func TestGetSaltboxUser(t *testing.T) {
 	accountsPath := filepath.Join(tmpDir, "accounts.yml")
 
 	tests := []struct {
-		name        string
-		setupFile   bool
-		fileContent string
-		expectError bool
+		name         string
+		setupFile    bool
+		fileContent  string
+		expectError  bool
 		expectedUser string
 	}{
 		{
@@ -365,8 +365,8 @@ func TestCommandExecutionWithContext(t *testing.T) {
 
 func TestGetArchitectureOutput(t *testing.T) {
 	tests := []struct {
-		name           string
-		mockOutput     string
+		name            string
+		mockOutput      string
 		expectSupported bool
 	}{
 		{

@@ -33,7 +33,7 @@ func (m *MockGitExecutor) ExecuteCommand(ctx context.Context, dir string, name s
 // MockAnsibleExecutor for ansible operations
 type MockAnsibleExecutor struct {
 	ExecuteContextFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
-	ExecuteWithIOFunc  func(ctx context.Context, name string, args []string, stdout, stderr, stdin interface{}) error
+	ExecuteWithIOFunc  func(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error
 }
 
 func (m *MockAnsibleExecutor) ExecuteContext(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -44,7 +44,7 @@ func (m *MockAnsibleExecutor) ExecuteContext(ctx context.Context, name string, a
 	return []byte("TASK TAGS: [tag1, tag2, tag3]"), nil
 }
 
-func (m *MockAnsibleExecutor) ExecuteWithIO(ctx context.Context, name string, args []string, stdout, stderr, stdin interface{}) error {
+func (m *MockAnsibleExecutor) ExecuteWithIO(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
 	if m.ExecuteWithIOFunc != nil {
 		return m.ExecuteWithIOFunc(ctx, name, args, stdout, stderr, stdin)
 	}
@@ -163,13 +163,13 @@ func TestGetValidTags_Integration(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name         string
-		repoPath     string
-		setupCache   func(*cache.Cache)
-		mockGitHash  string
-		mockTags     []string
-		expectedLen  int
-		expectEmpty  bool
+		name        string
+		repoPath    string
+		setupCache  func(*cache.Cache)
+		mockGitHash string
+		mockTags    []string
+		expectedLen int
+		expectEmpty bool
 	}{
 		{
 			name:     "valid cached tags",
@@ -200,13 +200,13 @@ func TestGetValidTags_Integration(t *testing.T) {
 			expectEmpty: false,
 		},
 		{
-			name:         "no cache - fetch from ansible",
-			repoPath:     constants.SaltboxRepoPath,
-			setupCache:   func(c *cache.Cache) {},
-			mockGitHash:  "abc123def456",
-			mockTags:     []string{"tag1", "tag2"},
-			expectedLen:  2,
-			expectEmpty:  false,
+			name:        "no cache - fetch from ansible",
+			repoPath:    constants.SaltboxRepoPath,
+			setupCache:  func(c *cache.Cache) {},
+			mockGitHash: "abc123def456",
+			mockTags:    []string{"tag1", "tag2"},
+			expectedLen: 2,
+			expectEmpty: false,
 		},
 	}
 
@@ -451,7 +451,7 @@ func TestRunPlaybook_Integration(t *testing.T) {
 
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
-				ExecuteWithIOFunc: func(ctx context.Context, name string, args []string, stdout, stderr, stdin interface{}) error {
+				ExecuteWithIOFunc: func(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
 					// Write success output
 					if stdout != nil {
 						if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
@@ -535,7 +535,7 @@ func TestHandleInstall_Integration(t *testing.T) {
 				ExecuteContextFunc: func(ctx context.Context, name string, args ...string) ([]byte, error) {
 					return []byte("TASK TAGS: [plex, sonarr, radarr, overseerr, tautulli, jellyfin, emby]"), nil
 				},
-				ExecuteWithIOFunc: func(ctx context.Context, name string, args []string, stdout, stderr, stdin interface{}) error {
+				ExecuteWithIOFunc: func(ctx context.Context, name string, args []string, stdout, stderr, stdin any) error {
 					if stdout != nil {
 						if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
 							w.Write([]byte("PLAY RECAP\n"))

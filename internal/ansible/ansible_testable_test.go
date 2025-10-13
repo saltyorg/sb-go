@@ -275,9 +275,9 @@ func TestIsSaltboxModRepo(t *testing.T) {
 
 func TestCreateTagParserFunc(t *testing.T) {
 	tests := []struct {
-		name         string
-		tags         []string
-		expectedLen  int
+		name        string
+		tags        []string
+		expectedLen int
 	}{
 		{
 			name:        "multiple tags",

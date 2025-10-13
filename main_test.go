@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -113,15 +114,15 @@ func TestMainPackageStructure(t *testing.T) {
 
 		// Test the slicing logic used in main
 		args := os.Args[1:] // Exclude program name
-		_ = args // May be empty if no args passed
+		_ = args            // May be empty if no args passed
 	})
 }
 
 func TestContextWithTimeout(t *testing.T) {
 	tests := []struct {
-		name     string
-		timeout  time.Duration
-		waitTime time.Duration
+		name       string
+		timeout    time.Duration
+		waitTime   time.Duration
 		expectDone bool
 	}{
 		{
@@ -237,13 +238,7 @@ func TestUbuntuVersionValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isSupported := false
-			for _, supported := range supportedVersions {
-				if tt.version == supported {
-					isSupported = true
-					break
-				}
-			}
+			isSupported := slices.Contains(supportedVersions, tt.version)
 
 			if isSupported != tt.valid {
 				t.Errorf("Expected version %s to be valid=%v, got %v", tt.version, tt.valid, isSupported)

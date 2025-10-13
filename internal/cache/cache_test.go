@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -195,38 +196,38 @@ func TestCache_CheckCache(t *testing.T) {
 	cache.SetRepoCache(testRepoPath, testData)
 
 	tests := []struct {
-		name           string
-		repoPath       string
-		tags           []string
-		expectedFound  bool
+		name            string
+		repoPath        string
+		tags            []string
+		expectedFound   bool
 		expectedMissing []string
 	}{
 		{
-			name:           "All tags present",
-			repoPath:       testRepoPath,
-			tags:           []string{"tag1", "tag2"},
-			expectedFound:  true,
+			name:            "All tags present",
+			repoPath:        testRepoPath,
+			tags:            []string{"tag1", "tag2"},
+			expectedFound:   true,
 			expectedMissing: []string{},
 		},
 		{
-			name:           "Some tags missing",
-			repoPath:       testRepoPath,
-			tags:           []string{"tag1", "tag4"},
-			expectedFound:  false,
+			name:            "Some tags missing",
+			repoPath:        testRepoPath,
+			tags:            []string{"tag1", "tag4"},
+			expectedFound:   false,
 			expectedMissing: []string{"tag4"},
 		},
 		{
-			name:           "All tags missing",
-			repoPath:       testRepoPath,
-			tags:           []string{"tag4", "tag5"},
-			expectedFound:  false,
+			name:            "All tags missing",
+			repoPath:        testRepoPath,
+			tags:            []string{"tag4", "tag5"},
+			expectedFound:   false,
 			expectedMissing: []string{"tag4", "tag5"},
 		},
 		{
-			name:           "Non-existent repo",
-			repoPath:       "/nonexistent",
-			tags:           []string{"tag1"},
-			expectedFound:  true,
+			name:            "Non-existent repo",
+			repoPath:        "/nonexistent",
+			tags:            []string{"tag1"},
+			expectedFound:   true,
 			expectedMissing: []string{},
 		},
 	}
@@ -245,13 +246,7 @@ func TestCache_CheckCache(t *testing.T) {
 
 			// Verify missing tags match
 			for _, expectedTag := range tt.expectedMissing {
-				foundMissing := false
-				for _, missingTag := range missing {
-					if missingTag == expectedTag {
-						foundMissing = true
-						break
-					}
-				}
+				foundMissing := slices.Contains(missing, expectedTag)
 				if !foundMissing {
 					t.Errorf("Expected missing tag %s not found in result", expectedTag)
 				}
@@ -273,7 +268,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 	done := make(chan bool)
 
 	// Writer goroutines
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(id int) {
 			testData := map[string]any{
 				"tags": []string{"tag1", "tag2"},
@@ -284,7 +279,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Reader goroutines
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(id int) {
 			_, _ = cache.GetRepoCache("/test/repo")
 			done <- true
@@ -292,7 +287,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		<-done
 	}
 

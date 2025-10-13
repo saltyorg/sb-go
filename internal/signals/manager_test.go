@@ -165,7 +165,7 @@ func TestSignalManager_ConcurrentShutdown(t *testing.T) {
 
 	// Trigger concurrent shutdowns
 	done := make(chan bool)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(exitCode int) {
 			manager.Shutdown(exitCode)
 			done <- true
@@ -173,7 +173,7 @@ func TestSignalManager_ConcurrentShutdown(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 
@@ -302,7 +302,7 @@ func TestSignalManager_ThreadSafety(t *testing.T) {
 	done := make(chan bool)
 
 	// Readers
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		go func() {
 			_ = manager.IsShutdown()
 			_ = manager.ExitCode()
@@ -319,7 +319,7 @@ func TestSignalManager_ThreadSafety(t *testing.T) {
 	}()
 
 	// Wait for all goroutines
-	for i := 0; i < 51; i++ {
+	for range 51 {
 		<-done
 	}
 
