@@ -203,7 +203,8 @@ func FindPythonBinary(ctx context.Context, version string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// CreateVenv creates a virtual environment using uv and a specific Python version
+// CreateVenv creates a virtual environment using Python's built-in venv module
+// with a specific Python version installed by uv
 func CreateVenv(ctx context.Context, venvPath, pythonVersion string, verbose bool) error {
 	// Ensure the parent directory exists
 	parentDir := filepath.Dir(venvPath)
@@ -211,14 +212,21 @@ func CreateVenv(ctx context.Context, venvPath, pythonVersion string, verbose boo
 		return fmt.Errorf("error creating parent directory: %w", err)
 	}
 
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir))
-
-	cmd := exec.CommandContext(ctx, UVBinaryPath, "venv", venvPath, "--python", pythonVersion)
-	cmd.Env = env
+	// Find the Python binary installed by uv
+	pythonBinary, err := FindPythonBinary(ctx, pythonVersion)
+	if err != nil {
+		return fmt.Errorf("error finding Python binary: %w", err)
+	}
 
 	if verbose {
-		fmt.Printf("Creating virtual environment at %s with Python %s\n", venvPath, pythonVersion)
+		fmt.Printf("Found Python binary at: %s\n", pythonBinary)
+		fmt.Printf("Creating virtual environment at %s with Python %s using python -m venv\n", venvPath, pythonVersion)
+	}
+
+	// Use python -m venv instead of uv venv for better compatibility
+	cmd := exec.CommandContext(ctx, pythonBinary, "-m", "venv", venvPath)
+
+	if verbose {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	}

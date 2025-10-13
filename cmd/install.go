@@ -181,7 +181,7 @@ func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []stri
 
 	allArgs = append(allArgs, extraArgs...)
 
-	err := ansible.RunAnsiblePlaybook(ctx, repoPath, playbookPath, ansibleBinaryPath, allArgs, verbose)
+	err := ansible.RunAnsiblePlaybook(ctx, repoPath, playbookPath, ansibleBinaryPath, allArgs, true) // Always use true for verbose
 	if err != nil {
 		handleInterruptError(err)
 		return fmt.Errorf("error running playbook: %w", err)

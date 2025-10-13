@@ -14,6 +14,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/python"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
+	"github.com/saltyorg/sb-go/internal/uv"
 	"github.com/saltyorg/sb-go/internal/validate"
 	"github.com/saltyorg/sb-go/internal/venv"
 
@@ -29,6 +30,7 @@ var updateCmd = &cobra.Command{
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		keepBranch, _ := cmd.Flags().GetBool("keep-branch")
 		resetBranch, _ := cmd.Flags().GetBool("reset-branch")
+		skipSelfUpdate, _ := cmd.Flags().GetBool("skip-self-update")
 
 		var branchReset *bool
 		if keepBranch {
@@ -39,7 +41,7 @@ var updateCmd = &cobra.Command{
 			branchReset = &trueVal
 		}
 
-		return handleUpdate(ctx, verbose, branchReset)
+		return handleUpdate(ctx, verbose, branchReset, skipSelfUpdate)
 	},
 }
 
@@ -48,13 +50,16 @@ func init() {
 	updateCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 	updateCmd.PersistentFlags().Bool("keep-branch", false, "Skip branch reset prompt and stay on current branch")
 	updateCmd.PersistentFlags().Bool("reset-branch", false, "Skip branch reset prompt and reset to default branch")
+	updateCmd.PersistentFlags().Bool("skip-self-update", false, "Skip CLI self-update check")
 }
 
-func handleUpdate(ctx context.Context, verbose bool, branchReset *bool) error {
+func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelfUpdate bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
-	doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
+	if !skipSelfUpdate {
+		doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox")
+	}
 
 	// Load announcement files before updates
 	saltboxAnnouncementsBefore, sandboxAnnouncementsBefore, err := announcements.LoadAllAnnouncementFiles()
@@ -144,6 +149,27 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}); err != nil {
 		// Don't fail the update if cleanup fails, just log a warning
 		_ = spinners.RunWarningSpinner(fmt.Sprintf("Warning: Failed to clean up deadsnakes packages: %v", err))
+	}
+
+	// Ensure uv is installed
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Ensuring uv is installed", func() error {
+		return uv.DownloadAndInstallUV(ctx, verbose)
+	}); err != nil {
+		return fmt.Errorf("error installing uv: %w", err)
+	}
+
+	// Ensure Python install directory exists
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Ensuring Python install directory exists", func() error {
+		return os.MkdirAll(constants.PythonInstallDir, 0755)
+	}); err != nil {
+		return fmt.Errorf("error creating Python install directory: %w", err)
+	}
+
+	// Ensure Python 3.12 is installed via uv
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Ensuring Python 3.12 is installed", func() error {
+		return uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose)
+	}); err != nil {
+		return fmt.Errorf("error installing Python 3.12: %w", err)
 	}
 
 	// Manage Ansible venv - this function already has internal spinners

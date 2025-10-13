@@ -222,14 +222,61 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 }
 
 // checkPythonVersion checks if the Python version is correct.
+// Returns true if Python is missing or pointing to wrong version (needs recreation).
 func checkPythonVersion(ansibleVenvPath, venvPythonPath string) (bool, error) {
-	if _, err := os.Stat(filepath.Join(ansibleVenvPath, "venv", "bin")); err == nil {
-		if _, err := os.Stat(venvPythonPath); os.IsNotExist(err) {
-			return true, nil
-		} else if err != nil {
-			return false, fmt.Errorf("error checking python version: %w", err)
-		}
+	// Check if venv bin directory exists
+	if _, err := os.Stat(filepath.Join(ansibleVenvPath, "venv", "bin")); err != nil {
+		// Venv doesn't exist, needs creation
+		return false, nil
 	}
+
+	// Check if Python binary exists at expected path
+	if _, err := os.Stat(venvPythonPath); os.IsNotExist(err) {
+		// Python binary missing, needs recreation
+		return true, nil
+	} else if err != nil {
+		return false, fmt.Errorf("error checking python path: %w", err)
+	}
+
+	// Python binary exists, now verify it's the correct version from uv
+	// Run python --version to get the actual version
+	cmd := exec.Command(venvPythonPath, "--version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Can't run Python, needs recreation
+		return true, nil
+	}
+
+	// Parse version output (format: "Python 3.12.x")
+	versionStr := strings.TrimSpace(string(output))
+	if !strings.HasPrefix(versionStr, "Python "+constants.AnsibleVenvPythonVersion) {
+		// Wrong Python version, needs recreation
+		return true, nil
+	}
+
+	// Check if Python is from uv installation by checking if it resolves to /srv/python
+	// Follow symlinks to find the real path
+	realPath, err := filepath.EvalSymlinks(venvPythonPath)
+	if err != nil {
+		// Can't resolve symlink, needs recreation
+		return true, nil
+	}
+
+	// If Python is from uv, it should be in /srv/python directory
+	if !strings.HasPrefix(realPath, constants.PythonInstallDir) {
+		// Not from uv installation (probably deadsnakes), needs recreation
+		return true, nil
+	}
+
+	// Final check: verify Python can actually import modules (not just run --version)
+	// This catches broken venvs that have correct symlinks but broken Python paths
+	cmd = exec.Command(venvPythonPath, "-c", "import encodings, sys; sys.exit(0)")
+	if err := cmd.Run(); err != nil {
+		// Python can't import basic modules, venv is broken, needs recreation
+		return true, nil
+	}
+
+	// All checks passed, venv is good
 	return false, nil
 }
 
