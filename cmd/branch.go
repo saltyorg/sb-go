@@ -10,7 +10,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/utils"
-
+	"github.com/saltyorg/sb-go/internal/venv"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +51,11 @@ func changeBranch(ctx context.Context, branchName string) error {
 	// Always update saltbox.fact during branch change
 	if err := fact.DownloadAndInstallSaltboxFact(false, false); err != nil {
 		return err
+	}
+
+	// Manage Ansible venv - this function already has internal spinners
+	if err := venv.ManageAnsibleVenv(ctx, false, saltboxUser, false); err != nil {
+		return fmt.Errorf("error managing Ansible venv: %w", err)
 	}
 
 	fmt.Println("Updating Saltbox tags cache.")
