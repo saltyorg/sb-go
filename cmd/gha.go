@@ -24,16 +24,28 @@ var ghaCmd = &cobra.Command{
 		spinners.SetVerboseMode(true)
 
 		// Perform initial setup tasks
-		setup.InitialSetup(ctx, true)
+		if err := setup.InitialSetup(ctx, true); err != nil {
+			fmt.Printf("Error during initial setup: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Configure the locale
-		setup.ConfigureLocale(ctx)
+		if err := setup.ConfigureLocale(ctx); err != nil {
+			fmt.Printf("Error configuring locale: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Setup Python venv
-		setup.PythonVenv(ctx, true)
+		if err := setup.PythonVenv(ctx, true); err != nil {
+			fmt.Printf("Error setting up Python venv: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Install pip3 Dependencies
-		setup.InstallPipDependencies(ctx, true)
+		if err := setup.InstallPipDependencies(ctx, true); err != nil {
+			fmt.Printf("Error installing pip dependencies: %v\n", err)
+			os.Exit(1)
+		}
 
 		if err := fact.DownloadAndInstallSaltboxFact(false, true); err != nil {
 			fmt.Printf("Error downloading and installing saltbox.fact: %v\n", err)

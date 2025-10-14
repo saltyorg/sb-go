@@ -3,6 +3,7 @@ package venv
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -316,21 +317,90 @@ func installRequirements(ctx context.Context, ansibleVenvPath string, verbose bo
 	return runCommand(ctx, command, env, verbose)
 }
 
-// copyBinaries copies the binaries.
+// copyBinaries copies the binaries in a robust and error-checked way.
 func copyBinaries(ctx context.Context, ansibleVenvPath string, verbose bool) error {
-	binaries := []string{"ansible*", "certbot", "apprise"}
-	env := os.Environ()
+	venvBinDir := filepath.Join(ansibleVenvPath, "venv", "bin")
+	destDir := "/usr/local/bin/"
 
-	for _, binary := range binaries {
-		src := filepath.Join(ansibleVenvPath, "venv", "bin", binary)
-		dst := "/usr/local/bin/"
+	// A list of patterns to find. "ansible*" is a glob pattern.
+	patterns := []string{"ansible*", "certbot", "apprise"}
+	var sourcesToCopy []string
 
-		command := []string{"sh", "-c", fmt.Sprintf("cp %s %s", src, dst)}
+	// --- Step 1: Find all the files that match the patterns ---
+	for _, pattern := range patterns {
+		// Construct the full path for the pattern
+		fullPattern := filepath.Join(venvBinDir, pattern)
 
-		if err := runCommand(ctx, command, env, verbose); err != nil {
-			return fmt.Errorf("error copying %s: %w", binary, err)
+		// Use filepath.Glob to find all matching files.
+		// This is safer than relying on shell expansion.
+		matches, err := filepath.Glob(fullPattern)
+		if err != nil {
+			return fmt.Errorf("error finding files for pattern %s: %w", pattern, err)
+		}
+
+		// If a pattern (like "certbot") matches no files, Glob returns an empty slice.
+		// We should treat this as an error.
+		if len(matches) == 0 {
+			// Provide a specific error if a required binary is missing.
+			return fmt.Errorf("required binary not found in venv: %s", pattern)
+		}
+
+		sourcesToCopy = append(sourcesToCopy, matches...)
+	}
+
+	// --- Step 2: Copy each file individually ---
+	for _, srcPath := range sourcesToCopy {
+		// Get the base filename (e.g., "ansible-playbook")
+		fileName := filepath.Base(srcPath)
+		destPath := filepath.Join(destDir, fileName)
+
+		if verbose {
+			fmt.Printf("Copying %s to %s\n", srcPath, destPath)
+		}
+
+		// Perform the copy using Go's native functions.
+		if err := copyFile(srcPath, destPath); err != nil {
+			return fmt.Errorf("failed to copy %s: %w", fileName, err)
 		}
 	}
+
+	return nil
+}
+
+// copyFile is a helper function to copy a single file and apply the source's permissions.
+func copyFile(src, dst string) error {
+	// Get file info from the source to read its permissions.
+	sourceFileInfo, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("could not stat source file: %w", err)
+	}
+
+	// Open the source file for reading.
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("could not open source file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	// Create the destination file.
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("could not create destination file: %w", err)
+	}
+	defer destFile.Close()
+
+	// Copy the contents.
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return fmt.Errorf("could not copy file contents: %w", err)
+	}
+
+	// Apply the original file's permissions to the new file.
+	err = os.Chmod(dst, sourceFileInfo.Mode())
+	if err != nil {
+		return fmt.Errorf("could not set permissions on destination file: %w", err)
+	}
+
 	return nil
 }
 
@@ -346,10 +416,20 @@ func setOwnership(ctx context.Context, ansibleVenvPath, saltboxUser string, verb
 func runCommand(ctx context.Context, command []string, env []string, verbose bool) error {
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Env = env
+
 	if verbose {
 		fmt.Println("Running command:", command)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	}
-	return cmd.Run()
+
+	// For non-verbose mode, capture the output to prevent the child process
+	// from interfering with the terminal. This is the fix.
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// Provide the captured output for better error diagnosis.
+		return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(output))
+	}
+	return nil
 }

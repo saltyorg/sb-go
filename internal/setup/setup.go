@@ -20,14 +20,13 @@ import (
 
 // InitialSetup performs the initial setup tasks.
 // The context parameter allows for cancellation of long-running operations.
-func InitialSetup(ctx context.Context, verbose bool) {
+func InitialSetup(ctx context.Context, verbose bool) error {
 	// Update apt cache
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache", func() error {
 		updateCache := apt.UpdatePackageLists(ctx, verbose)
 		return updateCache()
 	}); err != nil {
-		fmt.Println("Error updating apt cache:", err)
-		os.Exit(1)
+		return fmt.Errorf("error updating apt cache: %w", err)
 	}
 
 	// Install git and curl
@@ -35,8 +34,7 @@ func InitialSetup(ctx context.Context, verbose bool) {
 		installGitCurl := apt.InstallPackage(ctx, []string{"git", "curl"}, verbose)
 		return installGitCurl()
 	}); err != nil {
-		fmt.Println("Error installing git and curl:", err)
-		os.Exit(1)
+		return fmt.Errorf("error installing git and curl: %w", err)
 	}
 
 	// Create /srv/git directory
@@ -44,8 +42,7 @@ func InitialSetup(ctx context.Context, verbose bool) {
 	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Creating directory %s", dir), func() error {
 		return os.MkdirAll(dir, 0755)
 	}); err != nil {
-		fmt.Printf("Error creating %s: %v\n", dir, err)
-		os.Exit(1)
+		return fmt.Errorf("error creating %s: %w", dir, err)
 	}
 
 	// Create /srv/ansible directory
@@ -53,8 +50,7 @@ func InitialSetup(ctx context.Context, verbose bool) {
 	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Creating directory %s", dir), func() error {
 		return os.MkdirAll(dir, 0755)
 	}); err != nil {
-		fmt.Printf("Error creating %s: %v\n", dir, err)
-		os.Exit(1)
+		return fmt.Errorf("error creating %s: %w", dir, err)
 	}
 
 	// Install software-properties-common and apt-transport-https
@@ -62,16 +58,14 @@ func InitialSetup(ctx context.Context, verbose bool) {
 		installPropsTransport := apt.InstallPackage(ctx, []string{"software-properties-common", "apt-transport-https"}, verbose)
 		return installPropsTransport()
 	}); err != nil {
-		fmt.Println("Error installing software-properties-common and apt-transport-https:", err)
-		os.Exit(1)
+		return fmt.Errorf("error installing software-properties-common and apt-transport-https: %w", err)
 	}
 
 	// Add apt repos
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Adding apt repositories", func() error {
 		return apt.AddAptRepositories(ctx)
 	}); err != nil {
-		fmt.Println("Error adding apt repositories:", err)
-		os.Exit(1)
+		return fmt.Errorf("error adding apt repositories: %w", err)
 	}
 
 	// Update apt cache again after adding repositories
@@ -79,8 +73,7 @@ func InitialSetup(ctx context.Context, verbose bool) {
 		updateCacheAgain := apt.UpdatePackageLists(ctx, verbose)
 		return updateCacheAgain()
 	}); err != nil {
-		fmt.Println("Error updating apt cache:", err)
-		os.Exit(1)
+		return fmt.Errorf("error updating apt cache: %w", err)
 	}
 
 	// Install additional required packages.
@@ -93,14 +86,13 @@ func InitialSetup(ctx context.Context, verbose bool) {
 		installPackages := apt.InstallPackage(ctx, packages, verbose)
 		return installPackages()
 	}); err != nil {
-		fmt.Println("Error installing additional packages:", err)
-		os.Exit(1)
+		return fmt.Errorf("error installing additional packages: %w", err)
 	}
+	return nil
 }
 
-// ConfigureLocale attempts to set the system-wide locale to "en_US.UTF-8".
-// The context parameter allows for cancellation of long-running operations.
-func ConfigureLocale(ctx context.Context) {
+// ConfigureLocale attempts to set the system-wide locale to "en_US.UTF-8" and returns an error on failure.
+func ConfigureLocale(ctx context.Context) error {
 	targetLocale := "en_US.UTF-8"
 
 	// Check if the locale is already installed.
@@ -115,27 +107,32 @@ func ConfigureLocale(ctx context.Context) {
 	if !localeInstalled {
 		if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Generating locale %s", targetLocale), func() error {
 			cmdLocaleGen := exec.CommandContext(ctx, "locale-gen", targetLocale)
-			return cmdLocaleGen.Run()
+			if output, err := cmdLocaleGen.CombinedOutput(); err != nil {
+				return fmt.Errorf("%w: %s", err, string(output))
+			}
+			return nil
 		}); err != nil {
-			fmt.Println("Error generating locale:", err)
-			os.Exit(1)
+			// Return the error instead of exiting.
+			return fmt.Errorf("error generating locale: %w", err)
 		}
 	}
 
 	// Use update-locale to set both LANG and LC_ALL system-wide locale variables
 	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Setting system-wide locale (LC_ALL and LANG) to %s", targetLocale), func() error {
 		cmdUpdateLocale := exec.CommandContext(ctx, "update-locale", "LC_ALL="+targetLocale, "LANG="+targetLocale)
-		return cmdUpdateLocale.Run()
+		if output, err := cmdUpdateLocale.CombinedOutput(); err != nil {
+			return fmt.Errorf("%w: %s", err, string(output))
+		}
+		return nil
 	}); err != nil {
-		// Don't exit here; try dpkg-reconfigure as a fallback. Log with an info spinner.
-		_ = spinners.RunInfoSpinner(fmt.Sprintf("Attempting to set locale with update-locale failed: %v", err))
+		// Don't treat this as fatal; just log it and let dpkg-reconfigure try to fix it.
+		_ = spinners.RunInfoSpinner(fmt.Sprintf("update-locale failed, attempting fallback: %v", err))
 	}
 
 	// Check /etc/default/locale (more reliable than the `locale` command)
 	localeFileContent, err := os.ReadFile("/etc/default/locale")
 	if err != nil && !os.IsNotExist(err) {
-		// Use a warning spinner for file read errors (but don't exit).
-		_ = spinners.RunWarningSpinner(fmt.Sprintf("Error reading /etc/default/locale: %v", err))
+		_ = spinners.RunWarningSpinner(fmt.Sprintf("Warning: could not read /etc/default/locale: %v", err))
 	}
 
 	// Check for both LC_ALL and LANG settings
@@ -146,16 +143,20 @@ func ConfigureLocale(ctx context.Context) {
 		// Use a spinner for dpkg-reconfigure.
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Locale not set correctly, reconfiguring locales...", func() error {
 			cmdReconfigureLocales := exec.CommandContext(ctx, "dpkg-reconfigure", "locales")
-			return cmdReconfigureLocales.Run()
+			cmdReconfigureLocales.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+			if output, err := cmdReconfigureLocales.CombinedOutput(); err != nil {
+				return fmt.Errorf("%w: %s", err, string(output))
+			}
+			return nil
 		}); err != nil {
-			fmt.Println("Error reconfiguring locales:", err)
-			os.Exit(1)
+			// Return the error instead of exiting.
+			return fmt.Errorf("error reconfiguring locales: %w", err)
 		}
 
 		// Read /etc/default/locale *again* after reconfiguring
 		localeFileContent, err = os.ReadFile("/etc/default/locale")
 		if err != nil && !os.IsNotExist(err) {
-			_ = spinners.RunWarningSpinner(fmt.Sprintf("Error reading /etc/default/locale after reconfigure: %v", err))
+			_ = spinners.RunWarningSpinner(fmt.Sprintf("Warning: could not read /etc/default/locale after reconfigure: %v", err))
 		}
 
 		// Check again for both variables
@@ -165,28 +166,28 @@ func ConfigureLocale(ctx context.Context) {
 
 	if !lcAllSet || !langSet {
 		if !lcAllSet {
-			_ = spinners.RunWarningSpinner("Warning: LC_ALL not set correctly in /etc/default/locale")
+			_ = spinners.RunWarningSpinner("Warning: LC_ALL was not set correctly in /etc/default/locale. This might cause issues.")
 		}
 		if !langSet {
-			_ = spinners.RunWarningSpinner("Warning: LANG not set correctly in /etc/default/locale")
+			_ = spinners.RunWarningSpinner("Warning: LANG was not set correctly in /etc/default/locale. This might cause issues.")
 		}
 	} else {
-		// Use an info spinner to be consistent with other successful steps
-		_ = spinners.RunInfoSpinner(fmt.Sprintf("Locales LC_ALL and LANG both set to %s", targetLocale))
+		_ = spinners.RunInfoSpinner(fmt.Sprintf("Locales LC_ALL and LANG successfully set to %s", targetLocale))
 	}
+
+	return nil
 }
 
 // PythonVenv installs Python using uv and creates the Ansible venv.
 // The context parameter allows for cancellation of long-running operations.
-func PythonVenv(ctx context.Context, verbose bool) {
+func PythonVenv(ctx context.Context, verbose bool) error {
 	_ = spinners.RunInfoSpinner("Installing Python 3.12 using uv")
 
 	// Download and install uv
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Downloading and installing uv", func() error {
 		return uv.DownloadAndInstallUV(ctx, verbose)
 	}); err != nil {
-		fmt.Println("Error installing uv:", err)
-		os.Exit(1)
+		return fmt.Errorf("error installing uv: %w", err)
 	}
 
 	// Create /srv/python directory
@@ -194,16 +195,14 @@ func PythonVenv(ctx context.Context, verbose bool) {
 	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Creating directory %s", pythonDir), func() error {
 		return os.MkdirAll(pythonDir, 0755)
 	}); err != nil {
-		fmt.Printf("Error creating %s: %v\n", pythonDir, err)
-		os.Exit(1)
+		return fmt.Errorf("error creating %s: %w", pythonDir, err)
 	}
 
 	// Install Python 3.12 using uv
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing Python 3.12 using uv", func() error {
 		return uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
-		fmt.Println("Error installing Python 3.12:", err)
-		os.Exit(1)
+		return fmt.Errorf("error installing Python 3.12: %w", err)
 	}
 
 	// Create venv using uv
@@ -211,8 +210,7 @@ func PythonVenv(ctx context.Context, verbose bool) {
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating venv", func() error {
 		return uv.CreateVenv(ctx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
-		fmt.Println("Error creating venv:", err)
-		os.Exit(1)
+		return fmt.Errorf("error creating venv: %w", err)
 	}
 
 	// --- Check for venv Python and wait ---
@@ -230,16 +228,16 @@ func PythonVenv(ctx context.Context, verbose bool) {
 
 		return fmt.Errorf("virtual environment Python still not found after waiting")
 	}); err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+		return fmt.Errorf("error checking for venv Python: %w", err)
 	}
+	return nil
 }
 
 // SaltboxRepo checks out the master branch of the Saltbox GitHub repository.
 // Resets the existing git repository folder if present.
 // Runs submodule update.
 // The context parameter allows for cancellation of long-running operations.
-func SaltboxRepo(ctx context.Context, verbose bool, branch string) {
+func SaltboxRepo(ctx context.Context, verbose bool, branch string) error {
 	saltboxPath := constants.SaltboxRepoPath
 	saltboxRepoURL := constants.SaltboxRepoURL
 	if branch == "" {
@@ -253,8 +251,7 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) {
 		if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch), func() error {
 			return git.CloneRepository(ctx, saltboxRepoURL, saltboxPath, branch, verbose)
 		}); err != nil {
-			fmt.Printf("Error cloning Saltbox repository: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error cloning Saltbox repository: %w", err)
 		}
 
 		// Run submodule update after cloning.
@@ -263,14 +260,12 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) {
 			submoduleCmd.Dir = saltboxPath
 			return submoduleCmd.Run()
 		}); err != nil {
-			fmt.Printf("Error running git submodule update: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error running git submodule update: %w", err)
 		}
 
 	} else if err != nil {
 		// Handle errors other than "not exists" (e.g., permissions).
-		fmt.Printf("Error checking for Saltbox directory: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error checking for Saltbox directory: %w", err)
 
 	} else {
 		// The directory exists. Check if it's a git repo.
@@ -301,40 +296,37 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) {
 				}
 				return nil
 			}); err != nil {
-				fmt.Println(err) // Error is already formatted nicely
-				os.Exit(1)
+				return err // Error is already formatted nicely
 			}
 
 		} else if err != nil {
 			// Handle errors other than "not exists" (e.g., permissions).
-			fmt.Printf("Error checking for .git directory: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error checking for .git directory: %w", err)
 		} else {
 			// It's a git repo, fetch and reset
 			if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating existing Saltbox repository", func() error {
 				return git.FetchAndReset(ctx, saltboxPath, branch, "root", nil, nil) // Assuming root user
 			}); err != nil {
-				fmt.Printf("Error updating Saltbox repository: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("error updating Saltbox repository: %w", err)
 			}
 		}
 	}
 
 	// These functions already have internal spinners
 	if err := fact.DownloadAndInstallSaltboxFact(false, verbose); err != nil {
-		fmt.Printf("Error downloading and installing saltbox.fact: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error downloading and installing saltbox.fact: %w", err)
 	}
 
 	if err := CopyDefaultConfigFiles(ctx); err != nil {
-		fmt.Printf("Error copying default configuration files: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error copying default configuration files: %w", err)
 	}
+
+	return nil
 }
 
 // InstallPipDependencies installs pip dependencies in the Ansible virtual environment.
 // The context parameter allows for cancellation of long-running operations.
-func InstallPipDependencies(ctx context.Context, verbose bool) {
+func InstallPipDependencies(ctx context.Context, verbose bool) error {
 	venvPythonPath := constants.AnsibleVenvPythonPath()
 	python3Cmd := []string{venvPythonPath, "-m", "pip", "install", "--timeout=360", "--no-cache-dir", "--disable-pip-version-check", "--upgrade"}
 
@@ -346,11 +338,16 @@ func InstallPipDependencies(ctx context.Context, verbose bool) {
 			fmt.Println("Running command:", installBaseDeps)
 			cmdInstallBase.Stdout = os.Stdout
 			cmdInstallBase.Stderr = os.Stderr
+			return cmdInstallBase.Run()
 		}
-		return cmdInstallBase.Run()
+		// Capture output to prevent terminal interference
+		output, err := cmdInstallBase.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(output))
+		}
+		return nil
 	}); err != nil {
-		fmt.Println("Error installing pip, setuptools, and wheel:", err)
-		os.Exit(1)
+		return fmt.Errorf("error installing pip, setuptools, and wheel: %w", err)
 	}
 
 	// Install requirements from requirements-saltbox.txt
@@ -362,16 +359,29 @@ func InstallPipDependencies(ctx context.Context, verbose bool) {
 			fmt.Println("Running command:", installRequirements)
 			cmdInstallReq.Stdout = os.Stdout
 			cmdInstallReq.Stderr = os.Stderr
+			return cmdInstallReq.Run()
 		}
-		return cmdInstallReq.Run()
+		// Capture output to prevent terminal interference
+		output, err := cmdInstallReq.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(output))
+		}
+		return nil
 	}); err != nil {
-		fmt.Println("Error installing requirements from requirements-saltbox.txt:", err)
-		os.Exit(1)
+		return fmt.Errorf("error installing requirements from requirements-saltbox.txt: %w", err)
 	}
+
+	return nil
 }
 
 // copyBinaryFile copies a single binary file from src to dest with proper permissions
 func copyBinaryFile(srcPath, destPath string) error {
+	// Get file info from the source to read its permissions.
+	sourceFileInfo, err := os.Stat(srcPath)
+	if err != nil {
+		return fmt.Errorf("could not stat source file: %w", err)
+	}
+
 	srcFile, err := os.Open(srcPath)
 	if err != nil {
 		return fmt.Errorf("error opening source file %s: %w", srcPath, err)
@@ -384,21 +394,22 @@ func copyBinaryFile(srcPath, destPath string) error {
 	}
 	defer destFile.Close()
 
-	// Set permissions
-	if err := os.Chmod(destPath, 0755); err != nil {
-		return fmt.Errorf("error setting permissions: %w", err)
-	}
-
 	// Copy contents
 	if _, err := io.Copy(destFile, srcFile); err != nil {
 		return fmt.Errorf("error copying file: %w", err)
+	}
+
+	// Apply the original file's permissions to the new file.
+	err = os.Chmod(destPath, sourceFileInfo.Mode())
+	if err != nil {
+		return fmt.Errorf("could not set permissions on destination file: %w", err)
 	}
 
 	return nil
 }
 
 // CopyRequiredBinaries copies select binaries from the virtual environment to /usr/local/bin.
-func CopyRequiredBinaries(ctx context.Context) {
+func CopyRequiredBinaries(ctx context.Context) error {
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Copying required binaries to /usr/local/bin", func() error {
 		venvBinDir := filepath.Join(constants.AnsibleVenvPath, "venv", "bin")
 		destDir := "/usr/local/bin"
@@ -421,9 +432,9 @@ func CopyRequiredBinaries(ctx context.Context) {
 		}
 		return nil
 	}); err != nil {
-		fmt.Println("Error copying required binaries:", err)
-		os.Exit(1)
+		return fmt.Errorf("error copying required binaries: %w", err)
 	}
+	return nil
 }
 
 // copyConfigFile copies a single config file from src to dest with proper permissions

@@ -70,22 +70,40 @@ var setupCmd = &cobra.Command{
 		}
 
 		// Perform initial setup tasks
-		setup.InitialSetup(ctx, verbose)
+		if err := setup.InitialSetup(ctx, verbose); err != nil {
+			fmt.Printf("Error during initial setup: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Configure the locale
-		setup.ConfigureLocale(ctx)
+		if err := setup.ConfigureLocale(ctx); err != nil {
+			fmt.Printf("Error configuring locale: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Setup Python venv
-		setup.PythonVenv(ctx, verbose)
+		if err := setup.PythonVenv(ctx, verbose); err != nil {
+			fmt.Printf("Error setting up Python venv: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Setup Saltbox Repo
-		setup.SaltboxRepo(ctx, verbose, branch)
+		if err := setup.SaltboxRepo(ctx, verbose, branch); err != nil {
+			fmt.Printf("Error setting up Saltbox repository: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Install pip3 Dependencies
-		setup.InstallPipDependencies(ctx, verbose)
+		if err := setup.InstallPipDependencies(ctx, verbose); err != nil {
+			fmt.Printf("Error installing pip dependencies: %v\n", err)
+			os.Exit(1)
+		}
 
 		// Copy ansible* files to /usr/local/bin
-		setup.CopyRequiredBinaries(ctx)
+		if err := setup.CopyRequiredBinaries(ctx); err != nil {
+			fmt.Printf("Error copying binaries: %v\n", err)
+			os.Exit(1)
+		}
 
 		if verbose {
 			fmt.Println("Initial setup tasks completed")
