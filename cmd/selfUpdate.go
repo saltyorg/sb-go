@@ -30,7 +30,7 @@ var selfUpdateCmd = &cobra.Command{
 	Short: "Update Saltbox CLI",
 	Long:  `Update Saltbox CLI`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Check if self-update is disabled at build time (unless force flag is used)
+		// Check if self-update is disabled at build time (unless the force flag is used)
 		if runtime.DisableSelfUpdate == "true" && !forceUpdate {
 			_ = spinners.RunWarningSpinner("Self-update is disabled in this build")
 			if runtime.DisableSelfUpdate == "true" {
