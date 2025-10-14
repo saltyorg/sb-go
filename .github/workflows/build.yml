@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 env:
-  GO_VERSION: '1.25.2'
+  GO_VERSION: '1.25.3'
   APP_NAME: 'sb'
   GITHUB_REPO: 'github.com/saltyorg/sb-go'
 
