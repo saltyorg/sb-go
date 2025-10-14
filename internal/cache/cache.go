@@ -22,7 +22,15 @@ type Cache struct {
 // After initialization, it attempts to load any existing cache data from the file.
 // Returns the Cache instance or an error if loading the cache fails.
 func NewCache() (*Cache, error) {
-	filePath := constants.SaltboxCacheFile
+	return NewCacheWithFile(constants.SaltboxCacheFile)
+}
+
+// NewCacheWithFile initializes and returns a new Cache instance with a custom file path.
+// This is primarily useful for testing to avoid interfering with the actual cache file.
+// It sets up the cache with an empty data map and the specified file path.
+// After initialization, it attempts to load any existing cache data from the file.
+// Returns the Cache instance or an error if loading the cache fails.
+func NewCacheWithFile(filePath string) (*Cache, error) {
 	c := &Cache{
 		data: make(map[string]any),
 		file: filePath,

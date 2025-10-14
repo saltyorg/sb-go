@@ -8,9 +8,8 @@ import (
 
 	"github.com/aquasecurity/table"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
 	"github.com/spf13/cobra"
 )
 
@@ -37,7 +36,7 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 		}
 		defer cli.Close()
 
-		containersSummary, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+		containersSummary, err := cli.ContainerList(ctx, client.ContainerListOptions{All: true})
 		if err != nil {
 			return err
 		}
@@ -150,17 +149,17 @@ func getTraefikInternalPorts(labels map[string]string) []string {
 	return internalPorts
 }
 
-func getExternalPortBindings(ports nat.PortMap) []string {
+func getExternalPortBindings(ports network.PortMap) []string {
 	var bindings []string
 	for internalPort, hostBindings := range ports {
 		for _, binding := range hostBindings {
 			if binding.HostPort != "" {
 				// Always include the bind IP, even if it's 0.0.0.0
-				hostIP := binding.HostIP
-				if hostIP == "" {
+				hostIP := binding.HostIP.String()
+				if !binding.HostIP.IsValid() {
 					hostIP = "0.0.0.0"
 				}
-				bindingStr := fmt.Sprintf("%s:%s->%s/%s", hostIP, binding.HostPort, internalPort.Port(), internalPort.Proto())
+				bindingStr := fmt.Sprintf("%s:%s->%s", hostIP, binding.HostPort, internalPort.String())
 				bindings = append(bindings, bindingStr)
 			}
 		}
