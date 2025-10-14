@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,9 +19,9 @@ import (
 // - "sudo apt-get install -y" to install packages non-interactively.
 // - The provided package names appended individually.
 // The function sets the environment variable "DEBIAN_FRONTEND=noninteractive" to suppress interactive prompts.
-// Depending on the verbose flag, command output is either streamed directly to the console or captured in buffers.
-// In case of an error, the returned function provides a detailed error message including the exit code and,
-// if not in verbose mode, the captured stderr output.
+// When verbose is true, all output is streamed to console. When false, stdout is discarded but stderr
+// is captured for error reporting, avoiding conflicts with spinner frameworks.
+// In case of an error, the returned function provides a detailed error message including the exit code and stderr output.
 // The context parameter allows for cancellation of the installation process.
 func InstallPackage(ctx context.Context, packages []string, verbose bool) func() error {
 	return func() error {
@@ -34,14 +35,15 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 		// Set the environment to non-interactive mode.
 		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 
-		var stdoutBuf, stderrBuf bytes.Buffer
+		var stderrBuf bytes.Buffer
 
-		// Configure output based on a verbose flag.
 		if verbose {
+			// In verbose mode, stream all output directly
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
-			cmd.Stdout = &stdoutBuf
+			// In non-verbose mode, discard stdout but capture stderr for error reporting
+			cmd.Stdout = io.Discard
 			cmd.Stderr = &stderrBuf
 		}
 
@@ -53,14 +55,14 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 			// Create a comma-separated string of package names for error messaging.
 			packageList := strings.Join(packages, ", ")
 			if errors.As(err, &exitErr) {
-				if !verbose {
+				if !verbose && stderrBuf.Len() > 0 {
 					return fmt.Errorf("failed to install packages '%s'.\nExit code: %d\nStderr:\n%s",
 						packageList, exitErr.ExitCode(), stderrBuf.String())
 				}
 				return fmt.Errorf("failed to install packages '%s'.\nExit code: %d",
 					packageList, exitErr.ExitCode())
 			}
-			if !verbose {
+			if !verbose && stderrBuf.Len() > 0 {
 				return fmt.Errorf("failed to install packages '%s': %w\nStderr:\n%s",
 					packageList, err, stderrBuf.String())
 			}
@@ -80,9 +82,8 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 
 // UpdatePackageLists returns a function that updates the system's apt package lists.
 // When executed, it runs the "sudo apt-get update" command with the non-interactive environment.
-// The verbose flag determines whether the command output is streamed to the console or captured in buffers.
-// If the command fails, a detailed error message is returned, including the exit code and (when not verbose)
-// the stderr output.
+// The verbose flag determines whether the command output is streamed to the console or discarded.
+// If the command fails, a detailed error message is returned, including the exit code.
 // The context parameter allows for cancellation of the update process.
 func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 	return func() error {
@@ -92,14 +93,15 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 		// Set non-interactive mode.
 		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 
-		var stdoutBuf, stderrBuf bytes.Buffer
+		var stderrBuf bytes.Buffer
 
-		// Configure output based on a verbose flag.
 		if verbose {
+			// In verbose mode, stream all output directly
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
-			cmd.Stdout = &stdoutBuf
+			// In non-verbose mode, discard stdout but capture stderr for error reporting
+			cmd.Stdout = io.Discard
 			cmd.Stderr = &stderrBuf
 		}
 
@@ -109,12 +111,12 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
-				if !verbose {
+				if !verbose && stderrBuf.Len() > 0 {
 					return fmt.Errorf("failed to update package lists.\nExit code: %d\nStderr:\n%s", exitErr.ExitCode(), stderrBuf.String())
 				}
 				return fmt.Errorf("failed to update package lists.\nExit code: %d", exitErr.ExitCode())
 			}
-			if !verbose {
+			if !verbose && stderrBuf.Len() > 0 {
 				return fmt.Errorf("failed to update package lists: %w\nStderr:\n%s", err, stderrBuf.String())
 			}
 			return fmt.Errorf("failed to update package lists: %w", err)
@@ -225,9 +227,8 @@ func addRepo(repoLine, sourcesFile string) error {
 // AddPPA returns a function that adds a Personal Package Archive (PPA) to the system using "add-apt-repository".
 // When executed, the returned function constructs the command "sudo add-apt-repository <ppa> --yes"
 // and runs it with non-interactive settings. The verbose flag controls whether command output is streamed
-// directly to the console or captured in buffers for error reporting.
-// If the command fails, an error is returned with details including the exit code and (when not verbose)
-// the captured stderr output.
+// directly to the console or discarded.
+// If the command fails, an error is returned with details including the exit code.
 // The context parameter allows for cancellation of the operation.
 func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
 	return func() error {
@@ -237,13 +238,15 @@ func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
 		// Set non-interactive mode.
 		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 
-		var stdoutBuf, stderrBuf bytes.Buffer
-		// Configure command output based on the verbose flag.
+		var stderrBuf bytes.Buffer
+
 		if verbose {
+			// In verbose mode, stream all output directly
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
-			cmd.Stdout = &stdoutBuf
+			// In non-verbose mode, discard stdout but capture stderr for error reporting
+			cmd.Stdout = io.Discard
 			cmd.Stderr = &stderrBuf
 		}
 
@@ -252,12 +255,12 @@ func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
 		if err != nil {
 			var exitErr *exec.ExitError
 			if errors.As(err, &exitErr) {
-				if !verbose {
+				if !verbose && stderrBuf.Len() > 0 {
 					return fmt.Errorf("failed to add PPA '%s'.\nExit code: %d\nStderr:\n%s", ppa, exitErr.ExitCode(), stderrBuf.String())
 				}
 				return fmt.Errorf("failed to add PPA '%s'.\nExit code: %d", ppa, exitErr.ExitCode())
 			}
-			if !verbose {
+			if !verbose && stderrBuf.Len() > 0 {
 				return fmt.Errorf("failed to add PPA '%s': %w\nStderr:\n%s", ppa, err, stderrBuf.String())
 			}
 			return fmt.Errorf("failed to add PPA '%s': %w", ppa, err)

@@ -8,7 +8,6 @@ MODULE := github.com/saltyorg/sb-go
 VERSION ?= 0.0.0-dev
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 DISABLE_SELF_UPDATE := true
-GO_VERSION := $(shell go version | awk '{print $$3}')
 
 # Go build flags
 CGO_ENABLED := 0
@@ -108,8 +107,8 @@ lint: ## Run linters (staticcheck or golangci-lint if available)
 check: fmt vet lint ## Run all code quality checks (fmt, vet, lint)
 
 modernize: ## Run Go modernization tool to update code to latest patterns
-	@echo "$(GREEN)Running Go modernization tool (Go version: $(GO_VERSION))...$(NC)"
-	GOTOOLCHAIN=$(GO_VERSION) go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
+	@echo "$(GREEN)Running Go modernization tool...$(NC)"
+	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
 	@echo "$(GREEN)Modernization complete$(NC)"
 
 ##@ Dependencies
