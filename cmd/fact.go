@@ -488,11 +488,12 @@ func deleteFacts(filePath, deleteType, instance string, keys map[string]string, 
 		return false, nil
 	}
 
-	if deleteType == "instance" {
+	switch deleteType {
+	case "instance":
 		// Remove the entire section
 		cfg.DeleteSection(instance)
 		changed = true
-	} else if deleteType == "key" {
+	case "key":
 		// Remove specific keys
 		section := cfg.Section(instance)
 		for key := range keys {

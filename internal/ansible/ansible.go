@@ -124,7 +124,7 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 			fmt.Printf("DEBUG: PrepareAnsibleListTags: Cache found for %s\n", repoPath)
 		}
 		if commit, commitOK := repoCache["commit"].(string); commitOK {
-			currentCommit, err := git.GetGitCommitHash(repoPath)
+			currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -190,7 +190,7 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 		if err != nil {
 			return false, err
 		}
-		currentCommit, err := git.GetGitCommitHash(repoPath)
+		currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
 		if err != nil {
 			return false, err
 		}
@@ -244,7 +244,7 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 			fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Parsed %d tags from ansible output\n", len(tags))
 		}
 
-		currentCommit, err := git.GetGitCommitHash(repoPath)
+		currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
 		if err != nil {
 			if verbosity > 0 {
 				fmt.Printf("DEBUG: RunAndCacheAnsibleTags: Failed to get git commit hash: %v\n", err)

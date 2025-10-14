@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,9 +15,9 @@ import (
 )
 
 // GetDistribution returns the Ubuntu distribution version with a codename
-func GetDistribution() string {
-	distroInfo := ExecCommand("lsb_release", "-ds")
-	codename := ExecCommand("lsb_release", "-cs")
+func GetDistribution(ctx context.Context, verbose bool) string {
+	distroInfo := ExecCommand(ctx, "lsb_release", "-ds")
+	codename := ExecCommand(ctx, "lsb_release", "-cs")
 
 	if codename != "" && distroInfo != "Not available" {
 		distroInfo = distroInfo + " (" + codename + ")"
@@ -25,13 +26,13 @@ func GetDistribution() string {
 }
 
 // GetKernel returns the kernel version
-func GetKernel() string {
-	return ExecCommand("uname", "-r")
+func GetKernel(ctx context.Context, verbose bool) string {
+	return ExecCommand(ctx, "uname", "-r")
 }
 
 // GetUptime returns the system uptime
-func GetUptime() string {
-	uptimeInfo := ExecCommand("uptime", "-p")
+func GetUptime(ctx context.Context, verbose bool) string {
+	uptimeInfo := ExecCommand(ctx, "uptime", "-p")
 	if uptimeInfo != "Not available" {
 		// Remove "up " prefix from uptime
 		uptimeInfo = strings.TrimPrefix(uptimeInfo, "up ")
@@ -44,7 +45,7 @@ func GetUptime() string {
 }
 
 // GetCpuAverages returns the system load averages
-func GetCpuAverages() string {
+func GetCpuAverages(ctx context.Context, verbose bool) string {
 	// Try to read from /proc/loadavg first
 	content, err := os.ReadFile("/proc/loadavg")
 	if err == nil {
@@ -59,7 +60,7 @@ func GetCpuAverages() string {
 	}
 
 	// Fallback to uptime command if /proc/loadavg can't be read
-	loadInfo := ExecCommand("uptime")
+	loadInfo := ExecCommand(ctx, "uptime")
 	if loadInfo != "Not available" {
 		// Extract load averages from uptime output
 		// Typical output: "... load average: 0.00, 0.01, 0.05"
@@ -80,9 +81,9 @@ func GetCpuAverages() string {
 }
 
 // GetLastLogin returns the last login information
-func GetLastLogin() string {
+func GetLastLogin(ctx context.Context, verbose bool) string {
 	// Try the last command to get the most recent login
-	lastOutput := ExecCommand("last", "-1")
+	lastOutput := ExecCommand(ctx, "last", "-1")
 	if lastOutput != "Not available" && lastOutput != "" {
 		// First check if "still logged in" is present
 		stillLoggedIn := strings.Contains(lastOutput, "still logged in")
@@ -170,7 +171,7 @@ func GetLastLogin() string {
 	}
 
 	// Fallback methods similar to before...
-	lastlogOutput := ExecCommand("lastlog", "-u", "root")
+	lastlogOutput := ExecCommand(ctx, "lastlog", "-u", "root")
 	if lastlogOutput != "Not available" && lastlogOutput != "" {
 		lines := strings.Split(lastlogOutput, "\n")
 		if len(lines) >= 2 {
@@ -190,7 +191,7 @@ func GetLastLogin() string {
 	}
 
 	// Additional fallback with the who command
-	whoOutput := ExecCommand("who", "-u")
+	whoOutput := ExecCommand(ctx, "who", "-u")
 	if whoOutput != "Not available" && whoOutput != "" {
 		lines := strings.Split(whoOutput, "\n")
 		if len(lines) > 0 {
@@ -216,9 +217,9 @@ func GetLastLogin() string {
 }
 
 // GetUserSessions returns the number of active user sessions
-func GetUserSessions() string {
+func GetUserSessions(ctx context.Context, verbose bool) string {
 	// Use the 'who' command to get user sessions
-	whoOutput := ExecCommand("who")
+	whoOutput := ExecCommand(ctx, "who")
 	if whoOutput == "Not available" || whoOutput == "" {
 		return "No active sessions"
 	}
@@ -237,7 +238,7 @@ func GetUserSessions() string {
 }
 
 // GetProcessCount returns the number of running processes
-func GetProcessCount() string {
+func GetProcessCount(ctx context.Context, verbose bool) string {
 	// Method 1: Count directories in /proc that are numeric
 	entries, err := os.ReadDir("/proc")
 	if err == nil {
@@ -256,7 +257,7 @@ func GetProcessCount() string {
 	}
 
 	// Method 2: Use ps command (fallback)
-	psOutput := ExecCommand("ps", "ax")
+	psOutput := ExecCommand(ctx, "ps", "ax")
 	if psOutput != "Not available" {
 		lines := strings.Split(psOutput, "\n")
 		// Subtract 1 for the header line
@@ -270,7 +271,7 @@ func GetProcessCount() string {
 }
 
 // GetAptStatus returns the apt package status
-func GetAptStatus(verbose bool) string {
+func GetAptStatus(ctx context.Context, verbose bool) string {
 	if verbose {
 		fmt.Printf("DEBUG: Starting GetAptStatus\n")
 	}
@@ -359,15 +360,16 @@ func GetAptStatus(verbose bool) string {
 
 	}
 	startAptCheck := timepkg.Now()
-	output := ExecCommand("/usr/lib/update-notifier/apt-check", "--human-readable", "--no-esm-messages")
+	output := ExecCommand(ctx, "/usr/lib/update-notifier/apt-check", "--human-readable", "--no-esm-messages")
 	if verbose {
 		fmt.Printf("DEBUG: apt-check command completed in %v\n", timepkg.Since(startAptCheck))
 
-		if output == "Not available" {
+		switch output {
+		case "Not available":
 			fmt.Printf("DEBUG: apt-check command returned 'Not available'\n")
-		} else if output == "" {
+		case "":
 			fmt.Printf("DEBUG: apt-check command returned empty output\n")
-		} else {
+		default:
 			fmt.Printf("DEBUG: apt-check command completed successfully, parsing output\n")
 		}
 	}
@@ -428,15 +430,16 @@ func GetAptStatus(verbose bool) string {
 
 	}
 	startAptList := timepkg.Now()
-	output = ExecCommand("apt", "list", "--upgradable")
+	output = ExecCommand(ctx, "apt", "list", "--upgradable")
 	if verbose {
 		fmt.Printf("DEBUG: apt list --upgradable completed in %v\n", timepkg.Since(startAptList))
 
-		if output == "Not available" {
+		switch output {
+		case "Not available":
 			fmt.Printf("DEBUG: apt list --upgradable returned 'Not available'\n")
-		} else if output == "" {
+		case "":
 			fmt.Printf("DEBUG: apt list --upgradable returned empty output\n")
-		} else {
+		default:
 			fmt.Printf("DEBUG: apt list --upgradable completed successfully\n")
 		}
 	}
@@ -467,7 +470,7 @@ func GetAptStatus(verbose bool) string {
 
 // GetRebootRequired checks if a system reboot is required
 // Returns empty string if no reboot is required, which will hide the field entirely
-func GetRebootRequired() string {
+func GetRebootRequired(ctx context.Context, verbose bool) string {
 	// Method 1: Go native implementation
 	// Checks if the reboot-required file exists
 	rebootFile := "/var/run/reboot-required"
@@ -504,7 +507,7 @@ func GetRebootRequired() string {
 	}
 
 	// Method 2: Fallback to the update-motd script
-	output := ExecCommand("/usr/lib/update-notifier/update-motd-reboot-required")
+	output := ExecCommand(ctx, "/usr/lib/update-notifier/update-motd-reboot-required")
 	if output != "Not available" && output != "" && !strings.Contains(output, "No reboot") {
 		// If the output contains "reboot required", color it yellow
 		if strings.Contains(strings.ToLower(output), "reboot required") {
@@ -518,7 +521,7 @@ func GetRebootRequired() string {
 }
 
 // GetCpuInfo returns information about the CPU model and core count
-func GetCpuInfo() string {
+func GetCpuInfo(ctx context.Context, verbose bool) string {
 	// Try to read from /proc/cpuinfo
 	content, err := os.ReadFile("/proc/cpuinfo")
 	if err != nil {
@@ -593,7 +596,7 @@ func GetCpuInfo() string {
 	}
 
 	// Fallback to lscpu if we couldn't parse /proc/cpuinfo
-	lscpuOutput := ExecCommand("lscpu")
+	lscpuOutput := ExecCommand(ctx, "lscpu")
 	if lscpuOutput != "Not available" {
 		lines := strings.Split(lscpuOutput, "\n")
 		modelLine := ""
@@ -627,7 +630,7 @@ func GetCpuInfo() string {
 }
 
 // GetGpuInfo returns information about the GPU(s) in the system
-func GetGpuInfo() string {
+func GetGpuInfo(ctx context.Context, verbose bool) string {
 	var gpus []string
 
 	// List of GPU vendors/models to exclude (IPMI, server management, etc.)
@@ -644,7 +647,7 @@ func GetGpuInfo() string {
 	}
 
 	// Use lspci to detect GPUs (works for NVIDIA, AMD, Intel, etc.)
-	lspciOutput := ExecCommand("lspci")
+	lspciOutput := ExecCommand(ctx, "lspci")
 	if lspciOutput != "Not available" {
 		lines := strings.SplitSeq(lspciOutput, "\n")
 		for line := range lines {
@@ -769,14 +772,14 @@ func GetMemoryInfo() string {
 }
 
 // GetDockerInfo returns information about Docker containers
-func GetDockerInfo() string {
+func GetDockerInfo(ctx context.Context, verbose bool) string {
 	var output strings.Builder
 
 	// Check if Docker service is running
-	statusOutput := ExecCommand("systemctl", "is-active", "docker")
+	statusOutput := ExecCommand(ctx, "systemctl", "is-active", "docker")
 	if statusOutput != "active" {
 		// Check if Docker is installed but not running
-		installedCheck := ExecCommand("which", "docker")
+		installedCheck := ExecCommand(ctx, "which", "docker")
 		if installedCheck != "Not available" {
 			return DefaultStyle.Render("Docker is installed but not running")
 		}
@@ -784,7 +787,7 @@ func GetDockerInfo() string {
 	}
 
 	// Get container list with detailed format
-	containerOutput := ExecCommand("docker", "ps", "-a", "--format", "{{.Names}}|{{.Status}}|{{.State}}")
+	containerOutput := ExecCommand(ctx, "docker", "ps", "-a", "--format", "{{.Names}}|{{.Status}}|{{.State}}")
 	if containerOutput == "Not available" || containerOutput == "" {
 		return DefaultStyle.Render("Docker is running but no containers found")
 	}
@@ -900,7 +903,7 @@ func GetDockerInfo() string {
 }
 
 // GetDiskInfo returns the disk usage for all real partitions with visual bars
-func GetDiskInfo() string {
+func GetDiskInfo(ctx context.Context, verbose bool) string {
 	var output strings.Builder
 
 	// Constants for disk usage bar
@@ -910,7 +913,7 @@ func GetDiskInfo() string {
 	)
 
 	// Run df command to get disk usage with the proper exclusions
-	dfOutput := ExecCommand("df", "-H", "-x", "tmpfs", "-x", "overlay", "-x", "fuse.mergerfs", "-x", "fuse.rclone",
+	dfOutput := ExecCommand(ctx, "df", "-H", "-x", "tmpfs", "-x", "overlay", "-x", "fuse.mergerfs", "-x", "fuse.rclone",
 		"--output=target,pcent,size")
 	if dfOutput == "Not available" {
 		return DefaultStyle.Render("Not available")
@@ -1030,23 +1033,23 @@ func GetDiskInfo() string {
 }
 
 // GetTraefikInfo returns information about Traefik router status
-func GetTraefikInfo() string {
+func GetTraefikInfo(ctx context.Context, verbose bool) string {
 	var output strings.Builder
 
 	// Check if Docker service is running
-	statusOutput := ExecCommand("systemctl", "is-active", "docker")
+	statusOutput := ExecCommand(ctx, "systemctl", "is-active", "docker")
 	if statusOutput != "active" {
 		return DefaultStyle.Render("Docker service is not running")
 	}
 
 	// Check if Traefik container is running
-	containerStatus := ExecCommand("docker", "ps", "--filter", "name=^traefik$", "--format", "{{.Names}}")
+	containerStatus := ExecCommand(ctx, "docker", "ps", "--filter", "name=^traefik$", "--format", "{{.Names}}")
 	if containerStatus == "Not available" || containerStatus == "" {
 		return DefaultStyle.Render("Traefik container is not running")
 	}
 
 	// Check if Traefik API is accessible
-	routersOutput := ExecCommand("curl", "-s", "--connect-timeout", "3", "http://traefik:8080/api/http/routers")
+	routersOutput := ExecCommand(ctx, "curl", "-s", "--connect-timeout", "3", "http://traefik:8080/api/http/routers")
 	if routersOutput == "Not available" || strings.Contains(routersOutput, "Connection refused") || strings.Contains(routersOutput, "curl:") {
 		return DefaultStyle.Render("Traefik container is running but API is not accessible")
 	}

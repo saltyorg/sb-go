@@ -133,15 +133,13 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 	}
 
 	// Custom commands
-	if customCommands != nil {
-		for _, command := range customCommands {
-			cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-			cmd.Dir = repoPath
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				fmt.Printf("Error: failed to execute custom command %v: %s\n", command, string(output))
-				return fmt.Errorf("failed to execute custom command %v: %w", command, err)
-			}
+	for _, command := range customCommands {
+		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
+		cmd.Dir = repoPath
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Printf("Error: failed to execute custom command %v: %s\n", command, string(output))
+			return fmt.Errorf("failed to execute custom command %v: %w", command, err)
 		}
 	}
 
@@ -152,10 +150,8 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 }
 
 // GetGitCommitHash returns the current Git commit hash of the repository.
-// Note: This function doesn't accept context as it's a quick local operation,
-// but uses context.Background() internally for consistency.
-func GetGitCommitHash(repoPath string) (string, error) {
-	output, err := defaultExecutor.ExecuteCommand(context.Background(), repoPath, "git", BuildRevParseArgs()...)
+func GetGitCommitHash(ctx context.Context, repoPath string) (string, error) {
+	output, err := defaultExecutor.ExecuteCommand(ctx, repoPath, "git", BuildRevParseArgs()...)
 
 	if err != nil {
 		if _, statErr := os.Stat(repoPath); statErr != nil {

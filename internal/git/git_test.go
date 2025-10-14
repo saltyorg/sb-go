@@ -278,7 +278,7 @@ func TestGetGitCommitHash(t *testing.T) {
 			SetExecutor(mock)
 
 			// Call the function
-			hash, err := GetGitCommitHash(tt.repoPath)
+			hash, err := GetGitCommitHash(context.Background(), tt.repoPath)
 
 			// Verify results
 			if tt.expectedError {
@@ -313,7 +313,7 @@ func TestGetGitCommitHash_NonexistentDirectory(t *testing.T) {
 	}
 	SetExecutor(mock)
 
-	hash, err := GetGitCommitHash(nonexistentPath)
+	hash, err := GetGitCommitHash(context.Background(), nonexistentPath)
 
 	if err == nil {
 		t.Errorf("Expected error for nonexistent directory")
@@ -496,7 +496,7 @@ func TestExecutorIntegration(t *testing.T) {
 	}
 
 	// Now test GetGitCommitHash
-	hash, err := GetGitCommitHash(repoPath)
+	hash, err := GetGitCommitHash(context.Background(), repoPath)
 	if err != nil {
 		t.Errorf("GetGitCommitHash failed: %v", err)
 	}
@@ -603,7 +603,7 @@ func TestGetGitCommitHash_DirectoryNotExist(t *testing.T) {
 	}
 	SetExecutor(mock)
 
-	hash, err := GetGitCommitHash(nonExistPath)
+	hash, err := GetGitCommitHash(context.Background(), nonExistPath)
 
 	if err == nil {
 		t.Errorf("Expected error for nonexistent directory")

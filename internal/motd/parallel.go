@@ -56,7 +56,18 @@ func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
 			}
 
 			// Get the information with timeout
-			providerFunc := src.Provider.(func(context.Context, bool) string)
+			providerFunc, ok := src.Provider.(func(context.Context, bool) string)
+			if !ok {
+				if verbose {
+					fmt.Printf("ERROR: Invalid provider type for %s\n", src.Key)
+				}
+				resultChan <- Result{
+					Key:   src.Key,
+					Value: "Error: Invalid provider",
+					Order: src.Order,
+				}
+				return
+			}
 			value := providerFunc(ctx, verbose)
 
 			// Print timing debug info if verbose mode is enabled

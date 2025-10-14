@@ -5,15 +5,10 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 // ExecCommand executes a command and returns its output as a string
-func ExecCommand(name string, args ...string) string {
-	// Use context with timeout for command execution
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
+func ExecCommand(ctx context.Context, name string, args ...string) string {
 	cmd := exec.CommandContext(ctx, name, args...)
 	output, err := cmd.Output()
 	if err != nil {

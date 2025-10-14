@@ -5,11 +5,11 @@ import (
 )
 
 // GetDistributionWithContext provides distribution info with context/timeout support
-func GetDistributionWithContext(ctx context.Context, _ bool) string {
+func GetDistributionWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetDistribution()
+		ch <- GetDistribution(ctx, verbose)
 	}()
 
 	select {
@@ -21,11 +21,11 @@ func GetDistributionWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetKernelWithContext provides kernel info with context/timeout support
-func GetKernelWithContext(ctx context.Context, _ bool) string {
+func GetKernelWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetKernel()
+		ch <- GetKernel(ctx, verbose)
 	}()
 
 	select {
@@ -37,11 +37,11 @@ func GetKernelWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetUptimeWithContext provides uptime info with context/timeout support
-func GetUptimeWithContext(ctx context.Context, _ bool) string {
+func GetUptimeWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetUptime()
+		ch <- GetUptime(ctx, verbose)
 	}()
 
 	select {
@@ -53,11 +53,11 @@ func GetUptimeWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetCpuAveragesWithContext provides CPU load info with context/timeout support
-func GetCpuAveragesWithContext(ctx context.Context, _ bool) string {
+func GetCpuAveragesWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetCpuAverages()
+		ch <- GetCpuAverages(ctx, verbose)
 	}()
 
 	select {
@@ -69,11 +69,11 @@ func GetCpuAveragesWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetLastLoginWithContext provides last login info with context/timeout support
-func GetLastLoginWithContext(ctx context.Context, _ bool) string {
+func GetLastLoginWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetLastLogin()
+		ch <- GetLastLogin(ctx, verbose)
 	}()
 
 	select {
@@ -85,11 +85,11 @@ func GetLastLoginWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetUserSessionsWithContext provides user sessions info with context/timeout support
-func GetUserSessionsWithContext(ctx context.Context, _ bool) string {
+func GetUserSessionsWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetUserSessions()
+		ch <- GetUserSessions(ctx, verbose)
 	}()
 
 	select {
@@ -101,11 +101,11 @@ func GetUserSessionsWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetProcessCountWithContext provides process count info with context/timeout support
-func GetProcessCountWithContext(ctx context.Context, _ bool) string {
+func GetProcessCountWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetProcessCount()
+		ch <- GetProcessCount(ctx, verbose)
 	}()
 
 	select {
@@ -121,7 +121,7 @@ func GetAptStatusWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetAptStatus(verbose)
+		ch <- GetAptStatus(ctx, verbose)
 	}()
 
 	select {
@@ -133,11 +133,11 @@ func GetAptStatusWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetRebootRequiredWithContext provides reboot status info with context/timeout support
-func GetRebootRequiredWithContext(ctx context.Context, _ bool) string {
+func GetRebootRequiredWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetRebootRequired()
+		ch <- GetRebootRequired(ctx, verbose)
 	}()
 
 	select {
@@ -149,11 +149,11 @@ func GetRebootRequiredWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetCpuInfoWithContext provides CPU info with context/timeout support
-func GetCpuInfoWithContext(ctx context.Context, _ bool) string {
+func GetCpuInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetCpuInfo()
+		ch <- GetCpuInfo(ctx, verbose)
 	}()
 
 	select {
@@ -165,11 +165,11 @@ func GetCpuInfoWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetGpuInfoWithContext provides GPU info with context/timeout support
-func GetGpuInfoWithContext(ctx context.Context, _ bool) string {
+func GetGpuInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetGpuInfo()
+		ch <- GetGpuInfo(ctx, verbose)
 	}()
 
 	select {
@@ -197,11 +197,11 @@ func GetMemoryInfoWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetDockerInfoWithContext provides Docker container info with context/timeout support
-func GetDockerInfoWithContext(ctx context.Context, _ bool) string {
+func GetDockerInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetDockerInfo()
+		ch <- GetDockerInfo(ctx, verbose)
 	}()
 
 	select {
@@ -213,11 +213,11 @@ func GetDockerInfoWithContext(ctx context.Context, _ bool) string {
 }
 
 // GetDiskInfoWithContext provides disk usage info with context/timeout support
-func GetDiskInfoWithContext(ctx context.Context, _ bool) string {
+func GetDiskInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetDiskInfo()
+		ch <- GetDiskInfo(ctx, verbose)
 	}()
 
 	select {
@@ -357,11 +357,11 @@ func GetRtorrentInfoWithContext(ctx context.Context, verbose bool) string {
 }
 
 // GetTraefikInfoWithContext provides Traefik router status info with context/timeout support
-func GetTraefikInfoWithContext(ctx context.Context, _ bool) string {
+func GetTraefikInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
-		ch <- GetTraefikInfo()
+		ch <- GetTraefikInfo(ctx, verbose)
 	}()
 
 	select {

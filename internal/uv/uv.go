@@ -47,7 +47,11 @@ func DownloadAndInstallUV(ctx context.Context, verbose bool) error {
 	}
 
 	// Download the tarball
-	resp, err := http.Get(downloadURL)
+	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("error creating request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("error downloading uv: %w", err)
 	}

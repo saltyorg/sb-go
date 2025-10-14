@@ -135,7 +135,8 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 // Depending on the codename (e.g., matching "jammy" or "noble"), it adds a predefined list of repository entries
 // to the main sources file ("/etc/apt/sources.list") using the helper function addRepo.
 // If the release codename is unsupported or any step fails, an error is returned.
-// The context parameter allows for cancellation of the operation.
+// The context parameter is used for external command execution but not for local file I/O
+// operations, as Go's standard library does not provide context-aware file operations.
 //
 //goland:noinspection HttpUrlsUsage
 func AddAptRepositories(ctx context.Context) error {

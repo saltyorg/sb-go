@@ -57,7 +57,7 @@ func buildListTagsCommand(playbookPath, extraSkipTags string) []string {
 }
 
 // checkCachedTags checks if valid cached tags exist for the given repository
-func checkCachedTags(repoPath string, cache *cache.Cache) ([]string, bool) {
+func checkCachedTags(ctx context.Context, repoPath string, cache *cache.Cache) ([]string, bool) {
 	repoCache, ok := cache.GetRepoCache(repoPath)
 	if !ok {
 		return nil, false
@@ -73,7 +73,7 @@ func checkCachedTags(repoPath string, cache *cache.Cache) ([]string, bool) {
 		return nil, false
 	}
 
-	currentCommit, err := git.GetGitCommitHash(repoPath)
+	currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
 	if err != nil {
 		return nil, false
 	}
@@ -123,8 +123,8 @@ func executeAndParseTags(ctx context.Context, cmd *exec.Cmd, parser TagParser) (
 }
 
 // cacheTagsWithCommit caches the tags along with the current commit hash
-func cacheTagsWithCommit(repoPath string, tags []string, cache *cache.Cache) error {
-	currentCommit, err := git.GetGitCommitHash(repoPath)
+func cacheTagsWithCommit(ctx context.Context, repoPath string, tags []string, cache *cache.Cache) error {
+	currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
 	if err != nil {
 		return err
 	}

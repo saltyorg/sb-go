@@ -370,6 +370,33 @@ func InstallPipDependencies(ctx context.Context, verbose bool) {
 	}
 }
 
+// copyBinaryFile copies a single binary file from src to dest with proper permissions
+func copyBinaryFile(srcPath, destPath string) error {
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("error opening source file %s: %w", srcPath, err)
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("error creating destination file %s: %w", destPath, err)
+	}
+	defer destFile.Close()
+
+	// Set permissions
+	if err := os.Chmod(destPath, 0755); err != nil {
+		return fmt.Errorf("error setting permissions: %w", err)
+	}
+
+	// Copy contents
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return fmt.Errorf("error copying file: %w", err)
+	}
+
+	return nil
+}
+
 // CopyRequiredBinaries copies select binaries from the virtual environment to /usr/local/bin.
 func CopyRequiredBinaries(ctx context.Context) {
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Copying required binaries to /usr/local/bin", func() error {
@@ -377,7 +404,7 @@ func CopyRequiredBinaries(ctx context.Context) {
 		destDir := "/usr/local/bin"
 		files, err := os.ReadDir(venvBinDir)
 		if err != nil {
-			return fmt.Errorf("error reading virtual environment bin directory: %w", err) // Wrap error
+			return fmt.Errorf("error reading virtual environment bin directory: %w", err)
 		}
 
 		for _, file := range files {
@@ -387,30 +414,8 @@ func CopyRequiredBinaries(ctx context.Context) {
 				srcPath := filepath.Join(venvBinDir, fileName)
 				destPath := filepath.Join(destDir, fileName)
 
-				// Open source file
-				srcFile, err := os.Open(srcPath)
-				if err != nil {
-					return fmt.Errorf("error opening source file %s: %w", srcPath, err)
-				}
-				defer srcFile.Close()
-
-				// Create destination file
-				destFile, err := os.Create(destPath)
-				if err != nil {
-					return fmt.Errorf("error creating destination file %s: %w", destPath, err)
-				}
-				defer destFile.Close()
-
-				// Set permissions on destination file
-				if err := os.Chmod(destPath, 0755); err != nil {
-					return fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err)
-				}
-
-				// Copy contents
-				_, err = io.Copy(destFile, srcFile)
-
-				if err != nil {
-					return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)
+				if err := copyBinaryFile(srcPath, destPath); err != nil {
+					return err
 				}
 			}
 		}
@@ -419,6 +424,33 @@ func CopyRequiredBinaries(ctx context.Context) {
 		fmt.Println("Error copying required binaries:", err)
 		os.Exit(1)
 	}
+}
+
+// copyConfigFile copies a single config file from src to dest with proper permissions
+func copyConfigFile(srcPath, destPath string) error {
+	srcFile, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("error opening source file %s: %w", srcPath, err)
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("error creating destination file %s: %w", destPath, err)
+	}
+	defer destFile.Close()
+
+	// Set Permissions
+	if err := os.Chmod(destPath, 0755); err != nil {
+		return fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err)
+	}
+
+	// Copy contents
+	if _, err := io.Copy(destFile, srcFile); err != nil {
+		return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)
+	}
+
+	return nil
 }
 
 // CopyDefaultConfigFiles copies default config files into the Saltbox folder.
@@ -430,29 +462,6 @@ func CopyDefaultConfigFiles(ctx context.Context) error {
 		return fmt.Errorf("error listing default config files: %w", err)
 	}
 
-	processFile := func(srcPath, destPath, baseName, destName string) error {
-		srcFile, err := os.Open(srcPath)
-		if err != nil {
-			return fmt.Errorf("error opening source file %s: %w", srcPath, err)
-		}
-		defer srcFile.Close()
-
-		destFile, err := os.Create(destPath)
-		if err != nil {
-			return fmt.Errorf("error creating destination file %s: %w", destPath, err)
-		}
-		defer destFile.Close()
-
-		// Set Permissions
-		if err := os.Chmod(destPath, 0755); err != nil {
-			return fmt.Errorf("error setting permissions on destination file %s: %w", destPath, err)
-		}
-		if _, err := io.Copy(destFile, srcFile); err != nil {
-			return fmt.Errorf("error copying file %s to %s: %w", srcPath, destPath, err)
-		}
-		return nil
-	}
-
 	for _, srcPath := range files {
 		baseName := filepath.Base(srcPath)
 		destName := strings.TrimSuffix(baseName, ".default")
@@ -462,7 +471,7 @@ func CopyDefaultConfigFiles(ctx context.Context) error {
 		if _, err := os.Stat(destPath); os.IsNotExist(err) {
 			// Destination file doesn't exist, proceed with copying.
 			if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Copying %s", baseName), func() error {
-				return processFile(srcPath, destPath, baseName, destName)
+				return copyConfigFile(srcPath, destPath)
 			}); err != nil {
 				return err
 			}

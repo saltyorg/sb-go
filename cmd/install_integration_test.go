@@ -474,8 +474,8 @@ func TestRunPlaybook_Integration(t *testing.T) {
 			}
 			ansible.SetExecutor(mockAnsible)
 
-			// Call the actual function with verbose=false to use mocks
-			err := runPlaybook(ctx, tt.repoPath, tt.playbookPath, tt.tags, tt.ansibleBinaryPath, tt.extraVars, tt.skipTags, tt.extraArgs, false)
+			// Call the actual function to use mocks
+			err := runPlaybook(ctx, tt.repoPath, tt.playbookPath, tt.tags, tt.ansibleBinaryPath, tt.extraVars, tt.skipTags, tt.extraArgs)
 
 			if tt.expectError && err == nil {
 				t.Errorf("Expected error but got none")

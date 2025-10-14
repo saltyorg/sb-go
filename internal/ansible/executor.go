@@ -1,7 +1,6 @@
 package ansible
 
 import (
-	"bytes"
 	"context"
 	"os/exec"
 )
@@ -88,23 +87,4 @@ func SetExecutor(executor CommandExecutor) {
 // GetExecutor returns the current command executor
 func GetExecutor() CommandExecutor {
 	return defaultExecutor
-}
-
-// createCommand is a helper that creates an exec.Cmd
-// This is kept for internal use where we need the actual *exec.Cmd
-func createCommand(ctx context.Context, name string, args []string) *exec.Cmd {
-	return exec.CommandContext(ctx, name, args...)
-}
-
-// executeCommand executes a command with provided context and returns output buffers
-func executeCommand(ctx context.Context, cmd *exec.Cmd, verbose bool) (*bytes.Buffer, *bytes.Buffer, error) {
-	var stdoutBuf, stderrBuf bytes.Buffer
-
-	if !verbose {
-		cmd.Stdout = &stdoutBuf
-		cmd.Stderr = &stderrBuf
-	}
-
-	err := cmd.Run()
-	return &stdoutBuf, &stderrBuf, err
 }

@@ -88,7 +88,7 @@ func RemoveDeadsnakesPackages(ctx context.Context, pythonVersion string, verbose
 
 // ShouldCleanupDeadsnakes checks if the system should clean up deadsnakes packages
 // Returns true if the system is Ubuntu 20.04 or 22.04
-func ShouldCleanupDeadsnakes(ctx context.Context) (bool, error) {
+func ShouldCleanupDeadsnakes() (bool, error) {
 	osRelease, err := ubuntu.ParseOSRelease("/etc/os-release")
 	if err != nil {
 		return false, fmt.Errorf("error parsing OS release: %w", err)
@@ -105,7 +105,7 @@ func ShouldCleanupDeadsnakes(ctx context.Context) (bool, error) {
 
 // CleanupDeadsnakesIfNeeded checks if cleanup is needed and performs it
 func CleanupDeadsnakesIfNeeded(ctx context.Context, verbose bool) (bool, error) {
-	shouldCleanup, err := ShouldCleanupDeadsnakes(ctx)
+	shouldCleanup, err := ShouldCleanupDeadsnakes()
 	if err != nil {
 		return false, fmt.Errorf("error checking if cleanup is needed: %w", err)
 	}

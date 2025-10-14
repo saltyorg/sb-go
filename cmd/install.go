@@ -143,19 +143,19 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	ansibleBinaryPath := constants.AnsiblePlaybookBinaryPath
 
 	if len(saltboxTags) > 0 {
-		if err := runPlaybook(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), saltboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs, verbosity > 0); err != nil {
+		if err := runPlaybook(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), saltboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
 			return err
 		}
 	}
 
 	if len(saltboxModTags) > 0 {
-		if err := runPlaybook(ctx, constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), saltboxModTags, ansibleBinaryPath, extraVars, skipTags, extraArgs, verbosity > 0); err != nil {
+		if err := runPlaybook(ctx, constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), saltboxModTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
 			return err
 		}
 	}
 
 	if len(sandboxTags) > 0 {
-		if err := runPlaybook(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), sandboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs, verbosity > 0); err != nil {
+		if err := runPlaybook(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), sandboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
 			return err
 		}
 	}
@@ -167,7 +167,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	return nil
 }
 
-func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []string, ansibleBinaryPath string, extraVars []string, skipTags []string, extraArgs []string, verbose bool) error {
+func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []string, ansibleBinaryPath string, extraVars []string, skipTags []string, extraArgs []string) error {
 	tagsArg := strings.Join(tags, ",")
 	allArgs := []string{"--tags", tagsArg}
 
@@ -315,7 +315,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 		}
 		// Check if commit hash matches
 		if cachedCommit, commitOK := repoCache["commit"].(string); commitOK {
-			currentCommit, err := git.GetGitCommitHash(repoPath)
+			currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
 			if err == nil && cachedCommit == currentCommit {
 				// Commit matches, check if tags exist
 				cachedTagsInterface, ok := repoCache["tags"]

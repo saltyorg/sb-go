@@ -187,7 +187,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	// Get old commit hash
-	oldCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
+	oldCommitHash, err := git.GetGitCommitHash(ctx, constants.SaltboxRepoPath)
 	if err != nil {
 		return fmt.Errorf("error getting old commit hash: %w", err)
 	}
@@ -203,7 +203,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	// Get commit hash after fetch and reset
-	newCommitHash, err := git.GetGitCommitHash(constants.SaltboxRepoPath)
+	newCommitHash, err := git.GetGitCommitHash(ctx, constants.SaltboxRepoPath)
 	if err != nil {
 		return fmt.Errorf("error getting new commit hash: %w", err)
 	}
@@ -250,7 +250,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 	}
 
 	// Get old commit hash
-	oldCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
+	oldCommitHash, err := git.GetGitCommitHash(ctx, constants.SandboxRepoPath)
 	if err != nil {
 		return fmt.Errorf("error getting old commit hash: %w", err)
 	}
@@ -261,7 +261,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 	}
 
 	// Get commit hash after fetch and reset
-	newCommitHash, err := git.GetGitCommitHash(constants.SandboxRepoPath)
+	newCommitHash, err := git.GetGitCommitHash(ctx, constants.SandboxRepoPath)
 	if err != nil {
 		return fmt.Errorf("error getting new commit hash: %w", err)
 	}

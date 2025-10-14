@@ -222,7 +222,7 @@ func TestCheckCachedTags(t *testing.T) {
 				os.WriteFile(cacheFile, data, 0644)
 			}
 
-			tags, found := checkCachedTags(tt.repoPath, testCache)
+			tags, found := checkCachedTags(context.Background(), tt.repoPath, testCache)
 
 			if found != tt.expectFound {
 				t.Errorf("Expected found=%v, got %v", tt.expectFound, found)
@@ -389,7 +389,7 @@ func TestCacheTagsWithCommit(t *testing.T) {
 
 	// This will fail because we don't have a real git repo
 	// but it tests that the function executes
-	err = cacheTagsWithCommit(gitRepoPath, tags, testCache)
+	err = cacheTagsWithCommit(context.Background(), gitRepoPath, tags, testCache)
 
 	// We expect an error because the git command will fail
 	if err == nil {
