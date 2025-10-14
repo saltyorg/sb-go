@@ -28,7 +28,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 		// Check the Python version
 		fmt.Println("Checking Python version...")
 		var err error
-		pythonMissing, err = checkPythonVersion(ansibleVenvPath, venvPythonPath)
+		pythonMissing, err = checkPythonVersion(ctx, ansibleVenvPath, venvPythonPath)
 		if err != nil {
 			return fmt.Errorf("error checking python version: %w", err)
 		}
@@ -49,15 +49,6 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 			fmt.Println("Updating Ansible venv...")
 		}
 
-		// Detect OS release
-		fmt.Println("Detecting OS release...")
-		var release string
-		release, err = detectOSRelease(ctx)
-		if err != nil {
-			return fmt.Errorf("error detecting OS release: %w", err)
-		}
-		fmt.Printf("Detected OS Release: %s\n", release)
-
 		if recreate {
 			// Remove existing venv
 			fmt.Println("Removing existing venv...")
@@ -69,7 +60,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 		if _, err := os.Stat(ansibleVenvPath); os.IsNotExist(err) {
 			// Create venv
 			fmt.Println("Creating virtual environment...")
-			if err := createVirtualEnv(ctx, ansibleVenvPath, release, verbose); err != nil {
+			if err := createVirtualEnv(ctx, ansibleVenvPath, verbose); err != nil {
 				return fmt.Errorf("error creating virtual environment: %w", err)
 			}
 		}
@@ -116,7 +107,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 		// Check the Python version
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking Python version", func() error {
 			var err error
-			pythonMissing, err = checkPythonVersion(ansibleVenvPath, venvPythonPath)
+			pythonMissing, err = checkPythonVersion(ctx, ansibleVenvPath, venvPythonPath)
 			return err
 		}); err != nil {
 			return fmt.Errorf("error checking python version: %w", err)
@@ -144,16 +135,6 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 			}
 		}
 
-		// Detect OS release
-		var release string
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Detecting OS release", func() error {
-			var err error
-			release, err = detectOSRelease(ctx)
-			return err
-		}); err != nil {
-			return fmt.Errorf("error detecting OS release: %w", err)
-		}
-
 		if recreate {
 			// Remove existing venv
 			if err := spinners.RunTaskWithSpinnerContext(ctx, "Removing existing venv", func() error {
@@ -166,7 +147,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 		if _, err := os.Stat(ansibleVenvPath); os.IsNotExist(err) {
 			// Create venv
 			if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating virtual environment", func() error {
-				return createVirtualEnv(ctx, ansibleVenvPath, release, verbose)
+				return createVirtualEnv(ctx, ansibleVenvPath, verbose)
 			}); err != nil {
 				return fmt.Errorf("error creating virtual environment: %w", err)
 			}
@@ -223,7 +204,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 
 // checkPythonVersion checks if the Python version is correct.
 // Returns true if Python is missing or pointing to wrong version (needs recreation).
-func checkPythonVersion(ansibleVenvPath, venvPythonPath string) (bool, error) {
+func checkPythonVersion(ctx context.Context, ansibleVenvPath, venvPythonPath string) (bool, error) {
 	// Check if venv bin directory exists
 	if _, err := os.Stat(filepath.Join(ansibleVenvPath, "venv", "bin")); err != nil {
 		// Venv doesn't exist, needs creation
@@ -240,7 +221,7 @@ func checkPythonVersion(ansibleVenvPath, venvPythonPath string) (bool, error) {
 
 	// Python binary exists, now verify it's the correct version from uv
 	// Run python --version to get the actual version
-	cmd := exec.Command(venvPythonPath, "--version")
+	cmd := exec.CommandContext(ctx, venvPythonPath, "--version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Can't run Python, needs recreation
@@ -269,8 +250,8 @@ func checkPythonVersion(ansibleVenvPath, venvPythonPath string) (bool, error) {
 	}
 
 	// Final check: verify Python can actually import modules (not just run --version)
-	// This catches broken venvs that have correct symlinks but broken Python paths
-	cmd = exec.Command(venvPythonPath, "-c", "import encodings, sys; sys.exit(0)")
+	// This catches broken venv that have correct symlinks but broken Python paths
+	cmd = exec.CommandContext(ctx, venvPythonPath, "-c", "import encodings, sys; sys.exit(0)")
 	if err := cmd.Run(); err != nil {
 		// Python can't import basic modules, venv is broken, needs recreation
 		return true, nil
@@ -280,16 +261,6 @@ func checkPythonVersion(ansibleVenvPath, venvPythonPath string) (bool, error) {
 	return false, nil
 }
 
-// detectOSRelease detects the OS release.
-func detectOSRelease(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "lsb_release", "-cs")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("error running lsb_release: %w", err)
-	}
-	return strings.TrimSpace(string(output)), nil
-}
-
 // removeExistingVenv removes the existing virtual environment.
 func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
 	cmd := exec.CommandContext(ctx, "rm", "-rf", ansibleVenvPath)
@@ -297,7 +268,7 @@ func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
 }
 
 // createVirtualEnv creates the virtual environment using uv.
-func createVirtualEnv(ctx context.Context, ansibleVenvPath, release string, verbose bool) error {
+func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool) error {
 	// Ensure uv is installed
 	if err := uv.DownloadAndInstallUV(ctx, verbose); err != nil {
 		return fmt.Errorf("error installing uv: %w", err)
