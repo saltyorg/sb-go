@@ -562,10 +562,9 @@ func TestOutputBuffering(t *testing.T) {
 				if tt.wantOS {
 					t.Error("Non-verbose mode should use buffers")
 				}
-				// Verify buffers are initialized
-				if &stdoutBuf == nil || &stderrBuf == nil {
-					t.Error("Buffers should be initialized")
-				}
+				// Buffers are initialized and ready to use
+				_ = stdoutBuf
+				_ = stderrBuf
 			}
 		})
 	}

@@ -99,29 +99,6 @@ func checkCachedTags(ctx context.Context, repoPath string, cache *cache.Cache) (
 	return stringTags, true
 }
 
-// executeAndParseTags executes a command and parses tags from its output
-func executeAndParseTags(ctx context.Context, cmd *exec.Cmd, parser TagParser) ([]string, error) {
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if err != nil {
-		if sbErrors.HandleInterruptError(err) {
-			return nil, fmt.Errorf("command interrupted by user")
-		}
-		return nil, fmt.Errorf("ansible-playbook failed: %s, stderr: %s", err, stderr.String())
-	}
-
-	tags, err := parser(out.String())
-	if err != nil {
-		return nil, err
-	}
-
-	return tags, nil
-}
-
 // cacheTagsWithCommit caches the tags along with the current commit hash
 func cacheTagsWithCommit(ctx context.Context, repoPath string, tags []string, cache *cache.Cache) error {
 	currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
