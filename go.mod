@@ -15,6 +15,7 @@ require (
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/docker/go-connections v0.6.0
 	github.com/go-playground/validator/v10 v10.28.0
+	github.com/moby/moby/api v1.52.0-beta.2
 	github.com/moby/moby/client v0.1.0-beta.2
 	github.com/saltydk/go-rtorrent v1.0.1
 	github.com/sj14/jellyfin-go v0.3.4-0.20251003074752-9965db6d6b4d
@@ -73,7 +74,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/moby/api v1.52.0-beta.2 // indirect
 	github.com/moby/term v0.5.2 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
@@ -107,4 +107,4 @@ require (
 	gopkg.in/validator.v2 v2.0.1 // indirect
 )
 
-replace github.com/moby/moby => github.com/moby/moby/api v1.52.0-beta.1
+replace github.com/moby/moby => github.com/moby/moby/api v1.52.0-beta.2
