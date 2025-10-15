@@ -172,11 +172,6 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 		return fmt.Errorf("error installing Python 3.12: %w", err)
 	}
 
-	// Manage Ansible venv - this function already has internal spinners
-	if err := venv.ManageAnsibleVenv(ctx, false, saltboxUser, verbose); err != nil {
-		return fmt.Errorf("error managing Ansible venv: %w", err)
-	}
-
 	// Set up custom commands for git
 	customCommands := [][]string{
 		{
@@ -195,6 +190,11 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	// Fetch and reset git repo - this function already has internal spinners
 	if err := git.FetchAndReset(ctx, constants.SaltboxRepoPath, "master", saltboxUser, customCommands, branchReset); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
+	}
+
+	// Manage Ansible venv - this function already has internal spinners
+	if err := venv.ManageAnsibleVenv(ctx, false, saltboxUser, verbose); err != nil {
+		return fmt.Errorf("error managing Ansible venv: %w", err)
 	}
 
 	// Download and install Saltbox fact - this function already has internal spinners
