@@ -2,6 +2,7 @@ package uv
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -154,9 +155,16 @@ func InstallPython(ctx context.Context, version string, verbose bool) error {
 		fmt.Printf("Installing Python %s using uv\n", version)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+	} else {
+		var stderrBuf bytes.Buffer
+		cmd.Stdout = io.Discard
+		cmd.Stderr = &stderrBuf
 	}
 
 	if err := cmd.Run(); err != nil {
+		if !verbose {
+			return fmt.Errorf("error installing Python %s: %w\nStderr:\n%s", version, err, cmd.Stderr)
+		}
 		return fmt.Errorf("error installing Python %s: %w", version, err)
 	}
 
@@ -233,9 +241,16 @@ func CreateVenv(ctx context.Context, venvPath, pythonVersion string, verbose boo
 	if verbose {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+	} else {
+		var stderrBuf bytes.Buffer
+		cmd.Stdout = io.Discard
+		cmd.Stderr = &stderrBuf
 	}
 
 	if err := cmd.Run(); err != nil {
+		if !verbose {
+			return fmt.Errorf("error creating venv: %w\nStderr:\n%s", err, cmd.Stderr)
+		}
 		return fmt.Errorf("error creating venv: %w", err)
 	}
 
