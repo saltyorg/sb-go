@@ -1,6 +1,7 @@
 package venv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -424,12 +425,14 @@ func runCommand(ctx context.Context, command []string, env []string, verbose boo
 		return cmd.Run()
 	}
 
-	// For non-verbose mode, capture the output to prevent the child process
-	// from interfering with the terminal. This is the fix.
-	output, err := cmd.CombinedOutput()
+	var stderrBuf bytes.Buffer
+	cmd.Stdout = io.Discard // Discard stdout completely
+	cmd.Stderr = &stderrBuf // Capture only stderr for error reporting
+
+	err := cmd.Run()
 	if err != nil {
-		// Provide the captured output for better error diagnosis.
-		return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(output))
+		// Provide the captured stderr for better error diagnosis.
+		return fmt.Errorf("command failed: %w\nStderr:\n%s", err, stderrBuf.String())
 	}
 	return nil
 }
