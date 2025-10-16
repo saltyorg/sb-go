@@ -198,25 +198,32 @@ const (
 )
 
 // Result contains the result of a command execution, including captured output,
-// exit code, and any error that occurred. The fields populated depend on the
-// OutputMode used during execution.
+// exit code, and any error that occurred.
 //
-// For OutputModeCapture: Stdout and Stderr are populated separately.
-// For OutputModeCombined: Combined (and Stdout for compatibility) are populated.
-// For OutputModeDiscard: Only Stderr is populated.
-// For OutputModeStream and OutputModeInteractive: No output is captured.
+// Output capturing behavior by mode:
+//   - OutputModeCapture: Captures both stdout and stderr separately
+//   - OutputModeCombined: Captures combined stdout+stderr
+//   - OutputModeStream: Displays to terminal AND captures both stdout and stderr
+//   - OutputModeDiscard: Discards stdout (not captured), but captures stderr for errors
+//   - OutputModeInteractive: Displays to terminal AND captures both stdout and stderr
+//
+// Stderr is always captured (except when custom stderr writer is provided) to ensure
+// error messages can include diagnostic information.
 type Result struct {
-	// Stdout contains captured standard output when using OutputModeCapture.
-	// Also populated with Combined output for backward compatibility when using
-	// OutputModeCombined.
+	// Stdout contains captured standard output.
+	// Empty for OutputModeDiscard (where stdout is intentionally discarded).
+	// Populated for all other modes.
 	Stdout []byte
 
-	// Stderr contains captured standard error output when using OutputModeCapture
-	// or OutputModeDiscard. Use this to access error messages and diagnostics.
+	// Stderr contains captured standard error output.
+	// Always populated (unless custom stderr writer overrides it).
+	// Critical for error reporting and diagnostics.
 	Stderr []byte
 
-	// Combined contains the combined stdout and stderr output when using
-	// OutputModeCombined (the default mode). This is similar to exec.CombinedOutput().
+	// Combined contains combined output:
+	//   - OutputModeCombined: The actual interleaved stdout+stderr stream
+	//   - Other modes: stdout followed by stderr (for convenience)
+	//   - OutputModeDiscard: Only stderr (since stdout was discarded)
 	Combined []byte
 
 	// ExitCode is the exit code returned by the command. A value of 0 indicates success.
@@ -559,84 +566,120 @@ func (e *DefaultExecutor) Execute(config *Config) (*Result, error) {
 
 	result := &Result{}
 
+	// Always capture stdout and stderr internally, regardless of output mode
+	var stdoutBuf, stderrBuf bytes.Buffer
+
 	// Apply custom IO if provided (overrides OutputMode)
 	if config.Stdin != nil {
 		cmd.Stdin = config.Stdin
 	}
 
 	// Configure output handling based on mode
-	// Custom stdout/stderr override the mode if provided
+	// The mode controls what's displayed, but we always capture internally
 	switch config.OutputMode {
 	case OutputModeCapture:
-		var stdoutBuf, stderrBuf bytes.Buffer
+		// Capture separately, no screen output
 		if config.Stdout != nil {
-			cmd.Stdout = config.Stdout
+			cmd.Stdout = io.MultiWriter(&stdoutBuf, config.Stdout)
 		} else {
 			cmd.Stdout = &stdoutBuf
 		}
 		if config.Stderr != nil {
-			cmd.Stderr = config.Stderr
+			cmd.Stderr = io.MultiWriter(&stderrBuf, config.Stderr)
 		} else {
 			cmd.Stderr = &stderrBuf
 		}
-		err := cmd.Run()
-		result.Stdout = stdoutBuf.Bytes()
-		result.Stderr = stderrBuf.Bytes()
-		result.Error = err
+
 	case OutputModeCombined:
+		// Capture combined output, no screen output
 		if config.Stdout != nil || config.Stderr != nil {
-			// If custom IO is provided, can't use CombinedOutput
+			// Custom IO provided - capture separately
 			if config.Stdout != nil {
-				cmd.Stdout = config.Stdout
+				cmd.Stdout = io.MultiWriter(&stdoutBuf, config.Stdout)
+			} else {
+				cmd.Stdout = &stdoutBuf
 			}
 			if config.Stderr != nil {
-				cmd.Stderr = config.Stderr
+				cmd.Stderr = io.MultiWriter(&stderrBuf, config.Stderr)
+			} else {
+				cmd.Stderr = &stderrBuf
 			}
-			result.Error = cmd.Run()
 		} else {
+			// Use CombinedOutput for efficiency when no custom IO
 			output, err := cmd.CombinedOutput()
 			result.Combined = output
-			result.Stdout = output // Also set Stdout for backward compatibility
+			result.Stdout = output // Backward compatibility
+			result.Stderr = output // Make stderr available too
 			result.Error = err
+			// Extract exit code early for CombinedOutput path
+			if err != nil {
+				var exitErr *exec.ExitError
+				if errors.As(err, &exitErr) {
+					result.ExitCode = exitErr.ExitCode()
+				} else {
+					result.ExitCode = -1
+				}
+			} else {
+				result.ExitCode = 0
+			}
+			return result, result.Error
 		}
+
 	case OutputModeStream:
+		// Stream to screen AND capture
+		if config.Stdout != nil {
+			cmd.Stdout = io.MultiWriter(&stdoutBuf, config.Stdout)
+		} else {
+			cmd.Stdout = io.MultiWriter(&stdoutBuf, os.Stdout)
+		}
+		if config.Stderr != nil {
+			cmd.Stderr = io.MultiWriter(&stderrBuf, config.Stderr)
+		} else {
+			cmd.Stderr = io.MultiWriter(&stderrBuf, os.Stderr)
+		}
+
+	case OutputModeDiscard:
+		// Discard stdout (don't capture), but capture stderr
 		if config.Stdout != nil {
 			cmd.Stdout = config.Stdout
 		} else {
-			cmd.Stdout = os.Stdout
+			cmd.Stdout = io.Discard
 		}
 		if config.Stderr != nil {
-			cmd.Stderr = config.Stderr
-		} else {
-			cmd.Stderr = os.Stderr
-		}
-		result.Error = cmd.Run()
-	case OutputModeDiscard:
-		var stderrBuf bytes.Buffer
-		cmd.Stdout = io.Discard
-		if config.Stderr != nil {
-			cmd.Stderr = config.Stderr
+			cmd.Stderr = io.MultiWriter(&stderrBuf, config.Stderr)
 		} else {
 			cmd.Stderr = &stderrBuf
 		}
-		err := cmd.Run()
-		result.Stderr = stderrBuf.Bytes()
-		result.Error = err
+		// Note: stdoutBuf will remain empty for this mode
+
 	case OutputModeInteractive:
+		// Pass through to terminal, capture in background
 		if config.Stdin == nil {
 			cmd.Stdin = os.Stdin
 		}
 		if config.Stdout != nil {
-			cmd.Stdout = config.Stdout
+			cmd.Stdout = io.MultiWriter(&stdoutBuf, config.Stdout)
 		} else {
-			cmd.Stdout = os.Stdout
+			cmd.Stdout = io.MultiWriter(&stdoutBuf, os.Stdout)
 		}
 		if config.Stderr != nil {
-			cmd.Stderr = config.Stderr
+			cmd.Stderr = io.MultiWriter(&stderrBuf, config.Stderr)
 		} else {
-			cmd.Stderr = os.Stderr
+			cmd.Stderr = io.MultiWriter(&stderrBuf, os.Stderr)
 		}
-		result.Error = cmd.Run()
+	}
+
+	// Run the command
+	result.Error = cmd.Run()
+
+	// Always populate result fields with captured data
+	result.Stdout = stdoutBuf.Bytes()
+	result.Stderr = stderrBuf.Bytes()
+
+	// For modes that don't use CombinedOutput, populate Combined field
+	if config.OutputMode != OutputModeCombined {
+		// Combine stdout and stderr for convenience
+		result.Combined = append(result.Stdout, result.Stderr...)
 	}
 
 	// Extract exit code
@@ -798,8 +841,8 @@ func RunVerbose(ctx context.Context, command string, args []string, verbose bool
 	result, err := executor.Execute(config)
 
 	if err != nil {
-		// Format error with stderr if available
-		if !verbose && len(result.Stderr) > 0 {
+		// Format error with stderr if available (now captured in both modes)
+		if len(result.Stderr) > 0 {
 			return fmt.Errorf("command failed: %w\nStderr:\n%s", err, string(result.Stderr))
 		}
 		return fmt.Errorf("command failed: %w", err)

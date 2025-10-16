@@ -1,0 +1,75 @@
+name: Test GHA Command
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-gha:
+    name: Test sb gha command
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout sb-go repository
+        uses: actions/checkout@v5
+        with:
+          path: sb-go
+
+      - name: Checkout Saltbox repository
+        uses: actions/checkout@v5
+        with:
+          repository: saltyorg/Saltbox
+          path: saltbox
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Tune GitHub-hosted runner network
+        run: sudo ethtool -K eth0 tx off rx off
+
+      - name: Build sb binary
+        working-directory: sb-go
+        run: |
+          make build
+          sudo cp build/sb /usr/local/bin/sb
+          /usr/local/bin/sb version
+
+      - name: Create required directories
+        run: sudo mkdir -p /srv/git
+
+      - name: Set ownership
+        run: sudo chown -R runner:runner /srv/git
+
+      - name: Symlink Saltbox repository
+        run: ln -s $GITHUB_WORKSPACE/saltbox /srv/git/saltbox
+
+      - name: Print pip dependencies
+        run: cat /srv/git/saltbox/requirements/requirements-saltbox.txt
+
+      - name: Run sb gha command
+        run: |
+          set -x  # Enable command tracing
+          /usr/local/bin/sb gha
+          echo "Exit code: $?"
+
+      - name: Verify installation
+        run: |
+          echo "=== Checking Python venv ==="
+          ls -la /srv/ansible/venv/bin/
+          /srv/ansible/venv/bin/python3 --version
+          /srv/ansible/venv/bin/ansible --version
+
+      - name: Check saltbox.fact
+        run: |
+          echo "=== Checking saltbox.fact ==="
+          ls -la /srv/git/saltbox/ansible_facts.d/saltbox.fact
+          /srv/git/saltbox/ansible_facts.d/saltbox.fact
+
+      - name: Test Ansible syntax check
+        run: |
+          cd /srv/git/saltbox
+          /srv/ansible/venv/bin/ansible-playbook saltbox.yml --syntax-check
