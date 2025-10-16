@@ -11,7 +11,6 @@ permissions:
   contents: write
 
 env:
-  GO_VERSION: '1.25.3'
   APP_NAME: 'sb'
   GITHUB_REPO: 'github.com/saltyorg/sb-go'
 
@@ -29,10 +28,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Extract Go version from go.mod
+        id: go_version
+        run: echo "version=$(grep '^go ' go.mod | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: ${{ steps.go_version.outputs.version }}
 
       - name: Get Git Commit SHA
         id: get_git_commit
