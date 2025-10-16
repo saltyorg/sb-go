@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/saltyorg/sb-go/internal/errors"
@@ -25,6 +26,8 @@ var rootCmd = &cobra.Command{
 func ExecuteContext(ctx context.Context) {
 	err := rootCmd.ExecuteContext(ctx)
 	if err != nil {
+		// Cobra already prints the error, but let's add context
+		fmt.Fprintf(os.Stderr, "Command execution failed: %v\n", err)
 		os.Exit(1)
 	}
 }

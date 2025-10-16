@@ -43,4 +43,7 @@ func main() {
 	if sigManager.IsShutdown() {
 		os.Exit(sigManager.ExitCode())
 	}
+
+	// Exit successfully if we got here
+	os.Exit(0)
 }
