@@ -186,9 +186,10 @@ const (
 	OutputModeDiscard
 
 	// OutputModeInteractive passes stdin, stdout, and stderr through to the terminal,
-	// enabling full interactivity. Use this for commands that require user input or
-	// provide interactive interfaces, such as text editors, interactive prompts, or
-	// tools like ansible-playbook with --ask-become-pass.
+	// enabling full interactivity with preserved TTY properties (colors, terminal width).
+	// Use this for commands that require user input or provide interactive interfaces,
+	// such as text editors, interactive prompts, or tools like ansible-playbook.
+	// Note: Output is NOT captured in this mode to preserve terminal characteristics.
 	//
 	// Example:
 	//	result, _ := executor.Run(ctx, "ansible-playbook",
@@ -205,18 +206,18 @@ const (
 //   - OutputModeCombined: Captures combined stdout+stderr
 //   - OutputModeStream: Displays to terminal AND captures both stdout and stderr
 //   - OutputModeDiscard: Discards stdout (not captured), but captures stderr for errors
-//   - OutputModeInteractive: Displays to terminal AND captures both stdout and stderr
+//   - OutputModeInteractive: Passes through to terminal, NO capturing (preserves TTY properties)
 //
-// Stderr is always captured (except when custom stderr writer is provided) to ensure
-// error messages can include diagnostic information.
+// Stderr is always captured (except for OutputModeInteractive or when custom stderr
+// writer is provided) to ensure error messages can include diagnostic information.
 type Result struct {
 	// Stdout contains captured standard output.
-	// Empty for OutputModeDiscard (where stdout is intentionally discarded).
+	// Empty for OutputModeDiscard (stdout discarded) and OutputModeInteractive (not captured).
 	// Populated for all other modes.
 	Stdout []byte
 
 	// Stderr contains captured standard error output.
-	// Always populated (unless custom stderr writer overrides it).
+	// Always populated except for OutputModeInteractive (not captured).
 	// Critical for error reporting and diagnostics.
 	Stderr []byte
 
@@ -653,20 +654,22 @@ func (e *DefaultExecutor) Execute(config *Config) (*Result, error) {
 		// Note: stdoutBuf will remain empty for this mode
 
 	case OutputModeInteractive:
-		// Pass through to terminal, capture in background
+		// Pass through to terminal directly - DO NOT capture
+		// This preserves TTY properties like colors and terminal width detection
 		if config.Stdin == nil {
 			cmd.Stdin = os.Stdin
 		}
 		if config.Stdout != nil {
-			cmd.Stdout = io.MultiWriter(&stdoutBuf, config.Stdout)
+			cmd.Stdout = config.Stdout
 		} else {
-			cmd.Stdout = io.MultiWriter(&stdoutBuf, os.Stdout)
+			cmd.Stdout = os.Stdout
 		}
 		if config.Stderr != nil {
-			cmd.Stderr = io.MultiWriter(&stderrBuf, config.Stderr)
+			cmd.Stderr = config.Stderr
 		} else {
-			cmd.Stderr = io.MultiWriter(&stderrBuf, os.Stderr)
+			cmd.Stderr = os.Stderr
 		}
+		// Note: stdoutBuf and stderrBuf remain empty for this mode
 	}
 
 	// Run the command
