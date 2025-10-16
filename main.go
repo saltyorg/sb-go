@@ -18,11 +18,12 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		if err := utils.RelaunchAsRoot(ctx); err != nil {
-			//fmt.Println("Error relaunching:", err)
-			os.Exit(1)
+		exitCode, err := utils.RelaunchAsRoot(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error relaunching as root: %v\n", err)
 		}
-		os.Exit(0)
+		// Exit with the same code as the sudo subprocess
+		os.Exit(exitCode)
 	}
 
 	supportedVersions := []string{"20.04", "22.04", "24.04"}

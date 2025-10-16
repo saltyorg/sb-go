@@ -18,25 +18,26 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// RelaunchAsRoot relaunches the current process with sudo.
-func RelaunchAsRoot(ctx context.Context) error {
+// RelaunchAsRoot relaunches the current process with sudo and returns the exit code.
+// Returns the exit code from the sudo subprocess and an error if execution failed.
+// The caller should exit with the returned exit code.
+func RelaunchAsRoot(ctx context.Context) (int, error) {
 	executable, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("failed to get executable path: %w", err)
+		return 1, fmt.Errorf("failed to get executable path: %w", err)
 	}
 
 	args := os.Args[1:] // Exclude the program name itself.
 	sudoArgs := append([]string{executable}, args...)
 
-	_, err = executor.Run(ctx, "sudo",
+	result, err := executor.Run(ctx, "sudo",
 		executor.WithArgs(sudoArgs...),
 		executor.WithOutputMode(executor.OutputModeInteractive),
 	)
-	if err != nil {
-		return fmt.Errorf("failed to execute sudo: %w", err)
-	}
 
-	return nil
+	// Return the exit code from the sudo subprocess, regardless of whether there was an error
+	// This ensures the parent process exits with the same code as the child process
+	return result.ExitCode, err
 }
 
 // GetSaltboxUser retrieves the Saltbox user from accounts.yml.
