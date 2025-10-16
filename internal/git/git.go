@@ -51,7 +51,8 @@ func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verb
 
 // FetchAndReset performs a git fetch and reset to a specified branch.
 // The context parameter allows for cancellation of git operations.
-func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool) error {
+// The repoName parameter is used to identify the repository in user prompts.
+func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool, repoName string) error {
 	// Get the current branch name
 	result, err := executor.Run(ctx, "git",
 		executor.WithArgs("rev-parse", "--abbrev-ref", "HEAD"),
@@ -65,19 +66,19 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 	var branch string
 	// Determine if a reset to default_branch is needed
 	if currentBranch != defaultBranch {
-		if err := spinners.RunInfoSpinner(fmt.Sprintf("Currently on branch '%s'", currentBranch)); err != nil {
+		if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Currently on branch '%s'", repoName, currentBranch)); err != nil {
 			return err
 		}
 
 		if branchReset == nil {
 			// No flag specified, prompt user
 			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("Do you want to reset to the '%s' branch? (y/n): ", defaultBranch)
+			fmt.Printf("%s: Do you want to reset to the '%s' branch? (y/n): ", repoName, defaultBranch)
 			input, _ := reader.ReadString('\n')
 			input = strings.TrimSpace(strings.ToLower(input))
 
 			if input != "y" {
-				if err := spinners.RunInfoSpinner(fmt.Sprintf("Updating the current branch '%s'", currentBranch)); err != nil {
+				if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
 					return err
 				}
 				branch = currentBranch
@@ -89,7 +90,7 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 			branch = defaultBranch
 		} else {
 			// --keep-branch flag: stay on current branch
-			if err := spinners.RunInfoSpinner(fmt.Sprintf("Updating the current branch '%s'", currentBranch)); err != nil {
+			if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
 				return err
 			}
 			branch = currentBranch
@@ -131,7 +132,7 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 		}
 	}
 
-	if err := spinners.RunInfoSpinner(fmt.Sprintf("Repository at %s (%s) has been updated", repoPath, branch)); err != nil {
+	if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Repository at %s (%s) has been updated", repoName, repoPath, branch)); err != nil {
 		return err
 	}
 	return nil

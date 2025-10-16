@@ -41,7 +41,7 @@ func changeSandboxBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
-	err = git.FetchAndReset(ctx, constants.SandboxRepoPath, branchName, saltboxUser, customCommands, nil)
+	err = git.FetchAndReset(ctx, constants.SandboxRepoPath, branchName, saltboxUser, customCommands, nil, "Sandbox")
 	if err != nil {
 		return err
 	}

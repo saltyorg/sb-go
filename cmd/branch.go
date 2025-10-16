@@ -43,7 +43,7 @@ func changeBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
-	err = git.FetchAndReset(ctx, constants.SaltboxRepoPath, branchName, saltboxUser, customCommands, nil)
+	err = git.FetchAndReset(ctx, constants.SaltboxRepoPath, branchName, saltboxUser, customCommands, nil, "Saltbox")
 	if err != nil {
 		return err
 	}
