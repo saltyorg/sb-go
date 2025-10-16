@@ -7,11 +7,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"github.com/Masterminds/semver/v3"
@@ -102,11 +102,14 @@ func getCurrentFactVersion(targetPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, targetPath)
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, targetPath,
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to run saltbox.fact: %w", err)
 	}
+
+	output := result.Combined
 
 	var currentData map[string]any
 	if err = json.Unmarshal(output, &currentData); err != nil {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -98,19 +100,19 @@ func openEditor(path string) {
 	}
 
 	// Construct command with validated editor and additional args if any
-	var cmd *exec.Cmd
+	var args []string
 	if len(editorParts) > 1 {
 		// Include any additional arguments from EDITOR variable
-		args := append(editorParts[1:], path)
-		cmd = exec.Command(editorPath, args...)
+		args = append(editorParts[1:], path)
 	} else {
-		cmd = exec.Command(editorPath, path)
+		args = []string{path}
 	}
 
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	// Run editor using unified executor in interactive mode
+	_, err = executor.Run(context.Background(), editorPath,
+		executor.WithArgs(args...),
+		executor.WithOutputMode(executor.OutputModeInteractive),
+	)
 	if err != nil {
 		fmt.Printf("Error opening editor: %v\n", err)
 	}

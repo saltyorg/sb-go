@@ -7,8 +7,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"time"
+
+	"github.com/saltyorg/sb-go/internal/executor"
 
 	"github.com/spf13/cobra"
 )
@@ -97,13 +98,11 @@ func runBenchmark(ctx context.Context) error {
 		return fmt.Errorf("failed to close temporary file: %w", err)
 	}
 
-	// Create command with context for automatic cancellation
-	command := exec.CommandContext(ctx, "bash", tempFileName)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-
-	// Run the command
-	err = command.Run()
+	// Run the command using unified executor
+	result, err := executor.Run(ctx, "bash",
+		executor.WithArgs(tempFileName),
+		executor.WithOutputMode(executor.OutputModeStream),
+	)
 
 	// Check if context was canceled (user interrupted)
 	if errors.Is(ctx.Err(), context.Canceled) {
@@ -113,7 +112,7 @@ func runBenchmark(ctx context.Context) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("error executing bench.sh: %w", err)
+		return result.FormatError("executing bench.sh")
 	}
 
 	return nil

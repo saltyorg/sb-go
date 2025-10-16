@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 
 	"gopkg.in/yaml.v3"
@@ -25,14 +26,13 @@ func RelaunchAsRoot(ctx context.Context) error {
 	}
 
 	args := os.Args[1:] // Exclude the program name itself.
+	sudoArgs := append([]string{executable}, args...)
 
-	relaunchCmd := exec.CommandContext(ctx, "sudo", append([]string{executable}, args...)...)
-
-	relaunchCmd.Stdout = os.Stdout
-	relaunchCmd.Stderr = os.Stderr
-	relaunchCmd.Stdin = os.Stdin
-
-	if err := relaunchCmd.Run(); err != nil {
+	_, err = executor.Run(ctx, "sudo",
+		executor.WithArgs(sudoArgs...),
+		executor.WithOutputMode(executor.OutputModeInteractive),
+	)
+	if err != nil {
 		return fmt.Errorf("failed to execute sudo: %w", err)
 	}
 
@@ -86,14 +86,16 @@ func CheckArchitecture(ctx context.Context) error {
 	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "uname", "-m")
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(cmdCtx, "uname",
+		executor.WithArgs("-m"),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
 	if err != nil {
 		// Return the error but include the output for debugging.  No longer continuing.
-		return fmt.Errorf("error getting architecture: %v, output: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("error getting architecture: %v, output: %s", err, strings.TrimSpace(string(result.Combined)))
 	}
 
-	arch := strings.TrimSpace(string(output))
+	arch := strings.TrimSpace(string(result.Combined))
 	x8664regex := regexp.MustCompile(`(x86_64)$`)
 
 	if x8664regex.MatchString(arch) {
@@ -109,8 +111,10 @@ func CheckLXC(ctx context.Context) error {
 	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "systemd-detect-virt", "-c")
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(cmdCtx, "systemd-detect-virt",
+		executor.WithArgs("-c"),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
 
 	// systemd-detect-virt returns "none" when *not* in a container, and an exit code of 0
 	// If there is an error running the command, err != nil, *but* the output *might* also
@@ -120,19 +124,19 @@ func CheckLXC(ctx context.Context) error {
 		var exitError *exec.ExitError
 		if errors.As(err, &exitError) {
 			// If it's an ExitError, and the output *isn't* none, then we have a problem
-			if strings.TrimSpace(string(output)) != "none" {
-				return fmt.Errorf("could not detect virtualization using systemd-detect-virt: %v, output: %s", err, strings.TrimSpace(string(output)))
+			if strings.TrimSpace(string(result.Combined)) != "none" {
+				return fmt.Errorf("could not detect virtualization using systemd-detect-virt: %v, output: %s", err, strings.TrimSpace(string(result.Combined)))
 			} else {
 				// If the output is "none", even if there was an exit error, we treat it like not being in a container
 				return nil
 			}
 		}
 		// If it's not an ExitError (some other error), we have a real issue
-		return fmt.Errorf("could not detect virtualization using systemd-detect-virt: %v, output: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("could not detect virtualization using systemd-detect-virt: %v, output: %s", err, strings.TrimSpace(string(result.Combined)))
 	}
 
 	// If the command succeeds, check the output
-	virtType := strings.ToLower(strings.TrimSpace(string(output)))
+	virtType := strings.ToLower(strings.TrimSpace(string(result.Combined)))
 	if virtType == "lxc" {
 		return fmt.Errorf("UNSUPPORTED VIRTUALIZATION - Install cancelled: Running in an LXC container is not supported")
 	}
@@ -146,8 +150,10 @@ func CheckDesktopEnvironment(ctx context.Context) error {
 	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "dpkg", "-l", "ubuntu-desktop")
-	err := cmd.Run()
+	result, err := executor.Run(cmdCtx, "dpkg",
+		executor.WithArgs("-l", "ubuntu-desktop"),
+		executor.WithOutputMode(executor.OutputModeDiscard),
+	)
 	if err == nil {
 		return fmt.Errorf("UNSUPPORTED DESKTOP INSTALL - Install cancelled: Only Ubuntu Server is supported")
 	}
@@ -158,7 +164,7 @@ func CheckDesktopEnvironment(ctx context.Context) error {
 		if exitError.ExitCode() == 1 {
 			return nil
 		} else {
-			return fmt.Errorf("dpkg command failed with unexpected exit code: %d, error: %w", exitError.ExitCode(), err)
+			return fmt.Errorf("dpkg command failed with unexpected exit code: %d, error: %w", result.ExitCode, err)
 		}
 	}
 	return fmt.Errorf("unexpected error checking for desktop environment: %w", err)

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/go-playground/validator/v10"
@@ -439,16 +440,17 @@ func validateRcloneRemote(remoteName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sudo", "-u", rcloneUser, "rclone", "config", "show")
-	cmd.Env = append(os.Environ(), fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath))
-	debugPrintf("DEBUG: validateRcloneRemote - command: '%s'\n", cmd.String())
-
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, "sudo",
+		executor.WithArgs("-u", rcloneUser, "rclone", "config", "show"),
+		executor.WithInheritEnv(fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath)),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
 	if err != nil {
-		err := fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, output)
+		err := fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, result.Combined)
 		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
 		return err
 	}
+	output := result.Combined
 	debugPrintf("DEBUG: validateRcloneRemote - rclone config show output: '%s'\n", string(output))
 
 	// Use a regular expression to search for the remote within the rclone config show output.

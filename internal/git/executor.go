@@ -1,9 +1,9 @@
 package git
 
 import (
-	"bytes"
 	"context"
-	"os/exec"
+
+	"github.com/saltyorg/sb-go/internal/executor"
 )
 
 // CommandExecutor defines an interface for executing git commands.
@@ -14,21 +14,34 @@ type CommandExecutor interface {
 }
 
 // DefaultCommandExecutor is the production implementation of CommandExecutor
-type DefaultCommandExecutor struct{}
+// It now uses the unified executor package
+type DefaultCommandExecutor struct {
+	executor executor.Executor
+}
 
-// ExecuteCommand executes a command using exec.CommandContext
+// ExecuteCommand executes a command using the unified executor
 func (e *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Dir = dir
-	return cmd.CombinedOutput()
+	result, err := e.executor.Execute(&executor.Config{
+		Context:    ctx,
+		Command:    name,
+		Args:       args,
+		WorkingDir: dir,
+		OutputMode: executor.OutputModeCombined,
+	})
+	if err != nil {
+		return result.Combined, err
+	}
+	return result.Combined, nil
 }
 
 // defaultExecutor is the global executor instance used by package functions
-var defaultExecutor CommandExecutor = &DefaultCommandExecutor{}
+var defaultExecutor CommandExecutor = &DefaultCommandExecutor{
+	executor: executor.NewExecutor(),
+}
 
 // SetExecutor allows replacing the default executor (primarily for testing)
-func SetExecutor(executor CommandExecutor) {
-	defaultExecutor = executor
+func SetExecutor(exec CommandExecutor) {
+	defaultExecutor = exec
 }
 
 // GetExecutor returns the current executor
@@ -53,11 +66,36 @@ func BuildRevParseBranchArgs() []string {
 
 // ParseCommitHash extracts and trims the commit hash from git output
 func ParseCommitHash(output []byte) string {
-	// Use bytes package for efficiency
-	return string(bytes.TrimSpace(output))
+	// Trim whitespace from output
+	result := string(output)
+	return trimSpace(result)
 }
 
 // ParseBranchName extracts and trims the branch name from git output
 func ParseBranchName(output []byte) string {
-	return string(bytes.TrimSpace(output))
+	result := string(output)
+	return trimSpace(result)
+}
+
+// trimSpace is a simple string trimming function
+func trimSpace(s string) string {
+	start := 0
+	end := len(s)
+
+	// Trim leading whitespace
+	for start < end && isSpace(s[start]) {
+		start++
+	}
+
+	// Trim trailing whitespace
+	for end > start && isSpace(s[end-1]) {
+		end--
+	}
+
+	return s[start:end]
+}
+
+// isSpace checks if a byte is a whitespace character
+func isSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }

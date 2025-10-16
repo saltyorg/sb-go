@@ -8,11 +8,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -72,14 +72,16 @@ func isServiceExistAndRunning(ctx context.Context) (bool, bool, error) {
 	defer cancel()
 
 	// Run "systemctl is-active" to determine if the service is running.
-	cmd := exec.CommandContext(cmdCtx, "systemctl", "is-active", "saltbox_managed_docker_controller.service")
-	output, err := cmd.Output()
+	result, err := executor.Run(cmdCtx, "systemctl",
+		executor.WithArgs("is-active", "saltbox_managed_docker_controller.service"),
+		executor.WithOutputMode(executor.OutputModeCapture),
+	)
 	if err != nil {
 		// The service exists but is not running.
 		return true, false, nil
 	}
 
-	status := strings.TrimSpace(string(output))
+	status := strings.TrimSpace(string(result.Stdout))
 	return true, status == "active", nil
 }
 

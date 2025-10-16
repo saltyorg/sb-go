@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -97,18 +97,23 @@ func ConfigureLocale(ctx context.Context) error {
 
 	// Check if the locale is already installed.
 	localeInstalled := false
-	cmdLocaleCheck := exec.CommandContext(ctx, "locale", "-a")
-	outputLocaleCheck, _ := cmdLocaleCheck.CombinedOutput() // Ignore error; presence check.
-	if strings.Contains(string(outputLocaleCheck), targetLocale) {
+	resultLocaleCheck, _ := executor.Run(ctx, "locale",
+		executor.WithArgs("-a"),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
+	if strings.Contains(string(resultLocaleCheck.Combined), targetLocale) {
 		localeInstalled = true
 	}
 
 	// Generate locale if not already installed.
 	if !localeInstalled {
 		if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Generating locale %s", targetLocale), func() error {
-			cmdLocaleGen := exec.CommandContext(ctx, "locale-gen", targetLocale)
-			if output, err := cmdLocaleGen.CombinedOutput(); err != nil {
-				return fmt.Errorf("%w: %s", err, string(output))
+			result, err := executor.Run(ctx, "locale-gen",
+				executor.WithArgs(targetLocale),
+				executor.WithOutputMode(executor.OutputModeCombined),
+			)
+			if err != nil {
+				return fmt.Errorf("%w: %s", err, string(result.Combined))
 			}
 			return nil
 		}); err != nil {
@@ -119,9 +124,12 @@ func ConfigureLocale(ctx context.Context) error {
 
 	// Use update-locale to set both LANG and LC_ALL system-wide locale variables
 	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Setting system-wide locale (LC_ALL and LANG) to %s", targetLocale), func() error {
-		cmdUpdateLocale := exec.CommandContext(ctx, "update-locale", "LC_ALL="+targetLocale, "LANG="+targetLocale)
-		if output, err := cmdUpdateLocale.CombinedOutput(); err != nil {
-			return fmt.Errorf("%w: %s", err, string(output))
+		result, err := executor.Run(ctx, "update-locale",
+			executor.WithArgs("LC_ALL="+targetLocale, "LANG="+targetLocale),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
+		if err != nil {
+			return fmt.Errorf("%w: %s", err, string(result.Combined))
 		}
 		return nil
 	}); err != nil {
@@ -142,10 +150,13 @@ func ConfigureLocale(ctx context.Context) error {
 	if !lcAllSet || !langSet {
 		// Use a spinner for dpkg-reconfigure.
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Locale not set correctly, reconfiguring locales...", func() error {
-			cmdReconfigureLocales := exec.CommandContext(ctx, "dpkg-reconfigure", "locales")
-			cmdReconfigureLocales.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-			if output, err := cmdReconfigureLocales.CombinedOutput(); err != nil {
-				return fmt.Errorf("%w: %s", err, string(output))
+			result, err := executor.Run(ctx, "dpkg-reconfigure",
+				executor.WithArgs("locales"),
+				executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"),
+				executor.WithOutputMode(executor.OutputModeCombined),
+			)
+			if err != nil {
+				return fmt.Errorf("%w: %s", err, string(result.Combined))
 			}
 			return nil
 		}); err != nil {
@@ -256,9 +267,12 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) error {
 
 		// Run submodule update after cloning.
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating git submodules", func() error {
-			submoduleCmd := exec.CommandContext(ctx, "git", "submodule", "update", "--init", "--recursive")
-			submoduleCmd.Dir = saltboxPath
-			return submoduleCmd.Run()
+			_, err := executor.Run(ctx, "git",
+				executor.WithArgs("submodule", "update", "--init", "--recursive"),
+				executor.WithWorkingDir(saltboxPath),
+				executor.WithOutputMode(executor.OutputModeDiscard),
+			)
+			return err
 		}); err != nil {
 			return fmt.Errorf("error running git submodule update: %w", err)
 		}
@@ -288,9 +302,12 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) error {
 			// Wrap the entire loop in a spinner
 			if err := spinners.RunTaskWithSpinnerContext(ctx, "Initializing Git repository", func() error {
 				for _, command := range initCmds {
-					cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-					cmd.Dir = saltboxPath
-					if err := cmd.Run(); err != nil {
+					_, err := executor.Run(ctx, command[0],
+						executor.WithArgs(command[1:]...),
+						executor.WithWorkingDir(saltboxPath),
+						executor.WithOutputMode(executor.OutputModeDiscard),
+					)
+					if err != nil {
 						return fmt.Errorf("error running command %v: %w", command, err) // Wrap the error
 					}
 				}
@@ -333,17 +350,21 @@ func InstallPipDependencies(ctx context.Context, verbose bool) error {
 	// Install pip, setuptools, and wheel
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing pip, setuptools, and wheel", func() error {
 		installBaseDeps := append(python3Cmd, "pip", "setuptools", "wheel")
-		cmdInstallBase := exec.CommandContext(ctx, installBaseDeps[0], installBaseDeps[1:]...)
 		if verbose {
 			fmt.Println("Running command:", installBaseDeps)
-			cmdInstallBase.Stdout = os.Stdout
-			cmdInstallBase.Stderr = os.Stderr
-			return cmdInstallBase.Run()
+			_, err := executor.Run(ctx, installBaseDeps[0],
+				executor.WithArgs(installBaseDeps[1:]...),
+				executor.WithOutputMode(executor.OutputModeStream),
+			)
+			return err
 		}
 		// Capture output to prevent terminal interference
-		output, err := cmdInstallBase.CombinedOutput()
+		result, err := executor.Run(ctx, installBaseDeps[0],
+			executor.WithArgs(installBaseDeps[1:]...),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
 		if err != nil {
-			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(output))
+			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(result.Combined))
 		}
 		return nil
 	}); err != nil {
@@ -354,17 +375,21 @@ func InstallPipDependencies(ctx context.Context, verbose bool) error {
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing requirements from requirements-saltbox.txt", func() error {
 		requirementsPath := filepath.Join(constants.SaltboxRepoPath, "requirements", "requirements-saltbox.txt")
 		installRequirements := append(python3Cmd, "--requirement", requirementsPath)
-		cmdInstallReq := exec.CommandContext(ctx, installRequirements[0], installRequirements[1:]...)
 		if verbose {
 			fmt.Println("Running command:", installRequirements)
-			cmdInstallReq.Stdout = os.Stdout
-			cmdInstallReq.Stderr = os.Stderr
-			return cmdInstallReq.Run()
+			_, err := executor.Run(ctx, installRequirements[0],
+				executor.WithArgs(installRequirements[1:]...),
+				executor.WithOutputMode(executor.OutputModeStream),
+			)
+			return err
 		}
 		// Capture output to prevent terminal interference
-		output, err := cmdInstallReq.CombinedOutput()
+		result, err := executor.Run(ctx, installRequirements[0],
+			executor.WithArgs(installRequirements[1:]...),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
 		if err != nil {
-			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(output))
+			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(result.Combined))
 		}
 		return nil
 	}); err != nil {

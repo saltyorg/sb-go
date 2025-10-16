@@ -3,18 +3,29 @@ package motd
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/saltyorg/sb-go/internal/executor"
 )
 
 // ExecCommand executes a command and returns its output as a string
 func ExecCommand(ctx context.Context, name string, args ...string) string {
-	cmd := exec.CommandContext(ctx, name, args...)
-	output, err := cmd.Output()
+	// Add timeout to context if not already set
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+	}
+
+	result, err := executor.Run(ctx, name,
+		executor.WithArgs(args...),
+		executor.WithOutputMode(executor.OutputModeCapture),
+	)
 	if err != nil {
 		return "Not available"
 	}
-	return strings.TrimSpace(string(output))
+	return strings.TrimSpace(string(result.Stdout))
 }
 
 // formatBytes converts bytes to a human-readable string (KB, MB, GB, etc.)

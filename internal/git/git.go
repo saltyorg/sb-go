@@ -2,14 +2,12 @@ package git
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/spinners"
 )
 
@@ -22,36 +20,26 @@ func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verb
 	}
 
 	cloneArgs := []string{"clone", "--depth", "1", "-b", branch, repoURL, destPath}
-	cmd := exec.CommandContext(ctx, "git", cloneArgs...)
 
-	var stdoutBuf, stderrBuf bytes.Buffer
-
+	// Use executor to handle verbose/non-verbose output
+	var mode executor.OutputMode
 	if verbose {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		mode = executor.OutputModeStream
 	} else {
-		cmd.Stdout = &stdoutBuf
-		cmd.Stderr = &stderrBuf
+		mode = executor.OutputModeCapture
 	}
 
-	err := cmd.Run()
+	result, err := executor.Run(ctx, "git",
+		executor.WithArgs(cloneArgs...),
+		executor.WithOutputMode(mode))
 
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			if !verbose {
-				return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s'.\nExit code: %d\nStderr:\n%s",
-					repoURL, branch, destPath, exitErr.ExitCode(), stderrBuf.String())
-			}
-			return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s'.\nExit code: %d",
-				repoURL, branch, destPath, exitErr.ExitCode())
+		if !verbose && len(result.Stderr) > 0 {
+			return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s' (exit code %d)\nStderr:\n%s",
+				repoURL, branch, destPath, result.ExitCode, string(result.Stderr))
 		}
-		if !verbose {
-			return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s': %w\nStderr:\n%s",
-				repoURL, branch, destPath, err, stderrBuf.String())
-		}
-		return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s': %w",
-			repoURL, branch, destPath, err)
+		return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s' (exit code %d): %w",
+			repoURL, branch, destPath, result.ExitCode, err)
 	}
 
 	if verbose {
@@ -65,14 +53,14 @@ func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verb
 // The context parameter allows for cancellation of git operations.
 func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool) error {
 	// Get the current branch name
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
-	cmd.Dir = repoPath
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, "git",
+		executor.WithArgs("rev-parse", "--abbrev-ref", "HEAD"),
+		executor.WithWorkingDir(repoPath))
 	if err != nil {
-		fmt.Printf("Error: failed to get current branch: %s\n", string(output))
+		fmt.Printf("Error: failed to get current branch: %s\n", string(result.Combined))
 		return fmt.Errorf("failed to get current branch: %w", err)
 	}
-	currentBranch := strings.TrimSpace(string(output))
+	currentBranch := strings.TrimSpace(string(result.Combined))
 
 	var branch string
 	// Determine if a reset to default_branch is needed
@@ -123,22 +111,22 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 	}
 
 	for _, command := range commands {
-		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-		cmd.Dir = repoPath
-		output, err := cmd.CombinedOutput()
+		result, err := executor.Run(ctx, command[0],
+			executor.WithArgs(command[1:]...),
+			executor.WithWorkingDir(repoPath))
 		if err != nil {
-			fmt.Printf("Error: failed to execute command %v: %s\n", command, string(output))
+			fmt.Printf("Error: failed to execute command %v: %s\n", command, string(result.Combined))
 			return fmt.Errorf("failed to execute command %v: %w", command, err)
 		}
 	}
 
 	// Custom commands
 	for _, command := range customCommands {
-		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-		cmd.Dir = repoPath
-		output, err := cmd.CombinedOutput()
+		result, err := executor.Run(ctx, command[0],
+			executor.WithArgs(command[1:]...),
+			executor.WithWorkingDir(repoPath))
 		if err != nil {
-			fmt.Printf("Error: failed to execute custom command %v: %s\n", command, string(output))
+			fmt.Printf("Error: failed to execute custom command %v: %s\n", command, string(result.Combined))
 			return fmt.Errorf("failed to execute custom command %v: %w", command, err)
 		}
 	}

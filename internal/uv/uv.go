@@ -2,18 +2,17 @@ package uv
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 )
 
 const (
@@ -145,26 +144,14 @@ func extractUVBinary(tarballPath, destPath string, verbose bool) error {
 
 // InstallPython installs a specific Python version using uv
 func InstallPython(ctx context.Context, version string, verbose bool) error {
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir))
-
-	cmd := exec.CommandContext(ctx, UVBinaryPath, "python", "install", version)
-	cmd.Env = env
-
 	if verbose {
 		fmt.Printf("Installing Python %s using uv\n", version)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	} else {
-		var stderrBuf bytes.Buffer
-		cmd.Stdout = io.Discard
-		cmd.Stderr = &stderrBuf
 	}
 
-	if err := cmd.Run(); err != nil {
-		if !verbose {
-			return fmt.Errorf("error installing Python %s: %w\nStderr:\n%s", version, err, cmd.Stderr)
-		}
+	err := executor.RunVerbose(ctx, UVBinaryPath, []string{"python", "install", version}, verbose,
+		executor.WithInheritEnv(fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir)))
+
+	if err != nil {
 		return fmt.Errorf("error installing Python %s: %w", version, err)
 	}
 
@@ -177,18 +164,15 @@ func InstallPython(ctx context.Context, version string, verbose bool) error {
 
 // ListInstalledPythons lists all Python versions installed by uv
 func ListInstalledPythons(ctx context.Context) ([]string, error) {
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir))
+	result, err := executor.Run(ctx, UVBinaryPath,
+		executor.WithArgs("python", "list", "--only-installed"),
+		executor.WithInheritEnv(fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir)))
 
-	cmd := exec.CommandContext(ctx, UVBinaryPath, "python", "list", "--only-installed")
-	cmd.Env = env
-
-	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("error listing installed Pythons: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	lines := strings.Split(strings.TrimSpace(string(result.Combined)), "\n")
 	var versions []string
 	for _, line := range lines {
 		if line != "" {
@@ -201,18 +185,15 @@ func ListInstalledPythons(ctx context.Context) ([]string, error) {
 
 // FindPythonBinary returns the path to a specific Python version installed by uv
 func FindPythonBinary(ctx context.Context, version string) (string, error) {
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir))
+	result, err := executor.Run(ctx, UVBinaryPath,
+		executor.WithArgs("python", "find", version),
+		executor.WithInheritEnv(fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir)))
 
-	cmd := exec.CommandContext(ctx, UVBinaryPath, "python", "find", version)
-	cmd.Env = env
-
-	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("error finding Python %s: %w", version, err)
 	}
 
-	return strings.TrimSpace(string(output)), nil
+	return strings.TrimSpace(string(result.Combined)), nil
 }
 
 // CreateVenv creates a virtual environment using Python's built-in venv module
@@ -236,21 +217,8 @@ func CreateVenv(ctx context.Context, venvPath, pythonVersion string, verbose boo
 	}
 
 	// Use python -m venv instead of uv venv for better compatibility
-	cmd := exec.CommandContext(ctx, pythonBinary, "-m", "venv", venvPath)
-
-	if verbose {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	} else {
-		var stderrBuf bytes.Buffer
-		cmd.Stdout = io.Discard
-		cmd.Stderr = &stderrBuf
-	}
-
-	if err := cmd.Run(); err != nil {
-		if !verbose {
-			return fmt.Errorf("error creating venv: %w\nStderr:\n%s", err, cmd.Stderr)
-		}
+	err = executor.RunVerbose(ctx, pythonBinary, []string{"-m", "venv", venvPath}, verbose)
+	if err != nil {
 		return fmt.Errorf("error creating venv: %w", err)
 	}
 
@@ -263,19 +231,14 @@ func CreateVenv(ctx context.Context, venvPath, pythonVersion string, verbose boo
 
 // UninstallPython removes a specific Python version installed by uv
 func UninstallPython(ctx context.Context, version string, verbose bool) error {
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir))
-
-	cmd := exec.CommandContext(ctx, UVBinaryPath, "python", "uninstall", version)
-	cmd.Env = env
-
 	if verbose {
 		fmt.Printf("Uninstalling Python %s using uv\n", version)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
 	}
 
-	if err := cmd.Run(); err != nil {
+	err := executor.RunVerbose(ctx, UVBinaryPath, []string{"python", "uninstall", version}, verbose,
+		executor.WithInheritEnv(fmt.Sprintf("UV_PYTHON_INSTALL_DIR=%s", constants.PythonInstallDir)))
+
+	if err != nil {
 		return fmt.Errorf("error uninstalling Python %s: %w", version, err)
 	}
 

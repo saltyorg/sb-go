@@ -2,11 +2,15 @@ package motd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/saltyorg/sb-go/internal/executor"
 )
 
 // AvailableBannerTypes contains all valid box types for the boxes command
@@ -89,60 +93,66 @@ func GenerateBanner(title, font, boxType string) string {
 
 	// If no box type or "none", just use toilet
 	if boxType == "" || boxType == "none" {
-		cmd := exec.Command("toilet", "-f", font, title)
-		output, err := cmd.CombinedOutput()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		result, err := executor.Run(ctx, "toilet",
+			executor.WithArgs("-f", font, title),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating banner: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Command output: %s\n", string(output))
+			fmt.Fprintf(os.Stderr, "Command output: %s\n", string(result.Combined))
 			return fmt.Sprintf("--- %s ---\n", title)
 		}
-		return string(output)
+		return string(result.Combined)
 	}
 
 	// Check if boxes is installed
 	if _, err := exec.LookPath("boxes"); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: boxes command not found, using toilet only\n")
-		cmd := exec.Command("toilet", "-f", font, title)
-		output, err := cmd.CombinedOutput()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		result, err := executor.Run(ctx, "toilet",
+			executor.WithArgs("-f", font, title),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating banner: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Command output: %s\n", string(output))
+			fmt.Fprintf(os.Stderr, "Command output: %s\n", string(result.Combined))
 			return fmt.Sprintf("--- %s ---\n", title)
 		}
-		return string(output)
+		return string(result.Combined)
 	}
 
-	// Use toilet and pipe to boxes - using proper piping instead of shell concatenation
-	toiletCmd := exec.Command("toilet", "-f", font, title)
-	boxesCmd := exec.Command("boxes", "-d", boxType, "-a", "hc", "-p", "h8")
+	// Use toilet and pipe to boxes
+	// First get toilet output
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// Pipe toilet output to boxes
-	pipe, err := toiletCmd.StdoutPipe()
+	toiletResult, err := executor.Run(ctx, "toilet",
+		executor.WithArgs("-f", font, title),
+		executor.WithOutputMode(executor.OutputModeCapture),
+	)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating pipe: %v\n", err)
-		return fmt.Sprintf("--- %s ---\n", title)
-	}
-	boxesCmd.Stdin = pipe
-
-	// Start both commands
-	var boxesOutput bytes.Buffer
-	boxesCmd.Stdout = &boxesOutput
-	var boxesStderr bytes.Buffer
-	boxesCmd.Stderr = &boxesStderr
-
-	if err := boxesCmd.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting boxes: %v\n", err)
-		return fmt.Sprintf("--- %s ---\n", title)
-	}
-
-	if err := toiletCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running toilet: %v\n", err)
 		return fmt.Sprintf("--- %s ---\n", title)
 	}
 
-	if err := boxesCmd.Wait(); err != nil {
+	// Pipe toilet output to boxes
+	var boxesOutput bytes.Buffer
+	boxesResult, err := executor.Run(ctx, "boxes",
+		executor.WithArgs("-d", boxType, "-a", "hc", "-p", "h8"),
+		executor.WithStdin(bytes.NewReader(toiletResult.Stdout)),
+		executor.WithStdout(&boxesOutput),
+		executor.WithOutputMode(executor.OutputModeCapture),
+	)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error running boxes: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Boxes stderr: %s\n", boxesStderr.String())
+		if len(boxesResult.Stderr) > 0 {
+			fmt.Fprintf(os.Stderr, "Boxes stderr: %s\n", string(boxesResult.Stderr))
+		}
 		return fmt.Sprintf("--- %s ---\n", title)
 	}
 
@@ -156,18 +166,20 @@ func GenerateBannerFromFile(content string, toiletArgs string) string {
 		return content // Fallback to raw content if toilet isn't installed
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	args := strings.Fields(toiletArgs)
-	cmd := exec.Command("toilet", args...)
-
-	// Pipe the file content to the command's stdin
-	cmd.Stdin = strings.NewReader(content)
-
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, "toilet",
+		executor.WithArgs(args...),
+		executor.WithStdin(strings.NewReader(content)),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating banner from file: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Command output: %s\n", string(output))
+		fmt.Fprintf(os.Stderr, "Command output: %s\n", string(result.Combined))
 		return content // Fallback to raw content on error
 	}
 
-	return string(output)
+	return string(result.Combined)
 }

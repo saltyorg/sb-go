@@ -1,11 +1,9 @@
 package ansible
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -13,6 +11,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
 	sbErrors "github.com/saltyorg/sb-go/internal/errors"
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/git"
 )
 
@@ -29,41 +28,18 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 		fmt.Println("Executing Ansible playbook with command:", strings.Join(command, " "))
 	}
 
-	// For verbose mode, we need to use the real command with stdio
+	// Use the appropriate output mode based on verbosity
+	var outputMode executor.OutputMode
 	if verbose {
-		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-		cmd.Dir = repoPath
-		cmd.Stdout = os.Stdout
-		cmd.Stdin = os.Stdin
-		cmd.Stderr = os.Stderr
-
-		err := cmd.Run()
-
-		if err != nil {
-			// Check if the error is due to context cancellation (signal interruption)
-			if sbErrors.HandleInterruptError(err) {
-				return fmt.Errorf("playbook execution interrupted by user")
-			}
-
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				if exitErr.ExitCode() < 0 {
-					if sbErrors.HandleInterruptError(err) {
-						return fmt.Errorf("playbook execution interrupted by user")
-					}
-				}
-				return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d", playbookPath, exitErr.ExitCode())
-			}
-			return fmt.Errorf("\nError: Playbook %s run failed: %w", playbookPath, err)
-		}
-
-		fmt.Printf("\nPlaybook %s executed successfully.\n", playbookPath)
-		return nil
+		outputMode = executor.OutputModeInteractive
+	} else {
+		outputMode = executor.OutputModeCapture
 	}
 
-	// For non-verbose mode, use the executor interface (allows mocking)
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err := defaultExecutor.ExecuteWithIO(ctx, repoPath, command[0], command[1:], &stdoutBuf, &stderrBuf, nil)
+	result, err := executor.Run(ctx, command[0],
+		executor.WithArgs(command[1:]...),
+		executor.WithWorkingDir(repoPath),
+		executor.WithOutputMode(outputMode))
 
 	if err != nil {
 		// Check if the error is due to context cancellation (signal interruption)
@@ -78,9 +54,19 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 					return fmt.Errorf("playbook execution interrupted by user")
 				}
 			}
-			return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), stderrBuf.String())
+			if !verbose && len(result.Stderr) > 0 {
+				return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), string(result.Stderr))
+			}
+			return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d", playbookPath, exitErr.ExitCode())
 		}
-		return fmt.Errorf("\nError: Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, stderrBuf.String())
+		if !verbose && len(result.Stderr) > 0 {
+			return fmt.Errorf("\nError: Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, string(result.Stderr))
+		}
+		return fmt.Errorf("\nError: Playbook %s run failed: %w", playbookPath, err)
+	}
+
+	if verbose {
+		fmt.Printf("\nPlaybook %s executed successfully.\n", playbookPath)
 	}
 
 	return nil

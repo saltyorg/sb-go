@@ -3,11 +3,10 @@ package python
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 )
 
@@ -29,15 +28,15 @@ func DeadsnakesPackages(pythonVersion string) []string {
 
 // IsPackageInstalled checks if a package is installed using dpkg-query
 func IsPackageInstalled(ctx context.Context, pkgName string) (bool, error) {
-	cmd := exec.CommandContext(ctx, "dpkg-query", "--show", "--showformat=${Status}", pkgName)
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, "dpkg-query",
+		executor.WithArgs("--show", "--showformat=${Status}", pkgName))
 	if err != nil {
 		// Package is not installed or command failed
 		return false, nil
 	}
 
 	// Check if the package is actually installed
-	status := string(output)
+	status := string(result.Combined)
 	return strings.Contains(status, "install ok installed"), nil
 }
 
@@ -64,40 +63,24 @@ func RemoveDeadsnakesPackages(ctx context.Context, pythonVersion string, verbose
 
 	// --- Step 1: Remove the main installed packages ---
 	args := append([]string{"remove", "-y"}, installedPackages...)
-	cmd := exec.CommandContext(ctx, "apt", args...)
-	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 
 	if verbose {
 		fmt.Printf("Running command: apt %s\n", strings.Join(args, " "))
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("error removing Python packages: %w", err)
-		}
-	} else {
-		// Capture output to prevent terminal interference and improve error messages.
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("error removing Python packages: %w\nOutput:\n%s", err, string(output))
-		}
+	}
+
+	if err := executor.RunVerbose(ctx, "apt", args, verbose,
+		executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive")); err != nil {
+		return fmt.Errorf("error removing Python packages: %w", err)
 	}
 
 	// --- Step 2: Run apt autoremove to clean up dependencies ---
-	autoremoveCmd := exec.CommandContext(ctx, "apt", "autoremove", "-y")
-	autoremoveCmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-
 	if verbose {
 		fmt.Println("Running command: apt autoremove -y")
-		autoremoveCmd.Stdout = os.Stdout
-		autoremoveCmd.Stderr = os.Stderr
-		// Return the error directly if it fails.
-		if err := autoremoveCmd.Run(); err != nil {
-			return fmt.Errorf("error running apt autoremove: %w", err)
-		}
-	} else {
-		// Capture output and return an error on failure.
-		if output, err := autoremoveCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("error running apt autoremove: %w\nOutput:\n%s", err, string(output))
-		}
+	}
+
+	if err := executor.RunVerbose(ctx, "apt", []string{"autoremove", "-y"}, verbose,
+		executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive")); err != nil {
+		return fmt.Errorf("error running apt autoremove: %w", err)
 	}
 
 	return nil

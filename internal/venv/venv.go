@@ -1,17 +1,16 @@
 package venv
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/uv"
 )
@@ -223,15 +222,15 @@ func checkPythonVersion(ctx context.Context, ansibleVenvPath, venvPythonPath str
 
 	// Python binary exists, now verify it's the correct version from uv
 	// Run python --version to get the actual version
-	cmd := exec.CommandContext(ctx, venvPythonPath, "--version")
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, venvPythonPath,
+		executor.WithArgs("--version"))
 	if err != nil {
 		// Can't run Python, needs recreation
 		return true, nil
 	}
 
 	// Parse version output (format: "Python 3.12.x")
-	versionStr := strings.TrimSpace(string(output))
+	versionStr := strings.TrimSpace(string(result.Combined))
 	if !strings.HasPrefix(versionStr, "Python "+constants.AnsibleVenvPythonVersion) {
 		// Wrong Python version, needs recreation
 		return true, nil
@@ -253,8 +252,9 @@ func checkPythonVersion(ctx context.Context, ansibleVenvPath, venvPythonPath str
 
 	// Final check: verify Python can actually import modules (not just run --version)
 	// This catches broken venv that have correct symlinks but broken Python paths
-	cmd = exec.CommandContext(ctx, venvPythonPath, "-c", "import encodings, sys; sys.exit(0)")
-	if err := cmd.Run(); err != nil {
+	_, err = executor.Run(ctx, venvPythonPath,
+		executor.WithArgs("-c", "import encodings, sys; sys.exit(0)"))
+	if err != nil {
 		// Python can't import basic modules, venv is broken, needs recreation
 		return true, nil
 	}
@@ -265,8 +265,9 @@ func checkPythonVersion(ctx context.Context, ansibleVenvPath, venvPythonPath str
 
 // removeExistingVenv removes the existing virtual environment.
 func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
-	cmd := exec.CommandContext(ctx, "rm", "-rf", ansibleVenvPath)
-	return cmd.Run()
+	_, err := executor.Run(ctx, "rm",
+		executor.WithArgs("-rf", ansibleVenvPath))
+	return err
 }
 
 // createVirtualEnv creates the virtual environment using uv.
@@ -415,24 +416,10 @@ func setOwnership(ctx context.Context, ansibleVenvPath, saltboxUser string, verb
 
 // runCommand runs a command with the given environment.
 func runCommand(ctx context.Context, command []string, env []string, verbose bool) error {
-	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-	cmd.Env = env
-
 	if verbose {
 		fmt.Println("Running command:", command)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
 	}
 
-	var stderrBuf bytes.Buffer
-	cmd.Stdout = io.Discard // Discard stdout completely
-	cmd.Stderr = &stderrBuf // Capture only stderr for error reporting
-
-	err := cmd.Run()
-	if err != nil {
-		// Provide the captured stderr for better error diagnosis.
-		return fmt.Errorf("command failed: %w\nStderr:\n%s", err, stderrBuf.String())
-	}
-	return nil
+	return executor.RunVerbose(ctx, command[0], command[1:], verbose,
+		executor.WithEnv(env))
 }

@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/saltyorg/sb-go/internal/executor"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -213,10 +214,15 @@ func fetchLogs(service string, reverse bool, cursor string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-		output, err := cmd.CombinedOutput()
+		result, err := executor.Run(ctx, args[0],
+			executor.WithArgs(args[1:]...),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
+		var output []byte
 		if err != nil {
 			output = fmt.Appendf(nil, "Error fetching logs: %v", err)
+		} else {
+			output = result.Combined
 		}
 
 		// Handle potential encoding issues
@@ -295,11 +301,15 @@ func getFilteredSystemdServices(filters []string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "systemctl", "list-unit-files", "--type=service", "--state=enabled")
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, "systemctl",
+		executor.WithArgs("list-unit-files", "--type=service", "--state=enabled"),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list systemd services: %w", err)
 	}
+
+	output := result.Combined
 
 	var filteredServices []string
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))

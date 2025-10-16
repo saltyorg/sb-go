@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/executor"
 
 	"github.com/spf13/cobra"
 )
@@ -85,19 +87,20 @@ func runEditor(editor, filePath string) error {
 	}
 
 	// Construct command with validated editor and additional args if any
-	var cmd *exec.Cmd
+	var args []string
 	if len(editorParts) > 1 {
 		// Include any additional arguments from editor variable
-		args := append(editorParts[1:], filePath)
-		cmd = exec.Command(editorPath, args...)
+		args = append(editorParts[1:], filePath)
 	} else {
-		cmd = exec.Command(editorPath, filePath)
+		args = []string{filePath}
 	}
 
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	// Run editor using unified executor in interactive mode
+	_, err = executor.Run(context.Background(), editorPath,
+		executor.WithArgs(args...),
+		executor.WithOutputMode(executor.OutputModeInteractive),
+	)
+	return err
 }
 
 func confirmInput(prompt string) (bool, error) {

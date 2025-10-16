@@ -2,7 +2,9 @@ package ansible
 
 import (
 	"context"
-	"os/exec"
+	"io"
+
+	"github.com/saltyorg/sb-go/internal/executor"
 )
 
 // CommandExecutor is an interface for executing commands
@@ -12,40 +14,54 @@ type CommandExecutor interface {
 	ExecuteWithIO(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error
 }
 
-// RealCommandExecutor implements CommandExecutor using actual exec.Command
-type RealCommandExecutor struct{}
+// RealCommandExecutor implements CommandExecutor using the unified executor
+type RealCommandExecutor struct {
+	executor executor.Executor
+}
 
 // ExecuteContext executes a command and returns the combined output
 func (e *RealCommandExecutor) ExecuteContext(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	if dir != "" {
-		cmd.Dir = dir
+	result, err := e.executor.Execute(&executor.Config{
+		Context:    ctx,
+		Command:    name,
+		Args:       args,
+		WorkingDir: dir,
+		OutputMode: executor.OutputModeCombined,
+	})
+	if err != nil {
+		return result.Combined, err
 	}
-	return cmd.CombinedOutput()
+	return result.Combined, nil
 }
 
 // ExecuteWithIO executes a command with custom IO streams
 func (e *RealCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-	if dir != "" {
-		cmd.Dir = dir
+	config := &executor.Config{
+		Context:    ctx,
+		Command:    name,
+		Args:       args,
+		WorkingDir: dir,
+		OutputMode: executor.OutputModeCapture,
 	}
+
 	if stdout != nil {
-		if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
-			cmd.Stdout = w
+		if w, ok := stdout.(io.Writer); ok {
+			config.Stdout = w
 		}
 	}
 	if stderr != nil {
-		if w, ok := stderr.(interface{ Write([]byte) (int, error) }); ok {
-			cmd.Stderr = w
+		if w, ok := stderr.(io.Writer); ok {
+			config.Stderr = w
 		}
 	}
 	if stdin != nil {
-		if r, ok := stdin.(interface{ Read([]byte) (int, error) }); ok {
-			cmd.Stdin = r
+		if r, ok := stdin.(io.Reader); ok {
+			config.Stdin = r
 		}
 	}
-	return cmd.Run()
+
+	_, err := e.executor.Execute(config)
+	return err
 }
 
 // MockCommandExecutor is a mock implementation for testing
@@ -69,7 +85,7 @@ func (m *MockCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, nam
 	}
 	// Write some mock output if stdout is provided
 	if stdout != nil {
-		if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
+		if w, ok := stdout.(io.Writer); ok {
 			w.Write([]byte("mock output"))
 		}
 	}
@@ -77,7 +93,9 @@ func (m *MockCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, nam
 }
 
 // defaultExecutor is the default executor used by the package
-var defaultExecutor CommandExecutor = &RealCommandExecutor{}
+var defaultExecutor CommandExecutor = &RealCommandExecutor{
+	executor: executor.NewExecutor(),
+}
 
 // SetExecutor sets the command executor (useful for testing)
 func SetExecutor(executor CommandExecutor) {

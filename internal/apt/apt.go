@@ -2,16 +2,14 @@ package apt
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/saltyorg/sb-go/internal/executor"
 )
 
 // InstallPackage returns a function that installs one or more apt packages using "apt-get install".
@@ -25,49 +23,17 @@ import (
 // The context parameter allows for cancellation of the installation process.
 func InstallPackage(ctx context.Context, packages []string, verbose bool) func() error {
 	return func() error {
-		// Build the command arguments starting with "sudo apt-get install -y"
-		command := []string{"sudo", "apt-get", "install", "-y"}
-		// Append each package name individually to the command.
-		command = append(command, packages...) // The ... is crucial here!
+		// Build the command arguments starting with "apt-get install -y"
+		args := append([]string{"apt-get", "install", "-y"}, packages...)
 
-		// Create the command to run with context for cancellation support.
-		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-		// Set the environment to non-interactive mode.
-		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-
-		var stderrBuf bytes.Buffer
-
-		if verbose {
-			// In verbose mode, stream all output directly
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-		} else {
-			// In non-verbose mode, discard stdout but capture stderr for error reporting
-			cmd.Stdout = io.Discard
-			cmd.Stderr = &stderrBuf
-		}
-
-		err := cmd.Run()
+		// Run the command with the unified executor
+		err := executor.RunVerbose(ctx, "sudo", args, verbose,
+			executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
 
 		// Handle command execution errors.
 		if err != nil {
-			var exitErr *exec.ExitError
-			// Create a comma-separated string of package names for error messaging.
 			packageList := strings.Join(packages, ", ")
-			if errors.As(err, &exitErr) {
-				if !verbose && stderrBuf.Len() > 0 {
-					return fmt.Errorf("failed to install packages '%s'.\nExit code: %d\nStderr:\n%s",
-						packageList, exitErr.ExitCode(), stderrBuf.String())
-				}
-				return fmt.Errorf("failed to install packages '%s'.\nExit code: %d",
-					packageList, exitErr.ExitCode())
-			}
-			if !verbose && stderrBuf.Len() > 0 {
-				return fmt.Errorf("failed to install packages '%s': %w\nStderr:\n%s",
-					packageList, err, stderrBuf.String())
-			}
-			return fmt.Errorf("failed to install packages '%s': %w",
-				packageList, err)
+			return fmt.Errorf("failed to install packages '%s': %w", packageList, err)
 		}
 
 		// On a successful installation, print a success message if verbose.
@@ -87,38 +53,12 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 // The context parameter allows for cancellation of the update process.
 func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 	return func() error {
-		// Build the command to update package lists.
-		command := []string{"sudo", "apt-get", "update"}
-		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-		// Set non-interactive mode.
-		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-
-		var stderrBuf bytes.Buffer
-
-		if verbose {
-			// In verbose mode, stream all output directly
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-		} else {
-			// In non-verbose mode, discard stdout but capture stderr for error reporting
-			cmd.Stdout = io.Discard
-			cmd.Stderr = &stderrBuf
-		}
-
-		err := cmd.Run()
+		// Run the command with the unified executor
+		err := executor.RunVerbose(ctx, "sudo", []string{"apt-get", "update"}, verbose,
+			executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
 
 		// Handle errors from the update command.
 		if err != nil {
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				if !verbose && stderrBuf.Len() > 0 {
-					return fmt.Errorf("failed to update package lists.\nExit code: %d\nStderr:\n%s", exitErr.ExitCode(), stderrBuf.String())
-				}
-				return fmt.Errorf("failed to update package lists.\nExit code: %d", exitErr.ExitCode())
-			}
-			if !verbose && stderrBuf.Len() > 0 {
-				return fmt.Errorf("failed to update package lists: %w\nStderr:\n%s", err, stderrBuf.String())
-			}
 			return fmt.Errorf("failed to update package lists: %w", err)
 		}
 
@@ -143,12 +83,12 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 //goland:noinspection HttpUrlsUsage
 func AddAptRepositories(ctx context.Context) error {
 	// Get the Ubuntu release codename.
-	cmd := exec.CommandContext(ctx, "lsb_release", "-sc")
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, "lsb_release",
+		executor.WithArgs("-sc"))
 	if err != nil {
 		return fmt.Errorf("error getting Ubuntu release codename: %w", err)
 	}
-	release := strings.TrimSpace(string(output))
+	release := strings.TrimSpace(string(result.Combined))
 
 	sourcesFile := "/etc/apt/sources.list"
 
@@ -232,37 +172,12 @@ func addRepo(repoLine, sourcesFile string) error {
 // The context parameter allows for cancellation of the operation.
 func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
 	return func() error {
-		// Build the command for adding the PPA.
-		command := []string{"sudo", "add-apt-repository", ppa, "--yes"}
-		cmd := exec.CommandContext(ctx, command[0], command[1:]...)
-		// Set non-interactive mode.
-		cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+		// Run the command with the unified executor
+		err := executor.RunVerbose(ctx, "sudo", []string{"add-apt-repository", ppa, "--yes"}, verbose,
+			executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
 
-		var stderrBuf bytes.Buffer
-
-		if verbose {
-			// In verbose mode, stream all output directly
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-		} else {
-			// In non-verbose mode, discard stdout but capture stderr for error reporting
-			cmd.Stdout = io.Discard
-			cmd.Stderr = &stderrBuf
-		}
-
-		err := cmd.Run()
 		// Handle errors during PPA addition.
 		if err != nil {
-			var exitErr *exec.ExitError
-			if errors.As(err, &exitErr) {
-				if !verbose && stderrBuf.Len() > 0 {
-					return fmt.Errorf("failed to add PPA '%s'.\nExit code: %d\nStderr:\n%s", ppa, exitErr.ExitCode(), stderrBuf.String())
-				}
-				return fmt.Errorf("failed to add PPA '%s'.\nExit code: %d", ppa, exitErr.ExitCode())
-			}
-			if !verbose && stderrBuf.Len() > 0 {
-				return fmt.Errorf("failed to add PPA '%s': %w\nStderr:\n%s", ppa, err, stderrBuf.String())
-			}
 			return fmt.Errorf("failed to add PPA '%s': %w", ppa, err)
 		}
 

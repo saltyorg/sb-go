@@ -20,6 +20,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v6"
 	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/cloudflare/cloudflare-go/v6/zones"
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/utils"
 	"golang.org/x/net/publicsuffix"
 	"golang.org/x/sync/errgroup"
@@ -477,13 +478,16 @@ func validateRcloneRemote(value any, _ map[string]any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sudo", "-u", rcloneUser, "rclone", "config", "show")
-	cmd.Env = append(os.Environ(), fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath))
-
-	output, err := cmd.CombinedOutput()
+	result, err := executor.Run(ctx, "sudo",
+		executor.WithArgs("-u", rcloneUser, "rclone", "config", "show"),
+		executor.WithInheritEnv(fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath)),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, output)
+		return fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, result.Combined)
 	}
+
+	output := result.Combined
 
 	// Search for the remote in the output
 	remoteRegex := fmt.Sprintf(`(?m)^\[%s\]$`, regexp.QuoteMeta(remoteName))
