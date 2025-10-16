@@ -26,7 +26,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
 
       - name: Tune GitHub-hosted runner network
         run: sudo ethtool -K eth0 tx off rx off
