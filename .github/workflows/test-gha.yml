@@ -32,6 +32,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ steps.go_version.outputs.version }}
+          cache-dependency-path: sb-go/go.sum
 
       - name: Tune GitHub-hosted runner network
         run: sudo ethtool -K eth0 tx off rx off

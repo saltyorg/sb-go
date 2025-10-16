@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/saltyorg/sb-go/internal/errors"
 	"github.com/spf13/cobra"
@@ -23,13 +21,9 @@ var rootCmd = &cobra.Command{
 // ExecuteContext adds all child commands to the root command and sets flags appropriately.
 // It accepts a context that will be available to all commands via cmd.Context() for cancellation and timeouts.
 // This is called by main.main() and only needs to happen once to the rootCmd.
-func ExecuteContext(ctx context.Context) {
-	err := rootCmd.ExecuteContext(ctx)
-	if err != nil {
-		// Cobra already prints the error, but let's add context
-		fmt.Fprintf(os.Stderr, "Command execution failed: %v\n", err)
-		os.Exit(1)
-	}
+// Returns an error if command execution fails.
+func ExecuteContext(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {

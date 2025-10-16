@@ -37,7 +37,10 @@ func main() {
 	ctx := sigManager.Context()
 
 	// Execute commands with context
-	cmd.ExecuteContext(ctx)
+	if err := cmd.ExecuteContext(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Exit with appropriate code if shutdown was triggered
 	if sigManager.IsShutdown() {
