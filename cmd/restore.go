@@ -203,13 +203,12 @@ var restoreCmd = &cobra.Command{
 	Long: `Fetches encrypted files from a remote URL, decrypts them, and places them in the Saltbox directory.
 The restore URL defaults to "crs.saltbox.dev".  A password will be prompted for twice.`,
 	Hidden: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		p := tea.NewProgram(initialRestoreModel(), tea.WithOutput(os.Stdout), tea.WithAltScreen())
 
 		m, err := p.Run()
 		if err != nil {
-			fmt.Printf("could not start program: %s\n", err)
-			os.Exit(1)
+			return fmt.Errorf("could not start program: %w", err)
 		}
 
 		// Assert the model back to our model and check the submitted flag.
@@ -226,29 +225,27 @@ The restore URL defaults to "crs.saltbox.dev".  A password will be prompted for 
 
 				successfulDownloads, err := validateAndRestore(user, password, restoreURL, dir, folder, verbose)
 				if err != nil {
-					fmt.Println("Error:", err)
 					if verbose {
-						fmt.Printf("DEBUG: Underlying error: %v\n", err)
+						return fmt.Errorf("restore error (DEBUG: %v): %w", err, err)
 					}
-					os.Exit(1)
+					return fmt.Errorf("restore error: %w", err)
 				}
 
 				if successfulDownloads == 0 {
-					fmt.Println("Restore process failed: No files were downloaded or decrypted.")
-					os.Exit(1)
-				} else {
-					fmt.Printf("Restore process completed: %d files successfully restored.\n", successfulDownloads)
+					return fmt.Errorf("restore process failed: no files were downloaded or decrypted")
 				}
+
+				fmt.Printf("Restore process completed: %d files successfully restored.\n", successfulDownloads)
+				return nil
 
 			} else {
 				// User exited without submitting, exit gracefully.
 				fmt.Println("Restore cancelled.")
-				os.Exit(0) // Exit with code 0 for a clean exit.
+				return nil
 			}
-		} else {
-			fmt.Println("Error: Could not retrieve values from the UI.")
-			os.Exit(1)
 		}
+
+		return fmt.Errorf("could not retrieve values from the UI")
 	},
 }
 

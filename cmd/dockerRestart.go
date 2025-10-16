@@ -18,7 +18,7 @@ var restartCmd = &cobra.Command{
 	Use:   "restart",
 	Short: "Restart Docker containers managed by Saltbox",
 	Long:  `Restart Docker containers managed by Saltbox in dependency order.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		ignoreContainers, _ := cmd.Flags().GetStringSlice("ignore")
@@ -47,8 +47,7 @@ var restartCmd = &cobra.Command{
 		}
 
 		if err := spinners.RunTaskWithSpinnerCustomContext(ctx, opts, serviceCheckTask); err != nil {
-			fmt.Printf("Error: %v\n", err)
-			return
+			return fmt.Errorf("error: %v", err)
 		}
 
 		// Create a stop containers task
@@ -156,8 +155,7 @@ var restartCmd = &cobra.Command{
 		}
 
 		if err := spinners.RunTaskWithSpinnerCustomContext(ctx, stopOpts, stopContainersTask); err != nil {
-			fmt.Printf("Error: %v\n", err)
-			return
+			return fmt.Errorf("error: %v", err)
 		}
 
 		// Run spinner for starting containers
@@ -168,13 +166,13 @@ var restartCmd = &cobra.Command{
 		}
 
 		if err := spinners.RunTaskWithSpinnerCustomContext(ctx, startOpts, startContainersTask); err != nil {
-			fmt.Printf("Error: %v\n", err)
-			return
+			return fmt.Errorf("error: %v", err)
 		}
 
 		if verbose {
 			_ = spinners.RunInfoSpinner("Containers restarted successfully")
 		}
+		return nil
 	},
 }
 

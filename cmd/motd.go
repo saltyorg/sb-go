@@ -53,7 +53,7 @@ var motdCmd = &cobra.Command{
 	Long: `Displays system information including Ubuntu distribution version,
 kernel version, system uptime, CPU load, memory usage, disk usage,
 last login, user sessions, process information, and system update status based on flags provided.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get flag values and create config
 		config := &motdConfig{}
 		config.showAll, _ = cmd.Flags().GetBool("all")
@@ -87,12 +87,12 @@ last login, user sessions, process information, and system update status based o
 		config.bannerType, _ = cmd.Flags().GetString("type")
 		config.verbosity, _ = cmd.Flags().GetCount("verbose")
 
-		runMotdCommand(config)
+		return runMotdCommand(config)
 	},
 }
 
 // runMotdCommand handles the main logic for the motd command
-func runMotdCommand(config *motdConfig) {
+func runMotdCommand(config *motdConfig) error {
 	// If --all flag is used, enable everything
 	if config.showAll {
 		config.showAptStatus = true
@@ -126,33 +126,31 @@ func runMotdCommand(config *motdConfig) {
 		!config.showMemory && !config.showNzbget && !config.showPlex && !config.showProcesses && !config.showQbittorrent &&
 		!config.showQueues && !config.showRebootRequired && !config.showRtorrent && !config.showSabnzbd && !config.showSessions &&
 		!config.showTraefik && !config.showUptime {
-		fmt.Println("Error: No information selected to display.")
-		fmt.Println("Please use at least one of the following flags:")
-		fmt.Println("  --all          Show all information")
-		fmt.Println("  --apt          Show apt package status")
-		fmt.Println("  --cpu          Show CPU load averages")
-		fmt.Println("  --cpu-info     Show CPU model and core count")
-		fmt.Println("  --disk         Show disk usage for all partitions")
-		fmt.Println("  --distro       Show distribution information")
-		fmt.Println("  --docker       Show Docker container information")
-		fmt.Println("  --emby         Show Emby streaming information")
-		fmt.Println("  --gpu          Show GPU information")
-		fmt.Println("  --jellyfin     Show Jellyfin streaming information")
-		fmt.Println("  --kernel       Show kernel information")
-		fmt.Println("  --login        Show last login information")
-		fmt.Println("  --memory       Show memory usage")
-		fmt.Println("  --nzbget       Show NZBGet queue information")
-		fmt.Println("  --plex         Show Plex streaming information")
-		fmt.Println("  --processes    Show process count")
-		fmt.Println("  --qbittorrent  Show qBittorrent queue information")
-		fmt.Println("  --queues       Show download queue information from Sonarr, Radarr, etc.")
-		fmt.Println("  --reboot       Show if reboot is required")
-		fmt.Println("  --rtorrent     Show rTorrent queue information")
-		fmt.Println("  --sabnzbd      Show Sabnzbd queue information")
-		fmt.Println("  --sessions     Show active user sessions")
-		fmt.Println("  --traefik      Show Traefik router status information")
-		fmt.Println("  --uptime       Show uptime information")
-		os.Exit(1)
+		return fmt.Errorf("no information selected to display\nPlease use at least one of the following flags:\n" +
+			"  --all          Show all information\n" +
+			"  --apt          Show apt package status\n" +
+			"  --cpu          Show CPU load averages\n" +
+			"  --cpu-info     Show CPU model and core count\n" +
+			"  --disk         Show disk usage for all partitions\n" +
+			"  --distro       Show distribution information\n" +
+			"  --docker       Show Docker container information\n" +
+			"  --emby         Show Emby streaming information\n" +
+			"  --gpu          Show GPU information\n" +
+			"  --jellyfin     Show Jellyfin streaming information\n" +
+			"  --kernel       Show kernel information\n" +
+			"  --login        Show last login information\n" +
+			"  --memory       Show memory usage\n" +
+			"  --nzbget       Show NZBGet queue information\n" +
+			"  --plex         Show Plex streaming information\n" +
+			"  --processes    Show process count\n" +
+			"  --qbittorrent  Show qBittorrent queue information\n" +
+			"  --queues       Show download queue information from Sonarr, Radarr, etc.\n" +
+			"  --reboot       Show if reboot is required\n" +
+			"  --rtorrent     Show rTorrent queue information\n" +
+			"  --sabnzbd      Show Sabnzbd queue information\n" +
+			"  --sessions     Show active user sessions\n" +
+			"  --traefik      Show Traefik router status information\n" +
+			"  --uptime       Show uptime information")
 	}
 
 	// Validate banner type if specified
@@ -160,54 +158,51 @@ func runMotdCommand(config *motdConfig) {
 		validType := slices.Contains(motd.AvailableBannerTypes, config.bannerType)
 
 		if !validType {
-			fmt.Println("Error: Invalid banner type specified:", config.bannerType)
-			fmt.Println()
-			fmt.Println("Available types:")
+			var availableTypes strings.Builder
+			availableTypes.WriteString("\nAvailable types:\n")
 
 			// Print available types in columns
 			const numColumns = 4
 			for i, bType := range motd.AvailableBannerTypes {
 				if i%numColumns == 0 {
-					fmt.Println()
+					availableTypes.WriteString("\n")
 				}
-				fmt.Printf("  %-16s", bType)
+				availableTypes.WriteString(fmt.Sprintf("  %-16s", bType))
 			}
-			fmt.Println()
-			fmt.Println()
-			os.Exit(1)
+			availableTypes.WriteString("\n")
+
+			return fmt.Errorf("invalid banner type specified: %s%s", config.bannerType, availableTypes.String())
 		}
 	}
 
 	// Validate font if specified
 	if config.bannerFont != "" && !motd.IsValidFont(config.bannerFont) {
-		fmt.Println("Error: Invalid font specified:", config.bannerFont)
-		fmt.Println()
-		fmt.Println("Available fonts (from /usr/share/figlet):")
+		var availableFonts strings.Builder
+		availableFonts.WriteString("\nAvailable fonts (from /usr/share/figlet):\n")
 
 		// Print available fonts in columns
 		fonts := motd.ListAvailableFonts()
 		const numColumns = 4
 		for i, font := range fonts {
 			if i%numColumns == 0 {
-				fmt.Println()
+				availableFonts.WriteString("\n")
 			}
-			fmt.Printf("  %-16s", font)
+			availableFonts.WriteString(fmt.Sprintf("  %-16s", font))
 		}
-		fmt.Println()
-		fmt.Println()
-		os.Exit(1)
+		availableFonts.WriteString("\n")
+
+		return fmt.Errorf("invalid font specified: %s%s", config.bannerFont, availableFonts.String())
 	}
 
-	displayMotd(config, config.verbosity > 0)
+	return displayMotd(config, config.verbosity > 0)
 }
 
-func displayMotd(config *motdConfig, verbose bool) {
+func displayMotd(config *motdConfig, verbose bool) error {
 	// Display a banner from a file if provided. This takes precedence.
 	if config.bannerFile != "" {
 		content, err := os.ReadFile(config.bannerFile)
 		if err != nil {
-			fmt.Printf("Error: could not read banner file '%s': %v\n", config.bannerFile, err)
-			os.Exit(1)
+			return fmt.Errorf("could not read banner file '%s': %w", config.bannerFile, err)
 		}
 
 		var banner string
@@ -333,6 +328,7 @@ func displayMotd(config *motdConfig, verbose bool) {
 	}
 
 	fmt.Println()
+	return nil
 }
 
 func init() {

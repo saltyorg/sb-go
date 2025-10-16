@@ -12,8 +12,9 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print Saltbox CLI version",
 	Long:  `Print Saltbox CLI version`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Printf("Saltbox CLI version: %s (commit: %s)\n", runtime.Version, runtime.GitCommit)
+		return nil
 	},
 }
 

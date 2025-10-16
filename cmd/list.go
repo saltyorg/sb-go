@@ -18,10 +18,10 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List available Saltbox, Sandbox or Saltbox-mod tags",
 	Long:  `List available Saltbox, Sandbox or Saltbox-mod tags`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbosity, _ := cmd.Flags().GetCount("verbose")
-		handleList(ctx, verbosity)
+		return handleList(ctx, verbosity)
 	},
 }
 
@@ -33,11 +33,10 @@ func init() {
 	listCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
 }
 
-func handleList(ctx context.Context, verbosity int) {
+func handleList(ctx context.Context, verbosity int) error {
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
-		fmt.Printf("Error creating cache: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error creating cache: %w", err)
 	}
 
 	if verbosity > 0 {
@@ -167,6 +166,7 @@ func handleList(ctx context.Context, verbosity int) {
 		fmt.Printf("%s%s\n\n", info.BaseTitle, cacheStatus)
 		printInColumns(tags, 2)
 	}
+	return nil
 }
 
 func getConsoleWidth(defaultWidth int) int {

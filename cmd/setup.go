@@ -20,7 +20,7 @@ var setupCmd = &cobra.Command{
 	Short:  "Install Saltbox and its dependencies",
 	Long:   `Install Saltbox and its dependencies`,
 	Hidden: true,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		branch, _ := cmd.Flags().GetString("branch")
@@ -37,82 +37,72 @@ var setupCmd = &cobra.Command{
 
 			if response != "yes" && response != "y" {
 				fmt.Println("Setup aborted by user.")
-				return
+				return nil
 			}
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking Ubuntu version", func() error {
 			return utils.CheckUbuntuSupport()
 		}); err != nil {
-			fmt.Println(err)
-			return
+			return err
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking CPU architecture", func() error {
 			return utils.CheckArchitecture(ctx)
 		}); err != nil {
-			fmt.Println(err)
-			return
+			return err
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for LXC container", func() error {
 			return utils.CheckLXC(ctx)
 		}); err != nil {
-			fmt.Println(err)
-			return
+			return err
 		}
 
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for desktop environment", func() error {
 			return utils.CheckDesktopEnvironment(ctx)
 		}); err != nil {
-			fmt.Println(err)
-			return
+			return err
 		}
 
 		// Perform initial setup tasks
 		if err := setup.InitialSetup(ctx, verbose); err != nil {
-			fmt.Printf("Error during initial setup: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error during initial setup: %w", err)
 		}
 
 		// Configure the locale
 		if err := setup.ConfigureLocale(ctx); err != nil {
-			fmt.Printf("Error configuring locale: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error configuring locale: %w", err)
 		}
 
 		// Setup Python venv
 		if err := setup.PythonVenv(ctx, verbose); err != nil {
-			fmt.Printf("Error setting up Python venv: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error setting up Python venv: %w", err)
 		}
 
 		// Setup Saltbox Repo
 		if err := setup.SaltboxRepo(ctx, verbose, branch); err != nil {
-			fmt.Printf("Error setting up Saltbox repository: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error setting up Saltbox repository: %w", err)
 		}
 
 		// Install pip3 Dependencies
 		if err := setup.InstallPipDependencies(ctx, verbose); err != nil {
-			fmt.Printf("Error installing pip dependencies: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error installing pip dependencies: %w", err)
 		}
 
 		// Copy ansible* files to /usr/local/bin
 		if err := setup.CopyRequiredBinaries(ctx); err != nil {
-			fmt.Printf("Error copying binaries: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error copying binaries: %w", err)
 		}
 
 		if verbose {
 			fmt.Println("Initial setup tasks completed")
 		} else {
 			if err := spinners.RunInfoSpinner("Initial setup tasks completed"); err != nil {
-				fmt.Println(err)
-				return
+				return err
 			}
 		}
+		return nil
 	},
 }
 

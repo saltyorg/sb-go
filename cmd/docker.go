@@ -48,9 +48,9 @@ var dockerCmd = &cobra.Command{
 	Use:   "docker",
 	Short: "Manage Docker containers managed by Saltbox",
 	Long:  `Manage Docker containers managed by Saltbox`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Show help if no subcommand is provided.
-		cmd.Help()
+		return cmd.Help()
 	},
 }
 

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -15,16 +14,16 @@ var reinstallFactsCmd = &cobra.Command{
 	Use:   "reinstall-facts",
 	Short: "Reinstall the Rust saltbox.fact file",
 	Long:  `Reinstall the Rust saltbox.fact file`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 
 		// Set verbose mode for spinners
 		spinners.SetVerboseMode(verbose)
 
 		if err := fact.DownloadAndInstallSaltboxFact(true, verbose); err != nil {
-			fmt.Println("Error reinstalling saltbox.fact:", err)
-			os.Exit(1)
+			return fmt.Errorf("error reinstalling saltbox.fact: %w", err)
 		}
+		return nil
 	},
 }
 

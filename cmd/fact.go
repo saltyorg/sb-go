@@ -38,7 +38,7 @@ Example usage:
   sb fact role instance --method=delete --delete-type=key --key key1
   sb fact role instance --method=delete --delete-type=instance
   sb fact role --method=delete --delete-type=role`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get flag values and create config
 		method, _ := cmd.Flags().GetString("method")
 		deleteType, _ := cmd.Flags().GetString("delete-type")
@@ -50,16 +50,16 @@ Example usage:
 			keyValues:  keyValues,
 		}
 
-		runFactCommand(cmd, args, config)
+		return runFactCommand(cmd, args, config)
 	},
 }
 
 // runFactCommand handles the main logic for the fact command
-func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
+func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error {
 	if len(args) < 1 {
 		fmt.Print("Error: Role name is required\n\n")
 		cmd.Help()
-		return
+		return fmt.Errorf("role name is required")
 	}
 
 	role := args[0]
@@ -77,13 +77,12 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 			instance := args[1]
 			facts, err := loadFacts(filePath, instance, keys)
 			if err != nil {
-				fmt.Printf("Error loading facts: %v\n", err)
-				return
+				return fmt.Errorf("error loading facts: %v", err)
 			}
 
 			if len(facts) == 0 {
 				fmt.Printf("No facts found for role '%s', instance '%s'\n", role, instance)
-				return
+				return nil
 			}
 
 			// Display facts for the specific instance
@@ -93,13 +92,12 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 			// Load all instances for the role
 			instances, err := loadAllInstances(filePath)
 			if err != nil {
-				fmt.Printf("Error loading instances: %v\n", err)
-				return
+				return fmt.Errorf("error loading instances: %v", err)
 			}
 
 			if len(instances) == 0 {
 				fmt.Printf("No facts found for role '%s'\n", role)
-				return
+				return nil
 			}
 
 			// Display facts for all instances
@@ -119,27 +117,26 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 				displayFacts(facts)
 			}
 		}
+		return nil
 
 	case "save":
 		// For save, we must have an instance
 		if len(args) < 2 {
 			fmt.Println("Error: Instance name is required for save method")
 			cmd.Help()
-			return
+			return fmt.Errorf("instance name is required for save method")
 		}
 		instance := args[1]
 
 		// Get the Saltbox user for owner/group
 		saltboxUser, err := utils.GetSaltboxUser()
 		if err != nil {
-			fmt.Printf("Error getting Saltbox user: %v\n", err)
-			return
+			return fmt.Errorf("error getting Saltbox user: %v", err)
 		}
 
 		facts, changed, err := saveFacts(filePath, instance, keys, saltboxUser)
 		if err != nil {
-			fmt.Printf("Error saving facts: %v\n", err)
-			return
+			return fmt.Errorf("error saving facts: %v", err)
 		}
 
 		if changed {
@@ -151,18 +148,18 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 		// Display saved facts
 		fmt.Printf("Facts for role '%s', instance '%s':\n", role, instance)
 		displayFacts(facts)
+		return nil
 
 	case "delete":
 		if config.deleteType == "" {
 			fmt.Println("Error: delete-type is required for delete method")
-			return
+			return fmt.Errorf("delete-type is required for delete method")
 		}
 
 		// Get the Saltbox user for owner/group if needed for cleanup
 		saltboxUser, err := utils.GetSaltboxUser()
 		if err != nil {
-			fmt.Printf("Error getting Saltbox user: %v\n", err)
-			return
+			return fmt.Errorf("error getting Saltbox user: %v", err)
 		}
 
 		// Handle delete based on type
@@ -170,8 +167,7 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 			// No instance needed for role deletion
 			changed, err := deleteFacts(filePath, config.deleteType, "", keys, saltboxUser)
 			if err != nil {
-				fmt.Printf("Error deleting facts: %v\n", err)
-				return
+				return fmt.Errorf("error deleting facts: %v", err)
 			}
 
 			if changed {
@@ -179,19 +175,19 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 			} else {
 				fmt.Println("No changes were made")
 			}
+			return nil
 		} else {
 			// For instance or key deletion, we need an instance
 			if len(args) < 2 {
 				fmt.Println("Error: Instance name is required for instance or key deletion")
 				cmd.Help()
-				return
+				return fmt.Errorf("instance name is required for instance or key deletion")
 			}
 			instance := args[1]
 
 			changed, err := deleteFacts(filePath, config.deleteType, instance, keys, saltboxUser)
 			if err != nil {
-				fmt.Printf("Error deleting facts: %v\n", err)
-				return
+				return fmt.Errorf("error deleting facts: %v", err)
 			}
 
 			if changed {
@@ -205,11 +201,13 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) {
 			} else {
 				fmt.Println("No changes were made")
 			}
+			return nil
 		}
 
 	default:
 		fmt.Printf("Unknown method: %s\n", config.method)
 		cmd.Help()
+		return fmt.Errorf("unknown method: %s", config.method)
 	}
 }
 

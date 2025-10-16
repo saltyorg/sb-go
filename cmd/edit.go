@@ -118,7 +118,7 @@ func openEditor(path string) {
 	}
 }
 
-func runBubbleTeaList() {
+func runBubbleTeaList() error {
 	configItems := []list.Item{
 		ConfigItem{
 			title:       "accounts.yml",
@@ -160,9 +160,9 @@ func runBubbleTeaList() {
 	// Get terminal dimensions
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error running bubbletea program: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error running bubbletea program: %w", err)
 	}
+	return nil
 }
 
 // editCmd represents the edit command
@@ -170,7 +170,7 @@ var editCmd = &cobra.Command{
 	Use:   "edit [config]",
 	Short: "Edit Saltbox configuration files",
 	Long: `Edit Saltbox configuration files using your default editor.
-	
+
 Available configurations:
   - accounts: Edit accounts.yml
   - adv_settings: Edit advanced settings (adv_settings.yml)
@@ -179,10 +179,12 @@ Available configurations:
   - settings: Edit general settings (settings.yml)
 
 If no configuration is specified, an interactive menu will be shown.`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
-			runBubbleTeaList()
-			return
+			if err := runBubbleTeaList(); err != nil {
+				return err
+			}
+			return nil
 		}
 
 		switch args[0] {
@@ -200,6 +202,7 @@ If no configuration is specified, an interactive menu will be shown.`,
 			fmt.Printf("Unknown configuration: %s\n", args[0])
 			fmt.Println("Run 'sb edit' to see all available configurations")
 		}
+		return nil
 	},
 }
 
@@ -210,40 +213,45 @@ func init() {
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "accounts",
 		Short: "Edit accounts.yml",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxAccountsPath)
+			return nil
 		},
 	})
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "adv_settings",
 		Short: "Edit adv_settings.yml",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxAdvancedSettingsPath)
+			return nil
 		},
 	})
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "backup_config",
 		Short: "Edit backup_config.yml",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxBackupConfigPath)
+			return nil
 		},
 	})
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "hetzner_vlan",
 		Short: "Edit hetzner_vlan.yml",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxHetznerVLANPath)
+			return nil
 		},
 	})
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "settings",
 		Short: "Edit settings.yml",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxSettingsPath)
+			return nil
 		},
 	})
 }

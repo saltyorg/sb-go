@@ -19,12 +19,12 @@ var benchCmd = &cobra.Command{
 	Use:   "bench",
 	Short: "Runs bench.sh benchmark",
 	Long:  `Runs bench.sh benchmark`,
-	Run: func(cmd *cobra.Command, args []string) {
+	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		if err := runBenchmark(ctx); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "An error occurred while executing the benchmark: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("error executing benchmark: %w", err)
 		}
+		return nil
 	},
 }
 
