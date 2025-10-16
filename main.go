@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -13,9 +12,8 @@ import (
 
 func main() {
 	if os.Geteuid() != 0 {
-		// Relaunch as root - use context.Background() to allow unlimited time
-		// The sudo subprocess may take a long time for operations like package installation
-		exitCode, err := utils.RelaunchAsRoot(context.Background())
+		// Relaunch as root with sudo
+		exitCode, err := utils.RelaunchAsRoot()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error relaunching as root: %v\n", err)
 		}

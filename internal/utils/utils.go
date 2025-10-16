@@ -21,23 +21,31 @@ import (
 // RelaunchAsRoot relaunches the current process with sudo and returns the exit code.
 // Returns the exit code from the sudo subprocess and an error if execution failed.
 // The caller should exit with the returned exit code.
-func RelaunchAsRoot(ctx context.Context) (int, error) {
+func RelaunchAsRoot() (int, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return 1, fmt.Errorf("failed to get executable path: %w", err)
 	}
 
-	args := os.Args[1:] // Exclude the program name itself.
-	sudoArgs := append([]string{executable}, args...)
+	args := os.Args[1:] // Exclude the program name itself
+	cmd := exec.Command("sudo", append([]string{executable}, args...)...)
 
-	result, err := executor.Run(ctx, "sudo",
-		executor.WithArgs(sudoArgs...),
-		executor.WithOutputMode(executor.OutputModeInteractive),
-	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 
-	// Return the exit code from the sudo subprocess, regardless of whether there was an error
-	// This ensures the parent process exits with the same code as the child process
-	return result.ExitCode, err
+	err = cmd.Run()
+	if err != nil {
+		// Check if it's an ExitError (non-zero exit code)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			// Return the exit code without treating it as an error
+			return exitErr.ExitCode(), nil
+		}
+		// Non-exit error (e.g., sudo not found)
+		return 1, fmt.Errorf("failed to execute sudo: %w", err)
+	}
+
+	return 0, nil
 }
 
 // GetSaltboxUser retrieves the Saltbox user from accounts.yml.
