@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/saltyorg/sb-go/cmd"
 	"github.com/saltyorg/sb-go/internal/signals"
@@ -14,11 +13,9 @@ import (
 
 func main() {
 	if os.Geteuid() != 0 {
-		// Use a context with timeout for the relaunch operation
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		exitCode, err := utils.RelaunchAsRoot(ctx)
+		// Relaunch as root - use context.Background() to allow unlimited time
+		// The sudo subprocess may take a long time for operations like package installation
+		exitCode, err := utils.RelaunchAsRoot(context.Background())
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error relaunching as root: %v\n", err)
 		}
