@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -300,13 +301,7 @@ func TestWithOptions(t *testing.T) {
 	if len(config.Env) == 0 {
 		t.Error("WithInheritEnv failed, env is empty")
 	}
-	found := false
-	for _, env := range config.Env {
-		if env == "TEST=value" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(config.Env, "TEST=value")
 	if !found {
 		t.Error("WithInheritEnv failed, TEST=value not found in env")
 	}
