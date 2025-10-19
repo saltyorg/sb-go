@@ -29,6 +29,10 @@ const (
 	SupportedUbuntuReleases     = "22.04,24.04"
 	DockerControllerServiceFile = "/etc/systemd/system/saltbox_managed_docker_controller.service"
 	DockerControllerAPIURL      = "http://127.0.0.1:3377"
+
+	// CompletionAlias is the command name used for shell completion during testing
+	// Change this to "sb" for production or keep as "sb2" for testing alongside the old binary
+	CompletionAlias = "sb2"
 )
 
 func SaltboxPlaybookPath() string {

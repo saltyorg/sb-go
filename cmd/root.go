@@ -13,8 +13,7 @@ var rootCmd = &cobra.Command{
 	Short: "Saltbox CLI",
 	Long:  `Saltbox CLI`,
 	CompletionOptions: cobra.CompletionOptions{
-		HiddenDefaultCmd: true, // hides cmd
-		// DisableDefaultCmd: true, // removes cmd
+		DisableDefaultCmd: true, // removes cmd - we use custom completion installation
 	},
 }
 

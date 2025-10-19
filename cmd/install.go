@@ -57,6 +57,30 @@ var installCmd = &cobra.Command{
 
 		return handleInstall(cmd, tags, extraVars, skipTags, extraArgs, verbosity, noCache)
 	},
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		// Initialize cache
+		cacheInstance, err := cache.NewCache()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+
+		// Check if cache is populated
+		if !isCachePopulated(cacheInstance) {
+			// Try to auto-generate cache
+			ctx := context.Background()
+			ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
+			ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
+
+			// Check again - if still empty, abort completion
+			if !isCachePopulated(cacheInstance) {
+				return nil, cobra.ShellCompDirectiveError
+			}
+		}
+
+		// Retrieve and return all tags
+		allTags := getCompletionTags(cacheInstance)
+		return allTags, cobra.ShellCompDirectiveNoFileComp
+	},
 }
 
 func init() {
@@ -451,4 +475,56 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosit
 		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)\n", repoPath, cachedTagsInterface)
 	}
 	return false
+}
+
+// isCachePopulated checks if the cache has valid tags for at least one repository
+func isCachePopulated(cacheInstance *cache.Cache) bool {
+	// Check Saltbox cache
+	saltboxCache, ok := cacheInstance.GetRepoCache(constants.SaltboxRepoPath)
+	if ok {
+		if cachedTags, tagsOK := saltboxCache["tags"].([]any); tagsOK && len(cachedTags) > 0 {
+			return true
+		}
+	}
+
+	// Check Sandbox cache
+	sandboxCache, ok := cacheInstance.GetRepoCache(constants.SandboxRepoPath)
+	if ok {
+		if cachedTags, tagsOK := sandboxCache["tags"].([]any); tagsOK && len(cachedTags) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getCompletionTags retrieves and formats all tags from cache for shell completion
+func getCompletionTags(cacheInstance *cache.Cache) []string {
+	var allTags []string
+
+	// Get Saltbox tags (returned as-is)
+	saltboxCache, ok := cacheInstance.GetRepoCache(constants.SaltboxRepoPath)
+	if ok {
+		if cachedTags, tagsOK := saltboxCache["tags"].([]any); tagsOK {
+			for _, tag := range cachedTags {
+				if strTag, ok := tag.(string); ok {
+					allTags = append(allTags, strTag)
+				}
+			}
+		}
+	}
+
+	// Get Sandbox tags (prefixed with "sandbox-")
+	sandboxCache, ok := cacheInstance.GetRepoCache(constants.SandboxRepoPath)
+	if ok {
+		if cachedTags, tagsOK := sandboxCache["tags"].([]any); tagsOK {
+			for _, tag := range cachedTags {
+				if strTag, ok := tag.(string); ok {
+					allTags = append(allTags, "sandbox-"+strTag)
+				}
+			}
+		}
+	}
+
+	return allTags
 }

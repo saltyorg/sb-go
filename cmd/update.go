@@ -105,6 +105,9 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 		return fmt.Errorf("error validating Saltbox configuration: %w", err)
 	}
 
+	// Regenerate shell completions if they're installed
+	regenerateInstalledCompletions()
+
 	return nil
 }
 
@@ -283,4 +286,20 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 
 	// Final success message
 	return spinners.RunInfoSpinner("Sandbox Update Completed")
+}
+
+// regenerateInstalledCompletions auto-installs or regenerates shell completion files
+func regenerateInstalledCompletions() {
+	// Always install or regenerate bash completion
+	_ = InstallOrRegenerateCompletion("bash", bashCompletionPath, generateBashCompletion)
+	_ = InstallOrRegenerateCompletion("bash", bashCompletionAliasPath, generateBashCompletionAlias)
+
+	// Only install or regenerate zsh completion if zsh is installed
+	if isZshInstalled() {
+		_ = InstallOrRegenerateCompletion("zsh", zshCompletionPath, generateZshCompletion)
+		_ = InstallOrRegenerateCompletion("zsh", zshCompletionAliasPath, generateZshCompletionAlias)
+	}
+
+	// Silent execution - errors are ignored
+	// To enable verbose output in the future, uncomment the print statements in InstallOrRegenerateCompletion()
 }

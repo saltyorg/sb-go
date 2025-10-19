@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -332,7 +333,10 @@ func TestCacheExistsAndIsValidFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testCache, err := cache.NewCache()
+			// Create temporary cache file for this test
+			tmpDir := t.TempDir()
+			cacheFile := filepath.Join(tmpDir, "cache.json")
+			testCache, err := cache.NewCacheWithFile(cacheFile)
 			if err != nil {
 				t.Fatalf("Failed to create cache: %v", err)
 			}
