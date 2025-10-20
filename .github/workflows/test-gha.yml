@@ -37,6 +37,15 @@ jobs:
       - name: Tune GitHub-hosted runner network
         run: sudo ethtool -K eth0 tx off rx off
 
+      - name: Create required directories
+        run: sudo mkdir -p /srv/git
+
+      - name: Set ownership
+        run: sudo chown -R runner:runner /srv/git
+
+      - name: Symlink Saltbox repository
+        run: ln -s $GITHUB_WORKSPACE/saltbox /srv/git/saltbox
+
       - name: Run tests
         working-directory: sb-go
         run: make test
@@ -47,16 +56,6 @@ jobs:
           make build
           sudo cp build/sb /usr/local/bin/sb
           /usr/local/bin/sb version
-
-      - name: Create required directories
-        run: sudo mkdir -p /srv/git
-
-      - name: Set ownership
-        run: sudo chown -R runner:runner /srv/git
-
-      - name: Symlink Saltbox repository
-        run: ln -s $GITHUB_WORKSPACE/saltbox /srv/git/saltbox
-
       - name: Print pip dependencies
         run: cat /srv/git/saltbox/requirements/requirements-saltbox.txt
 

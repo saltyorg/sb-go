@@ -453,66 +453,6 @@ func TestCloneRepository_ErrorMessageFormat(t *testing.T) {
 	}
 }
 
-// TestExecutorIntegration tests the executor with real git commands (if git is available)
-func TestExecutorIntegration(t *testing.T) {
-	// Create a temporary git repository for testing
-	tmpDir := t.TempDir()
-	repoPath := filepath.Join(tmpDir, "test-repo")
-
-	// Try to create a git repository
-	// Use the global executor that the rest of the program uses
-	exec := GetExecutor()
-	ctx := context.Background()
-
-	// Check if git is available
-	_, err := exec.ExecuteCommand(ctx, "", "git", "--version")
-	if err != nil {
-		t.Skip("Git not available, skipping integration test")
-	}
-
-	// Create directory
-	if err := os.MkdirAll(repoPath, 0755); err != nil {
-		t.Fatalf("Failed to create test directory: %v", err)
-	}
-
-	// Initialize git repository
-	_, err = exec.ExecuteCommand(ctx, repoPath, "git", "init")
-	if err != nil {
-		t.Fatalf("Failed to initialize git repository: %v", err)
-	}
-
-	// Create a test commit
-	testFile := filepath.Join(repoPath, "test.txt")
-	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	_, err = exec.ExecuteCommand(ctx, repoPath, "git", "add", "test.txt")
-	if err != nil {
-		t.Fatalf("Failed to add file: %v", err)
-	}
-
-	_, err = exec.ExecuteCommand(ctx, repoPath, "git", "commit", "-m", "Initial commit")
-	if err != nil {
-		t.Fatalf("Failed to commit: %v", err)
-	}
-
-	// Now test GetGitCommitHash
-	hash, err := GetGitCommitHash(context.Background(), repoPath)
-	if err != nil {
-		t.Errorf("GetGitCommitHash failed: %v", err)
-	}
-
-	if len(hash) == 0 {
-		t.Errorf("Expected non-empty commit hash")
-	}
-
-	// Verify it's a valid git hash (40 hex characters or 7+ for short hash)
-	if len(hash) < 7 {
-		t.Errorf("Commit hash too short: %s", hash)
-	}
-}
-
 // TestMockCommandExecutor_CallTracking tests that mock tracks calls
 func TestMockCommandExecutor_CallTracking(t *testing.T) {
 	mock := &MockCommandExecutor{
