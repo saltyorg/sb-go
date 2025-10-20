@@ -50,7 +50,7 @@ func RelaunchAsRoot() (int, error) {
 
 // GetSaltboxUser retrieves the Saltbox user from accounts.yml.
 func GetSaltboxUser() (string, error) {
-	data, err := os.ReadFile(constants.SaltboxAccountsPath)
+	data, err := os.ReadFile(constants.SaltboxAccountsConfigPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read accounts.yml: %w", err)
 	}

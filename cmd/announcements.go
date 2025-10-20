@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/saltyorg/sb-go/internal/announcements"
+	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"github.com/spf13/cobra"
@@ -57,12 +58,12 @@ func handleAnnouncements(verbose bool, beforePath, afterPath, repo string) error
 		return fmt.Errorf("error loading after announcement file '%s': %w", afterPath, err)
 	}
 
-	// Determine repo path based on repo name (for simulation purposes, use placeholder paths)
+	// Determine repo path based on repo name
 	var repoPath string
 	if repo == "Saltbox" {
-		repoPath = "/srv/git/saltbox"
+		repoPath = constants.SaltboxRepoPath
 	} else {
-		repoPath = "/opt/sandbox"
+		repoPath = constants.SandboxRepoPath
 	}
 
 	// Check for new announcements

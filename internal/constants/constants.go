@@ -4,35 +4,43 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/saltyorg/sb-go/internal/paths"
 )
 
 const (
-	AnsiblePlaybookBinaryPath   = "/usr/local/bin/ansible-playbook"
-	SaltboxGitPath              = "/srv/git"
-	SaltboxRepoPath             = "/srv/git/saltbox"
-	SaltboxRepoURL              = "https://github.com/saltyorg/saltbox.git"
-	SaltboxAccountsPath         = "/srv/git/saltbox/accounts.yml"
-	SaltboxAdvancedSettingsPath = "/srv/git/saltbox/adv_settings.yml"
-	SaltboxBackupConfigPath     = "/srv/git/saltbox/backup_config.yml"
-	SaltboxHetznerVLANPath      = "/srv/git/saltbox/hetzner_vlan.yml"
-	SaltboxSettingsPath         = "/srv/git/saltbox/settings.yml"
-	SaltboxMOTDPath             = "/srv/git/saltbox/motd.yml"
-	SaltboxFactsPath            = "/opt/saltbox"
-	SaltboxInventoryPath        = "/srv/git/saltbox/inventories/host_vars/localhost.yml"
-	SandboxRepoPath             = "/opt/sandbox"
-	SaltboxModRepoPath          = "/opt/saltbox_mod"
-	SaltboxCacheFile            = "/srv/git/saltbox/cache.json"
-	AnsibleVenvPath             = "/srv/ansible"
-	AnsibleRequirementsPath     = "/srv/git/saltbox/requirements/requirements-saltbox.txt"
-	AnsibleVenvPythonVersion    = "3.12"
-	PythonInstallDir            = "/srv/python"
-	SupportedUbuntuReleases     = "22.04,24.04"
-	DockerControllerServiceFile = "/etc/systemd/system/saltbox_managed_docker_controller.service"
-	DockerControllerAPIURL      = "http://127.0.0.1:3377"
+	AnsiblePlaybookBinaryPath         = "/usr/local/bin/ansible-playbook"
+	SaltboxGitPath                    = "/srv/git"
+	SaltboxRepoPath                   = "/srv/git/saltbox"
+	SaltboxRepoURL                    = "https://github.com/saltyorg/saltbox.git"
+	SaltboxAccountsConfigPath         = "/srv/git/saltbox/accounts.yml"
+	SaltboxAdvancedSettingsConfigPath = "/srv/git/saltbox/adv_settings.yml"
+	SaltboxBackupConfigPath           = "/srv/git/saltbox/backup_config.yml"
+	SaltboxHetznerVLANConfigPath      = "/srv/git/saltbox/hetzner_vlan.yml"
+	SaltboxSettingsConfigPath         = "/srv/git/saltbox/settings.yml"
+	SaltboxMOTDConfigPath             = "/srv/git/saltbox/motd.yml"
+	SaltboxInventoryConfigPath        = "/srv/git/saltbox/inventories/host_vars/localhost.yml"
+	SaltboxCacheFile                  = "/srv/git/saltbox/cache.json"
+	AnsibleVenvPath                   = "/srv/ansible"
+	AnsibleRequirementsPath           = "/srv/git/saltbox/requirements/requirements-saltbox.txt"
+	AnsibleVenvPythonVersion          = "3.12"
+	PythonInstallDir                  = "/srv/python"
+	SupportedUbuntuReleases           = "22.04,24.04"
+	DockerControllerServiceFile       = "/etc/systemd/system/saltbox_managed_docker_controller.service"
+	DockerControllerAPIURL            = "http://127.0.0.1:3377"
 
 	// CompletionAlias is the command name used for shell completion during testing
 	// Change this to "sb" for production or keep as "sb2" for testing alongside the old binary
 	CompletionAlias = "sb2"
+)
+
+// These paths are configurable based on server_appdata_path from inventory.
+// They default to /opt but can be overridden via inventories/host_vars/localhost.yml.
+// They are aliased from the paths package to maintain backward compatibility.
+var (
+	SaltboxFactsPath   = paths.SaltboxFactsPath
+	SandboxRepoPath    = paths.SandboxRepoPath
+	SaltboxModRepoPath = paths.SaltboxModRepoPath
 )
 
 func SaltboxPlaybookPath() string {

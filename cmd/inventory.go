@@ -34,7 +34,7 @@ func handleInventory() error {
 	defaultEditor := "nano"
 	approvedEditors := []string{"nano", "vim", "vi", "emacs", "gedit", "code", "micro"}
 
-	if _, err := os.Stat(constants.SaltboxInventoryPath); os.IsNotExist(err) {
+	if _, err := os.Stat(constants.SaltboxInventoryConfigPath); os.IsNotExist(err) {
 		return fmt.Errorf("error: the inventory file 'localhost.yml' does not yet exist")
 	}
 
@@ -47,7 +47,7 @@ func handleInventory() error {
 
 	if !isApproved {
 		if editor == defaultEditor {
-			return runEditor(defaultEditor, constants.SaltboxInventoryPath)
+			return runEditor(defaultEditor, constants.SaltboxInventoryConfigPath)
 		}
 
 		fmt.Printf("The EDITOR variable is set to an unrecognized value: %s\n", editor)
@@ -57,14 +57,14 @@ func handleInventory() error {
 		}
 
 		if confirm {
-			return runEditor(editor, constants.SaltboxInventoryPath)
+			return runEditor(editor, constants.SaltboxInventoryConfigPath)
 		}
 
 		fmt.Printf("Using default editor: %s\n", defaultEditor)
-		return runEditor(defaultEditor, constants.SaltboxInventoryPath)
+		return runEditor(defaultEditor, constants.SaltboxInventoryConfigPath)
 	}
 
-	return runEditor(editor, constants.SaltboxInventoryPath)
+	return runEditor(editor, constants.SaltboxInventoryConfigPath)
 }
 
 func runEditor(editor, filePath string) error {

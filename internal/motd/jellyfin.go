@@ -27,7 +27,7 @@ type JellyfinStreamInfo struct {
 
 // GetJellyfinInfo fetches and formats Jellyfin streaming information
 func GetJellyfinInfo(verbose bool) string {
-	configPath := constants.SaltboxMOTDPath
+	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)

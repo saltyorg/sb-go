@@ -41,7 +41,7 @@ type SabnzbdQueue struct {
 
 // GetSabnzbdInfo fetches and formats SABnzbd queue information
 func GetSabnzbdInfo(verbose bool) string {
-	configPath := constants.SaltboxMOTDPath
+	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)

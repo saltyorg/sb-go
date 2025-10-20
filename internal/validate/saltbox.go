@@ -29,13 +29,13 @@ func AllSaltboxConfigs(verbose bool) error {
 	// Define all validation jobs
 	jobs := []configValidationJob{
 		{
-			configPath: constants.SaltboxAccountsPath,
+			configPath: constants.SaltboxAccountsConfigPath,
 			schemaPath: "/srv/git/saltbox/schema/accounts.schema.yml",
 			name:       "accounts.yml",
 			optional:   false,
 		},
 		{
-			configPath: constants.SaltboxAdvancedSettingsPath,
+			configPath: constants.SaltboxAdvancedSettingsConfigPath,
 			schemaPath: "/srv/git/saltbox/schema/adv_settings.schema.yml",
 			name:       "adv_settings.yml",
 			optional:   false,
@@ -47,19 +47,19 @@ func AllSaltboxConfigs(verbose bool) error {
 			optional:   false,
 		},
 		{
-			configPath: constants.SaltboxHetznerVLANPath,
+			configPath: constants.SaltboxHetznerVLANConfigPath,
 			schemaPath: "/srv/git/saltbox/schema/hetzner_vlan.schema.yml",
 			name:       "hetzner_vlan.yml",
 			optional:   false,
 		},
 		{
-			configPath: constants.SaltboxSettingsPath,
+			configPath: constants.SaltboxSettingsConfigPath,
 			schemaPath: "/srv/git/saltbox/schema/settings.schema.yml",
 			name:       "settings.yml",
 			optional:   false,
 		},
 		{
-			configPath: constants.SaltboxMOTDPath,
+			configPath: constants.SaltboxMOTDConfigPath,
 			schemaPath: "/srv/git/saltbox/schema/motd.schema.yml",
 			name:       "motd.yml",
 			optional:   true,

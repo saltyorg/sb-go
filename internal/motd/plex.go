@@ -74,7 +74,7 @@ type PlexSession struct {
 // GetPlexInfo fetches and formats Plex streaming information
 func GetPlexInfo(verbose bool) string {
 	// Check if the configuration file exists
-	configPath := constants.SaltboxMOTDPath
+	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)

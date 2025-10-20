@@ -28,7 +28,7 @@ type qbittorrentInfo struct {
 
 // GetQbittorrentInfo fetches and formats qBittorrent information.
 func GetQbittorrentInfo(verbose bool) string {
-	configPath := constants.SaltboxMOTDPath
+	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)

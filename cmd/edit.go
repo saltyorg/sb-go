@@ -123,17 +123,17 @@ func runBubbleTeaList() error {
 		ConfigItem{
 			title:       "accounts.yml",
 			description: "Saltbox Accounts configuration",
-			path:        constants.SaltboxAccountsPath,
+			path:        constants.SaltboxAccountsConfigPath,
 		},
 		ConfigItem{
 			title:       "settings.yml",
 			description: "Saltbox basic configuration",
-			path:        constants.SaltboxSettingsPath,
+			path:        constants.SaltboxSettingsConfigPath,
 		},
 		ConfigItem{
 			title:       "adv_settings.yml",
 			description: "Saltbox advanced configuration",
-			path:        constants.SaltboxAdvancedSettingsPath,
+			path:        constants.SaltboxAdvancedSettingsConfigPath,
 		},
 		ConfigItem{
 			title:       "backup_config.yml",
@@ -143,7 +143,7 @@ func runBubbleTeaList() error {
 		ConfigItem{
 			title:       "hetzner_config.yml",
 			description: "Saltbox Hetzner VLAN configuration",
-			path:        constants.SaltboxHetznerVLANPath,
+			path:        constants.SaltboxHetznerVLANConfigPath,
 		},
 	}
 
@@ -189,15 +189,15 @@ If no configuration is specified, an interactive menu will be shown.`,
 
 		switch args[0] {
 		case "accounts":
-			openEditor(constants.SaltboxAccountsPath)
+			openEditor(constants.SaltboxAccountsConfigPath)
 		case "adv_settings":
-			openEditor(constants.SaltboxAdvancedSettingsPath)
+			openEditor(constants.SaltboxAdvancedSettingsConfigPath)
 		case "backup_config":
 			openEditor(constants.SaltboxBackupConfigPath)
 		case "hetzner_vlan":
-			openEditor(constants.SaltboxHetznerVLANPath)
+			openEditor(constants.SaltboxHetznerVLANConfigPath)
 		case "settings":
-			openEditor(constants.SaltboxSettingsPath)
+			openEditor(constants.SaltboxSettingsConfigPath)
 		default:
 			fmt.Printf("Unknown configuration: %s\n", args[0])
 			fmt.Println("Run 'sb edit' to see all available configurations")
@@ -214,7 +214,7 @@ func init() {
 		Use:   "accounts",
 		Short: "Edit accounts.yml",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxAccountsPath)
+			openEditor(constants.SaltboxAccountsConfigPath)
 			return nil
 		},
 	})
@@ -223,7 +223,7 @@ func init() {
 		Use:   "adv_settings",
 		Short: "Edit adv_settings.yml",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxAdvancedSettingsPath)
+			openEditor(constants.SaltboxAdvancedSettingsConfigPath)
 			return nil
 		},
 	})
@@ -241,7 +241,7 @@ func init() {
 		Use:   "hetzner_vlan",
 		Short: "Edit hetzner_vlan.yml",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxHetznerVLANPath)
+			openEditor(constants.SaltboxHetznerVLANConfigPath)
 			return nil
 		},
 	})
@@ -250,7 +250,7 @@ func init() {
 		Use:   "settings",
 		Short: "Edit settings.yml",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxSettingsPath)
+			openEditor(constants.SaltboxSettingsConfigPath)
 			return nil
 		},
 	})

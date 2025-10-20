@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/config"
+	"github.com/saltyorg/sb-go/internal/constants"
 
 	"golift.io/starr"
 	"golift.io/starr/lidarr"
@@ -32,7 +33,7 @@ type QueueInfo struct {
 // GetQueueInfo fetches queue information from configured applications
 func GetQueueInfo(verbose bool) string {
 	// Check if the configuration file exists
-	configPath := "/srv/git/saltbox/motd.yml"
+	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
 			fmt.Printf("DEBUG: Config file %s does not exist\n", configPath)
