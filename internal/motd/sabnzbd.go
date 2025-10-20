@@ -83,6 +83,13 @@ func GetSabnzbdInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in SABnzbd queue info fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing SABnzbd instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)

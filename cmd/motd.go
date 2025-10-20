@@ -328,6 +328,14 @@ func displayMotd(config *motdConfig, verbose bool) error {
 	}
 
 	fmt.Println()
+
+	// Explicitly flush stdout to ensure all output is written.
+	// This is critical when stdout is not a TTY (e.g., PAM/run-parts context)
+	// where buffering behavior differs and output may be lost if not flushed.
+	if err := os.Stdout.Sync(); err != nil {
+		return fmt.Errorf("failed to flush stdout: %w", err)
+	}
+
 	return nil
 }
 

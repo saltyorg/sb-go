@@ -70,6 +70,13 @@ func GetJellyfinInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.JellyfinInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in Jellyfin stream info fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing Jellyfin instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)

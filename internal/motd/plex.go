@@ -124,6 +124,13 @@ func GetPlexInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.PlexInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in Plex stream info fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing Plex instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)

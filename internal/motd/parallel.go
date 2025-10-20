@@ -3,6 +3,7 @@ package motd
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -44,6 +45,22 @@ func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
 		wg.Add(1)
 		go func(src InfoSource) {
 			defer wg.Done()
+
+			// Recover from panics to prevent goroutine crashes from hanging the entire MOTD.
+			// Without this, a panic in any provider would prevent wg.Done() from being called,
+			// causing the wait group to hang indefinitely and no output to be displayed.
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in %s: %v\n", src.Key, r)
+					}
+					resultChan <- Result{
+						Key:   src.Key,
+						Value: fmt.Sprintf("Error: panic occurred (%v)", r),
+						Order: src.Order,
+					}
+				}
+			}()
 
 			// Create context with timeout
 			ctx, cancel := context.WithTimeout(context.Background(), src.Timeout)

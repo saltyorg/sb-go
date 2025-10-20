@@ -79,6 +79,13 @@ func GetQueueInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in Sonarr queue fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing Sonarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
@@ -114,6 +121,13 @@ func GetQueueInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in Radarr queue fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing Radarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
@@ -149,6 +163,13 @@ func GetQueueInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in Lidarr queue fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing Lidarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
@@ -184,6 +205,13 @@ func GetQueueInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in Readarr queue fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing Readarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)

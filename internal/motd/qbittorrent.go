@@ -70,6 +70,13 @@ func GetQbittorrentInfo(verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.UserPassAppInstance) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					if verbose {
+						fmt.Fprintf(os.Stderr, "PANIC in qBittorrent stats fetch (instance %d): %v\n", idx, r)
+					}
+				}
+			}()
 
 			if verbose {
 				fmt.Printf("DEBUG: Processing qBittorrent instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)

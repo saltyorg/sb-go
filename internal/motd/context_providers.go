@@ -2,6 +2,8 @@ package motd
 
 import (
 	"context"
+	"fmt"
+	"os"
 )
 
 // GetDistributionWithContext provides distribution info with context/timeout support
@@ -9,6 +11,11 @@ func GetDistributionWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in distribution provider (%v)", r)
+			}
+		}()
 		ch <- GetDistribution(ctx, verbose)
 	}()
 
@@ -25,6 +32,11 @@ func GetKernelWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in kernel provider (%v)", r)
+			}
+		}()
 		ch <- GetKernel(ctx, verbose)
 	}()
 
@@ -41,6 +53,11 @@ func GetUptimeWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in uptime provider (%v)", r)
+			}
+		}()
 		ch <- GetUptime(ctx, verbose)
 	}()
 
@@ -57,6 +74,11 @@ func GetCpuAveragesWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in CPU averages provider (%v)", r)
+			}
+		}()
 		ch <- GetCpuAverages(ctx, verbose)
 	}()
 
@@ -73,6 +95,11 @@ func GetLastLoginWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in last login provider (%v)", r)
+			}
+		}()
 		ch <- GetLastLogin(ctx, verbose)
 	}()
 
@@ -89,6 +116,11 @@ func GetUserSessionsWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in user sessions provider (%v)", r)
+			}
+		}()
 		ch <- GetUserSessions(ctx, verbose)
 	}()
 
@@ -105,6 +137,11 @@ func GetProcessCountWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in process count provider (%v)", r)
+			}
+		}()
 		ch <- GetProcessCount(ctx, verbose)
 	}()
 
@@ -121,6 +158,11 @@ func GetAptStatusWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in apt status provider (%v)", r)
+			}
+		}()
 		ch <- GetAptStatus(ctx, verbose)
 	}()
 
@@ -137,6 +179,11 @@ func GetRebootRequiredWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in reboot status provider (%v)", r)
+			}
+		}()
 		ch <- GetRebootRequired(ctx, verbose)
 	}()
 
@@ -153,6 +200,11 @@ func GetCpuInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in CPU info provider (%v)", r)
+			}
+		}()
 		ch <- GetCpuInfo(ctx, verbose)
 	}()
 
@@ -169,6 +221,11 @@ func GetGpuInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in GPU info provider (%v)", r)
+			}
+		}()
 		ch <- GetGpuInfo(ctx, verbose)
 	}()
 
@@ -185,6 +242,11 @@ func GetMemoryInfoWithContext(ctx context.Context, _ bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in memory info provider (%v)", r)
+			}
+		}()
 		ch <- GetMemoryInfo()
 	}()
 
@@ -201,6 +263,11 @@ func GetDockerInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in Docker info provider (%v)", r)
+			}
+		}()
 		ch <- GetDockerInfo(ctx, verbose)
 	}()
 
@@ -217,6 +284,11 @@ func GetDiskInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				ch <- fmt.Sprintf("Error: panic in disk info provider (%v)", r)
+			}
+		}()
 		ch <- GetDiskInfo(ctx, verbose)
 	}()
 
@@ -233,6 +305,14 @@ func GetQueueInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in queue info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetQueueInfo(verbose)
 	}()
 
@@ -249,6 +329,14 @@ func GetPlexInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in Plex info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetPlexInfo(verbose)
 	}()
 
@@ -265,6 +353,14 @@ func GetEmbyInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in Emby info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetEmbyInfo(verbose)
 	}()
 
@@ -281,6 +377,14 @@ func GetJellyfinInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in Jellyfin info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetJellyfinInfo(verbose)
 	}()
 
@@ -297,6 +401,14 @@ func GetSabnzbdInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in Sabnzbd info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetSabnzbdInfo(verbose)
 	}()
 
@@ -313,6 +425,14 @@ func GetNzbgetInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in NZBGet info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetNzbgetInfo(verbose)
 	}()
 
@@ -329,6 +449,14 @@ func GetQbittorrentInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in qBittorrent info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetQbittorrentInfo(verbose)
 	}()
 
@@ -345,6 +473,14 @@ func GetRtorrentInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in rTorrent info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetRtorrentInfo(verbose)
 	}()
 
@@ -361,6 +497,14 @@ func GetTraefikInfoWithContext(ctx context.Context, verbose bool) string {
 	ch := make(chan string, 1)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in Traefik info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
 		ch <- GetTraefikInfo(ctx, verbose)
 	}()
 
