@@ -388,11 +388,12 @@ func TestCloneRepository_ContextCancellation(t *testing.T) {
 
 // TestDefaultCommandExecutor tests the default executor implementation
 func TestDefaultCommandExecutor(t *testing.T) {
-	executor := &DefaultCommandExecutor{}
+	// Use the global executor that the rest of the program uses
+	exec := GetExecutor()
 	ctx := context.Background()
 
 	// Test with a simple command that should work on all systems
-	output, err := executor.ExecuteCommand(ctx, "", "git", "--version")
+	output, err := exec.ExecuteCommand(ctx, "", "git", "--version")
 
 	if err != nil {
 		// Git might not be installed in test environment
@@ -459,11 +460,12 @@ func TestExecutorIntegration(t *testing.T) {
 	repoPath := filepath.Join(tmpDir, "test-repo")
 
 	// Try to create a git repository
-	executor := &DefaultCommandExecutor{}
+	// Use the global executor that the rest of the program uses
+	exec := GetExecutor()
 	ctx := context.Background()
 
 	// Check if git is available
-	_, err := executor.ExecuteCommand(ctx, "", "git", "--version")
+	_, err := exec.ExecuteCommand(ctx, "", "git", "--version")
 	if err != nil {
 		t.Skip("Git not available, skipping integration test")
 	}
@@ -474,7 +476,7 @@ func TestExecutorIntegration(t *testing.T) {
 	}
 
 	// Initialize git repository
-	_, err = executor.ExecuteCommand(ctx, repoPath, "git", "init")
+	_, err = exec.ExecuteCommand(ctx, repoPath, "git", "init")
 	if err != nil {
 		t.Fatalf("Failed to initialize git repository: %v", err)
 	}
@@ -485,12 +487,12 @@ func TestExecutorIntegration(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	_, err = executor.ExecuteCommand(ctx, repoPath, "git", "add", "test.txt")
+	_, err = exec.ExecuteCommand(ctx, repoPath, "git", "add", "test.txt")
 	if err != nil {
 		t.Fatalf("Failed to add file: %v", err)
 	}
 
-	_, err = executor.ExecuteCommand(ctx, repoPath, "git", "commit", "-m", "Initial commit")
+	_, err = exec.ExecuteCommand(ctx, repoPath, "git", "commit", "-m", "Initial commit")
 	if err != nil {
 		t.Fatalf("Failed to commit: %v", err)
 	}

@@ -37,6 +37,10 @@ jobs:
       - name: Tune GitHub-hosted runner network
         run: sudo ethtool -K eth0 tx off rx off
 
+      - name: Run tests
+        working-directory: sb-go
+        run: make test
+
       - name: Build sb binary
         working-directory: sb-go
         run: |
