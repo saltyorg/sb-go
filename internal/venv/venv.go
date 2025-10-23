@@ -95,7 +95,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 
 	// Copy binaries
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Copying binaries", func() error {
-		return copyBinaries(ctx, ansibleVenvPath, verbose)
+		return copyBinaries(ansibleVenvPath)
 	}); err != nil {
 		return fmt.Errorf("error copying binaries: %w", err)
 	}
@@ -237,8 +237,7 @@ func installRequirements(ctx context.Context, ansibleVenvPath string, verbose bo
 }
 
 // copyBinaries copies the binaries in a robust and error-checked way.
-// The verbose parameter is kept for diagnostic output when VerboseMode is enabled.
-func copyBinaries(ctx context.Context, ansibleVenvPath string, verbose bool) error {
+func copyBinaries(ansibleVenvPath string) error {
 	venvBinDir := filepath.Join(ansibleVenvPath, "venv", "bin")
 	destDir := "/usr/local/bin/"
 
