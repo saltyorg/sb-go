@@ -26,10 +26,12 @@ type Migration struct {
 }
 
 type Announcement struct {
-	Date      string    `yaml:"date"`
-	Title     string    `yaml:"title"`
-	Migration Migration `yaml:"migration"`
-	Message   string    `yaml:"message"`
+	Date           string    `yaml:"date"`
+	Title          string    `yaml:"title"`
+	Migration      Migration `yaml:"migration"`
+	Message        string    `yaml:"message"`
+	RequiredFolder string    `yaml:"required_folder,omitempty"`
+	RequiredFile   string    `yaml:"required_file,omitempty"`
 }
 
 type AnnouncementFile struct {
@@ -125,8 +127,12 @@ func CheckSingleRepoAnnouncements(repoName, repoPath string, beforeFile, afterFi
 
 	// If there was no before file (initial case), all announcements in after file are new
 	if beforeFile == nil || len(beforeFile.Announcements) == 0 {
-		newAnnouncements := make([]Announcement, len(afterFile.Announcements))
-		copy(newAnnouncements, afterFile.Announcements)
+		var newAnnouncements []Announcement
+		for _, announcement := range afterFile.Announcements {
+			if shouldShowAnnouncement(announcement) {
+				newAnnouncements = append(newAnnouncements, announcement)
+			}
+		}
 
 		// Sort announcements by date (oldest to newest)
 		sortAnnouncementsByDate(newAnnouncements)
@@ -149,7 +155,7 @@ func CheckSingleRepoAnnouncements(repoName, repoPath string, beforeFile, afterFi
 	var newAnnouncements []Announcement
 	for _, announcement := range afterFile.Announcements {
 		key := announcement.Date + "|" + announcement.Title
-		if !existingMap[key] {
+		if !existingMap[key] && shouldShowAnnouncement(announcement) {
 			newAnnouncements = append(newAnnouncements, announcement)
 		}
 	}
@@ -169,6 +175,39 @@ func sortAnnouncementsByDate(announcements []Announcement) {
 	sort.Slice(announcements, func(i, j int) bool {
 		return announcements[i].Date < announcements[j].Date
 	})
+}
+
+// shouldShowAnnouncement checks if the announcement's path conditions are satisfied.
+// Returns true if:
+// - required_folder is not set OR the specified folder exists and is a directory
+// - required_file is not set OR the specified file exists and is a regular file
+// If both are set, BOTH conditions must be true.
+func shouldShowAnnouncement(announcement Announcement) bool {
+	// Check required_folder if specified
+	if announcement.RequiredFolder != "" {
+		info, err := os.Stat(announcement.RequiredFolder)
+		if os.IsNotExist(err) {
+			return false
+		}
+		// Verify it's actually a directory
+		if err == nil && !info.IsDir() {
+			return false
+		}
+	}
+
+	// Check required_file if specified
+	if announcement.RequiredFile != "" {
+		info, err := os.Stat(announcement.RequiredFile)
+		if os.IsNotExist(err) {
+			return false
+		}
+		// Verify it's actually a file (not a directory)
+		if err == nil && info.IsDir() {
+			return false
+		}
+	}
+
+	return true
 }
 
 // GetAnnouncementFilePath returns the path to the announcements.yml file for a repo
