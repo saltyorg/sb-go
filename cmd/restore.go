@@ -16,7 +16,6 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/constants"
 
-	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -39,7 +38,6 @@ var (
 type restoreModel struct {
 	focusIndex int
 	inputs     []textinput.Model
-	cursorMode cursor.Mode
 	err        error
 	user       string
 	password   string
