@@ -38,7 +38,8 @@ var selfUpdateCmd = &cobra.Command{
 			}
 			return nil
 		}
-		return doSelfUpdate(autoAccept, debug, "", forceUpdate)
+		_, err := doSelfUpdate(autoAccept, debug, "", forceUpdate)
+		return err
 	},
 }
 
@@ -68,7 +69,7 @@ func promptForConfirmation(prompt string) bool {
 	return response == "y" || response == "yes"
 }
 
-func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force bool) error {
+func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
 	// Check if self-update is disabled at build time (unless force is true)
 	if runtime.DisableSelfUpdate == "true" && !force {
 		if verbose {
@@ -76,7 +77,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		} else {
 			_ = spinners.RunWarningSpinner("Self-update is disabled in this build")
 		}
-		return nil
+		return false, nil
 	}
 
 	// Log if force update is being used
@@ -110,7 +111,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		if verbose {
 			fmt.Printf("Debug: Error creating updater: %v\n", err)
 		}
-		return fmt.Errorf("error creating updater: %w", err)
+		return false, fmt.Errorf("error creating updater: %w", err)
 	}
 
 	latest, found, err := updater.DetectLatest(context.Background(), selfupdate.ParseSlug("saltyorg/sb-go"))
@@ -118,7 +119,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		if verbose {
 			fmt.Printf("Debug: Error checking for updates: %v\n", err)
 		}
-		return fmt.Errorf("error checking for updates: %w", err)
+		return false, fmt.Errorf("error checking for updates: %w", err)
 	}
 
 	if !found || latest.Version() == v.String() {
@@ -126,7 +127,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 			fmt.Println("Debug: No update available - current version is the latest")
 		}
 		_ = spinners.RunInfoSpinner(fmt.Sprintf("Current binary is the latest version: %s", runtime.Version))
-		return nil
+		return false, nil
 	}
 
 	// An update is available
@@ -137,7 +138,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		if !promptForConfirmation("Do you want to update") {
 			_ = spinners.RunWarningSpinner("Update of sb CLI cancelled")
 			fmt.Println()
-			return nil
+			return false, nil
 		}
 	} else if verbose {
 		fmt.Println("Debug: Auto-update enabled, proceeding without confirmation")
@@ -149,7 +150,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		if verbose {
 			fmt.Printf("Debug: Error getting executable path: %v\n", err)
 		}
-		return fmt.Errorf("error getting executable path: %w", err)
+		return false, fmt.Errorf("error getting executable path: %w", err)
 	}
 
 	err = updater.UpdateTo(context.Background(), latest, exe)
@@ -157,7 +158,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		if verbose {
 			fmt.Printf("Debug: Update failed with error: %v\n", err)
 		}
-		return fmt.Errorf("binary update failed: %w", err)
+		return false, fmt.Errorf("binary update failed: %w", err)
 	}
 
 	if verbose {
@@ -170,5 +171,5 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		_ = spinners.RunWarningSpinner(optionalMessage)
 	}
 	fmt.Println("")
-	return nil
+	return true, nil
 }

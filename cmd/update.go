@@ -58,7 +58,14 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 	spinners.SetVerboseMode(verbose)
 
 	if !skipSelfUpdate {
-		doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox", false)
+		updated, err := doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox", false)
+		if err != nil {
+			return fmt.Errorf("error during self-update: %w", err)
+		}
+		if updated {
+			// Exit after successful update so the new version can be run
+			os.Exit(0)
+		}
 	}
 
 	// Load announcement files before updates
