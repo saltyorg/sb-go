@@ -33,8 +33,8 @@ func main() {
 	ctx := sigManager.Context()
 
 	// Execute commands with context
+	// Cobra will handle printing errors and exiting with code 1
 	if err := cmd.ExecuteContext(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 

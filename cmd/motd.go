@@ -126,31 +126,7 @@ func runMotdCommand(config *motdConfig) error {
 		!config.showMemory && !config.showNzbget && !config.showPlex && !config.showProcesses && !config.showQbittorrent &&
 		!config.showQueues && !config.showRebootRequired && !config.showRtorrent && !config.showSabnzbd && !config.showSessions &&
 		!config.showTraefik && !config.showUptime {
-		return fmt.Errorf("no information selected to display\nPlease use at least one of the following flags:\n" +
-			"  --all          Show all information\n" +
-			"  --apt          Show apt package status\n" +
-			"  --cpu          Show CPU load averages\n" +
-			"  --cpu-info     Show CPU model and core count\n" +
-			"  --disk         Show disk usage for all partitions\n" +
-			"  --distro       Show distribution information\n" +
-			"  --docker       Show Docker container information\n" +
-			"  --emby         Show Emby streaming information\n" +
-			"  --gpu          Show GPU information\n" +
-			"  --jellyfin     Show Jellyfin streaming information\n" +
-			"  --kernel       Show kernel information\n" +
-			"  --login        Show last login information\n" +
-			"  --memory       Show memory usage\n" +
-			"  --nzbget       Show NZBGet queue information\n" +
-			"  --plex         Show Plex streaming information\n" +
-			"  --processes    Show process count\n" +
-			"  --qbittorrent  Show qBittorrent queue information\n" +
-			"  --queues       Show download queue information from Sonarr, Radarr, etc.\n" +
-			"  --reboot       Show if reboot is required\n" +
-			"  --rtorrent     Show rTorrent queue information\n" +
-			"  --sabnzbd      Show Sabnzbd queue information\n" +
-			"  --sessions     Show active user sessions\n" +
-			"  --traefik      Show Traefik router status information\n" +
-			"  --uptime       Show uptime information")
+		return fmt.Errorf("no information selected to display (use --all or specific flags)")
 	}
 
 	// Validate banner type if specified
@@ -328,13 +304,6 @@ func displayMotd(config *motdConfig, verbose bool) error {
 	}
 
 	fmt.Println()
-
-	// Explicitly flush stdout to ensure all output is written.
-	// This is critical when stdout is not a TTY (e.g., PAM/run-parts context)
-	// where buffering behavior differs and output may be lost if not flushed.
-	if err := os.Stdout.Sync(); err != nil {
-		return fmt.Errorf("failed to flush stdout: %w", err)
-	}
 
 	return nil
 }

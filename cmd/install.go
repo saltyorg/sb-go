@@ -54,6 +54,8 @@ var installCmd = &cobra.Command{
 			vFlag := "-" + strings.Repeat("v", verbosity)
 			extraArgs = append(extraArgs, vFlag)
 		}
+		// Silence help usage output once initial flags have been validated
+		cmd.SilenceUsage = true
 
 		return handleInstall(cmd, tags, extraVars, skipTags, extraArgs, verbosity, noCache)
 	},
@@ -208,7 +210,7 @@ func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []stri
 	err := ansible.RunAnsiblePlaybook(ctx, repoPath, playbookPath, ansibleBinaryPath, allArgs, true) // Always use true for verbose
 	if err != nil {
 		handleInterruptError(err)
-		return fmt.Errorf("error running playbook: %w", err)
+		return err
 	}
 	return nil
 }
@@ -421,10 +423,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 	}
 
 	cachedTagsStrings := make([]string, 0, len(cachedTags)) // Pre-allocate for efficiency
-	for _, tag := range cachedTags {
-		cachedTagsStrings = append(cachedTagsStrings, tag)
-
-	}
+	cachedTagsStrings = append(cachedTagsStrings, cachedTags...)
 	if verbosity > 0 {
 		fmt.Printf("DEBUG: Returning tags after update: %v\n", cachedTagsStrings)
 	}

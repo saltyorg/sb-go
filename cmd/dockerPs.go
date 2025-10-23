@@ -142,7 +142,7 @@ func getTraefikInternalPorts(labels map[string]string) []string {
 			!strings.Contains(key, "-http") {
 			parts := strings.Split(key, ".")
 			if len(parts) > 3 {
-				internalPorts = append(internalPorts, fmt.Sprintf("%s", value))
+				internalPorts = append(internalPorts, value)
 			}
 		}
 	}

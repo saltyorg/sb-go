@@ -82,7 +82,6 @@ After installation, restart your shell or run:
 	},
 }
 
-
 func init() {
 	rootCmd.AddCommand(completionCmd)
 	completionCmd.AddCommand(bashCompletionCmd)
@@ -608,7 +607,6 @@ func generateZshCompletionAlias(path string) error {
 	return generateStaticZshCompletion(path, constants.CompletionAlias)
 }
 
-
 // installCompletion handles the common logic for installing completion scripts
 func installCompletion(shellName, targetPath string, generateFunc func(string) error) error {
 	// Note: Root check not needed - main.go automatically elevates to root
@@ -650,10 +648,6 @@ func isZshInstalled() bool {
 // InstallOrRegenerateCompletion installs or regenerates a completion file
 // This is used by the update command to auto-install or update completions
 func InstallOrRegenerateCompletion(shellName, targetPath string, generateFunc func(string) error) error {
-	// Check if the completion file already exists
-	_, err := os.Stat(targetPath)
-	fileExists := err == nil
-
 	// Check if we have write permissions
 	targetDir := filepath.Dir(targetPath)
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -665,13 +659,6 @@ func InstallOrRegenerateCompletion(shellName, targetPath string, generateFunc fu
 	if err := generateFunc(targetPath); err != nil {
 		// Generation failed, skip silently
 		return nil
-	}
-
-	// Success - could add verbose logging here later
-	if fileExists {
-		// fmt.Printf("Updated %s completion at %s\n", shellName, targetPath)
-	} else {
-		// fmt.Printf("Installed %s completion at %s\n", shellName, targetPath)
 	}
 
 	return nil

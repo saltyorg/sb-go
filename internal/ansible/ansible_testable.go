@@ -126,17 +126,17 @@ func formatPlaybookError(playbookPath string, err error, stderrBuf *bytes.Buffer
 			}
 		}
 		if !verbose && stderrBuf != nil {
-			return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s",
+			return fmt.Errorf("Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s",
 				playbookPath, exitErr.ExitCode(), stderrBuf.String())
 		}
-		return fmt.Errorf("\nError: Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d",
+		return fmt.Errorf("Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d",
 			playbookPath, exitErr.ExitCode())
 	}
 
 	if !verbose && stderrBuf != nil {
-		return fmt.Errorf("\nError: Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, stderrBuf.String())
+		return fmt.Errorf("Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, stderrBuf.String())
 	}
-	return fmt.Errorf("\nError: Playbook %s run failed: %w", playbookPath, err)
+	return fmt.Errorf("Playbook %s run failed: %w", playbookPath, err)
 }
 
 // isSaltboxModRepo checks if the repository path is the SaltboxMod repository
