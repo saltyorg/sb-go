@@ -290,14 +290,19 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 
 // regenerateInstalledCompletions auto-installs or regenerates shell completion files
 func regenerateInstalledCompletions() {
-	// Always install or regenerate bash completion
-	_ = InstallOrRegenerateCompletion("bash", bashCompletionPath, generateBashCompletion)
-	_ = InstallOrRegenerateCompletion("bash", bashCompletionAliasPath, generateBashCompletionAlias)
+	bashPath, zshPath := getCompletionPaths()
+	cmdName := getBinaryName()
+
+	// Always install or regenerate bash completion for current binary name
+	_ = InstallOrRegenerateCompletion("bash", bashPath, func(path string) error {
+		return generateStaticBashCompletion(path, cmdName)
+	})
 
 	// Only install or regenerate zsh completion if zsh is installed
 	if isZshInstalled() {
-		_ = InstallOrRegenerateCompletion("zsh", zshCompletionPath, generateZshCompletion)
-		_ = InstallOrRegenerateCompletion("zsh", zshCompletionAliasPath, generateZshCompletionAlias)
+		_ = InstallOrRegenerateCompletion("zsh", zshPath, func(path string) error {
+			return generateStaticZshCompletion(path, cmdName)
+		})
 	}
 
 	// Silent execution - errors are ignored

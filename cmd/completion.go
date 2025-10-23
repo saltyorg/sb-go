@@ -7,17 +7,22 @@ import (
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/cache"
-	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/spf13/cobra"
 )
 
-// Completion file paths for Ubuntu system-wide installation
-const (
-	bashCompletionPath      = "/etc/bash_completion.d/sb"
-	bashCompletionAliasPath = "/etc/bash_completion.d/sb2"
-	zshCompletionPath       = "/usr/share/zsh/vendor-completions/_sb"
-	zshCompletionAliasPath  = "/usr/share/zsh/vendor-completions/_sb2"
-)
+// getBinaryName returns the name the binary was invoked as (e.g., "sb" or "sb2")
+func getBinaryName() string {
+	binaryPath := os.Args[0]
+	return filepath.Base(binaryPath)
+}
+
+// getCompletionPaths returns the appropriate completion paths based on the binary name
+func getCompletionPaths() (bashPath, zshPath string) {
+	cmdName := getBinaryName()
+	bashPath = fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
+	zshPath = fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
+	return
+}
 
 // completionCmd represents the completion command
 var completionCmd = &cobra.Command{
@@ -35,22 +40,19 @@ After installation, restart your shell or source the completion file.`,
 // bashCompletionCmd installs bash completion
 var bashCompletionCmd = &cobra.Command{
 	Use:   "bash",
-	Short: "Install bash completion for sb",
-	Long: `Installs bash completion script to /etc/bash_completion.d/sb
+	Short: "Install bash completion",
+	Long:  `Installs bash completion script for the current binary name.
 
-After installation, restart your shell or run:
-  source /etc/bash_completion.d/sb`,
+After installation, restart your shell or source the completion file.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Install main completion
-		if err := installCompletion("bash", bashCompletionPath, generateBashCompletion); err != nil {
-			return err
-		}
+		bashPath, _ := getCompletionPaths()
+		cmdName := getBinaryName()
 
-		// Install alias completion if alias is different from "sb"
-		if constants.CompletionAlias != "sb" {
-			if err := installCompletion("bash", bashCompletionAliasPath, generateBashCompletionAlias); err != nil {
-				return err
-			}
+		// Install completion for the binary name used
+		if err := installCompletion("bash", bashPath, func(path string) error {
+			return generateStaticBashCompletion(path, cmdName)
+		}); err != nil {
+			return err
 		}
 
 		return nil
@@ -60,22 +62,20 @@ After installation, restart your shell or run:
 // zshCompletionCmd installs zsh completion
 var zshCompletionCmd = &cobra.Command{
 	Use:   "zsh",
-	Short: "Install zsh completion for sb",
-	Long: `Installs zsh completion script to /usr/share/zsh/vendor-completions/_sb
+	Short: "Install zsh completion",
+	Long:  `Installs zsh completion script for the current binary name.
 
 After installation, restart your shell or run:
   autoload -U compinit && compinit`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Install main completion
-		if err := installCompletion("zsh", zshCompletionPath, generateZshCompletion); err != nil {
-			return err
-		}
+		_, zshPath := getCompletionPaths()
+		cmdName := getBinaryName()
 
-		// Install alias completion if alias is different from "sb"
-		if constants.CompletionAlias != "sb" {
-			if err := installCompletion("zsh", zshCompletionAliasPath, generateZshCompletionAlias); err != nil {
-				return err
-			}
+		// Install completion for the binary name used
+		if err := installCompletion("zsh", zshPath, func(path string) error {
+			return generateStaticZshCompletion(path, cmdName)
+		}); err != nil {
+			return err
 		}
 
 		return nil
@@ -86,11 +86,6 @@ func init() {
 	rootCmd.AddCommand(completionCmd)
 	completionCmd.AddCommand(bashCompletionCmd)
 	completionCmd.AddCommand(zshCompletionCmd)
-}
-
-// generateBashCompletion generates bash completion for the main 'sb' command
-func generateBashCompletion(path string) error {
-	return generateStaticBashCompletion(path, "sb")
 }
 
 // generateStaticBashCompletion creates a static completion script with tags embedded
@@ -345,16 +340,6 @@ func formatTagsForBash(tags []string) string {
 	return strings.Join(lines, "\n")
 }
 
-// generateBashCompletionAlias generates bash completion for the alias command (e.g., sb2)
-func generateBashCompletionAlias(path string) error {
-	return generateStaticBashCompletion(path, constants.CompletionAlias)
-}
-
-// generateZshCompletion generates zsh completion for the main 'sb' command
-func generateZshCompletion(path string) error {
-	return generateStaticZshCompletion(path, "sb")
-}
-
 // generateStaticZshCompletion creates a static zsh completion script with tags embedded
 func generateStaticZshCompletion(path, cmdName string) error {
 	// Load cache and get tags
@@ -600,11 +585,6 @@ func formatTagsForZsh(tags []string) string {
 		lines = append(lines, fmt.Sprintf("    %q", tag))
 	}
 	return strings.Join(lines, "\n")
-}
-
-// generateZshCompletionAlias generates zsh completion for the alias command (e.g., sb2)
-func generateZshCompletionAlias(path string) error {
-	return generateStaticZshCompletion(path, constants.CompletionAlias)
 }
 
 // installCompletion handles the common logic for installing completion scripts
