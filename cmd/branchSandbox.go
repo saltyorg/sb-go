@@ -32,16 +32,12 @@ func init() {
 func changeSandboxBranch(ctx context.Context, branchName string) error {
 	fmt.Println("Switching Sandbox repository branch...")
 
-	customCommands := [][]string{
-		{"cp", fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SandboxRepoPath), fmt.Sprintf("%s/ansible.cfg", constants.SandboxRepoPath)},
-	}
-
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
 		return err
 	}
 
-	err = git.FetchAndReset(ctx, constants.SandboxRepoPath, branchName, saltboxUser, customCommands, nil, "Sandbox")
+	err = git.FetchAndReset(ctx, constants.SandboxRepoPath, branchName, saltboxUser, nil, nil, "Sandbox")
 	if err != nil {
 		return err
 	}

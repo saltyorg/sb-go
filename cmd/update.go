@@ -182,15 +182,6 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 		return fmt.Errorf("error installing Python 3.12: %w", err)
 	}
 
-	// Set up custom commands for git
-	customCommands := [][]string{
-		{
-			"cp",
-			fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SaltboxRepoPath),
-			fmt.Sprintf("%s/ansible.cfg", constants.SaltboxRepoPath),
-		},
-	}
-
 	// Get old commit hash
 	oldCommitHash, err := git.GetGitCommitHash(ctx, constants.SaltboxRepoPath)
 	if err != nil {
@@ -198,7 +189,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(ctx, constants.SaltboxRepoPath, "master", saltboxUser, customCommands, branchReset, "Saltbox"); err != nil {
+	if err := git.FetchAndReset(ctx, constants.SaltboxRepoPath, "master", saltboxUser, nil, branchReset, "Saltbox"); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
@@ -250,15 +241,6 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 		return fmt.Errorf("error getting saltbox user: %w", err)
 	}
 
-	// Set up custom commands for git
-	customCommands := [][]string{
-		{
-			"cp",
-			fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SandboxRepoPath),
-			fmt.Sprintf("%s/ansible.cfg", constants.SandboxRepoPath),
-		},
-	}
-
 	// Get old commit hash
 	oldCommitHash, err := git.GetGitCommitHash(ctx, constants.SandboxRepoPath)
 	if err != nil {
@@ -266,7 +248,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(ctx, constants.SandboxRepoPath, "master", saltboxUser, customCommands, branchReset, "Sandbox"); err != nil {
+	if err := git.FetchAndReset(ctx, constants.SandboxRepoPath, "master", saltboxUser, nil, branchReset, "Sandbox"); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 

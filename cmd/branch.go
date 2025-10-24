@@ -34,16 +34,12 @@ func init() {
 func changeBranch(ctx context.Context, branchName string) error {
 	fmt.Println("Switching Saltbox repository branch...")
 
-	customCommands := [][]string{
-		{"cp", fmt.Sprintf("%s/defaults/ansible.cfg.default", constants.SaltboxRepoPath), fmt.Sprintf("%s/ansible.cfg", constants.SaltboxRepoPath)},
-	}
-
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
 		return err
 	}
 
-	err = git.FetchAndReset(ctx, constants.SaltboxRepoPath, branchName, saltboxUser, customCommands, nil, "Saltbox")
+	err = git.FetchAndReset(ctx, constants.SaltboxRepoPath, branchName, saltboxUser, nil, nil, "Saltbox")
 	if err != nil {
 		return err
 	}
