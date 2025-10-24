@@ -3,9 +3,13 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/runtime"
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -102,11 +106,16 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 
 	if verbose {
 		fmt.Printf("Debug: Parsed semver version: %s\n", v.String())
-		fmt.Println("Debug: Checking for latest release from GitHub")
+		fmt.Println("Debug: Checking for latest release from GitHub via Saltbox proxy")
 	}
 
+	// Create the Saltbox proxy source
+	proxySource := NewSaltboxProxySource("https://svm.saltbox.dev/version")
+
 	// First, check if an update is available without applying it
-	updater, err := selfupdate.NewUpdater(selfupdate.Config{})
+	updater, err := selfupdate.NewUpdater(selfupdate.Config{
+		Source: proxySource,
+	})
 	if err != nil {
 		if verbose {
 			fmt.Printf("Debug: Error creating updater: %v\n", err)
@@ -172,4 +181,191 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 	}
 	fmt.Println("")
 	return true, nil
+}
+
+// SaltboxProxySource implements the go-selfupdate Source interface
+// to route GitHub API calls through the Saltbox version proxy
+type SaltboxProxySource struct {
+	proxyBaseURL string
+	httpClient   *http.Client
+}
+
+// NewSaltboxProxySource creates a new Saltbox proxy source
+func NewSaltboxProxySource(proxyBaseURL string) *SaltboxProxySource {
+	return &SaltboxProxySource{
+		proxyBaseURL: proxyBaseURL,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}
+}
+
+// githubRelease represents the GitHub API release response
+type githubRelease struct {
+	ID          int64         `json:"id"`
+	TagName     string        `json:"tag_name"`
+	Name        string        `json:"name"`
+	Draft       bool          `json:"draft"`
+	Prerelease  bool          `json:"prerelease"`
+	PublishedAt string        `json:"published_at"`
+	Body        string        `json:"body"`
+	HTMLURL     string        `json:"html_url"`
+	Assets      []githubAsset `json:"assets"`
+}
+
+type githubAsset struct {
+	ID                 int64  `json:"id"`
+	Name               string `json:"name"`
+	Size               int    `json:"size"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
+// ListReleases fetches releases through the Saltbox proxy
+func (s *SaltboxProxySource) ListReleases(ctx context.Context, repository selfupdate.Repository) ([]selfupdate.SourceRelease, error) {
+	// Get repository owner and name
+	owner, name, err := repository.GetSlug()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository slug: %w", err)
+	}
+
+	// Construct the GitHub API URL for releases
+	githubAPIURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, name)
+
+	// Construct the proxied URL
+	proxyURL := fmt.Sprintf("%s?url=%s", s.proxyBaseURL, githubAPIURL)
+
+	// Make the request
+	req, err := http.NewRequestWithContext(ctx, "GET", proxyURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch releases: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("proxy returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse the response
+	var githubReleases []githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&githubReleases); err != nil {
+		return nil, fmt.Errorf("failed to decode releases: %w", err)
+	}
+
+	// Convert to SourceRelease format
+	releases := make([]selfupdate.SourceRelease, 0, len(githubReleases))
+	for _, ghRelease := range githubReleases {
+		releases = append(releases, newSaltboxRelease(ghRelease))
+	}
+
+	return releases, nil
+}
+
+// DownloadReleaseAsset downloads the actual release asset
+// Note: This downloads directly, not through the proxy
+func (s *SaltboxProxySource) DownloadReleaseAsset(ctx context.Context, rel *selfupdate.Release, assetID int64) (io.ReadCloser, error) {
+	// Get the download URL from the release's validated asset
+	downloadURL := rel.AssetURL
+
+	if downloadURL == "" {
+		return nil, fmt.Errorf("no asset URL found in release")
+	}
+
+	// Download the asset directly (not through proxy)
+	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create download request: %w", err)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download asset: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("download returned status %d", resp.StatusCode)
+	}
+
+	return resp.Body, nil
+}
+
+// saltboxRelease wraps githubRelease to implement SourceRelease interface
+type saltboxRelease struct {
+	release githubRelease
+}
+
+func newSaltboxRelease(ghRelease githubRelease) *saltboxRelease {
+	return &saltboxRelease{release: ghRelease}
+}
+
+func (r *saltboxRelease) GetID() int64 {
+	return r.release.ID
+}
+
+func (r *saltboxRelease) GetTagName() string {
+	return r.release.TagName
+}
+
+func (r *saltboxRelease) GetDraft() bool {
+	return r.release.Draft
+}
+
+func (r *saltboxRelease) GetPrerelease() bool {
+	return r.release.Prerelease
+}
+
+func (r *saltboxRelease) GetPublishedAt() time.Time {
+	t, _ := time.Parse(time.RFC3339, r.release.PublishedAt)
+	return t
+}
+
+func (r *saltboxRelease) GetReleaseNotes() string {
+	return r.release.Body
+}
+
+func (r *saltboxRelease) GetName() string {
+	return r.release.Name
+}
+
+func (r *saltboxRelease) GetURL() string {
+	return r.release.HTMLURL
+}
+
+func (r *saltboxRelease) GetAssets() []selfupdate.SourceAsset {
+	assets := make([]selfupdate.SourceAsset, 0, len(r.release.Assets))
+	for _, asset := range r.release.Assets {
+		assets = append(assets, newSaltboxAsset(asset))
+	}
+	return assets
+}
+
+// saltboxAsset wraps githubAsset to implement SourceAsset interface
+type saltboxAsset struct {
+	asset githubAsset
+}
+
+func newSaltboxAsset(ghAsset githubAsset) *saltboxAsset {
+	return &saltboxAsset{asset: ghAsset}
+}
+
+func (a *saltboxAsset) GetID() int64 {
+	return a.asset.ID
+}
+
+func (a *saltboxAsset) GetName() string {
+	return a.asset.Name
+}
+
+func (a *saltboxAsset) GetSize() int {
+	return a.asset.Size
+}
+
+func (a *saltboxAsset) GetBrowserDownloadURL() string {
+	return a.asset.BrowserDownloadURL
 }
