@@ -41,7 +41,7 @@ After installation, restart your shell or source the completion file.`,
 var bashCompletionCmd = &cobra.Command{
 	Use:   "bash",
 	Short: "Install bash completion",
-	Long:  `Installs bash completion script for the current binary name.
+	Long: `Installs bash completion script for the current binary name.
 
 After installation, restart your shell or source the completion file.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,7 +63,7 @@ After installation, restart your shell or source the completion file.`,
 var zshCompletionCmd = &cobra.Command{
 	Use:   "zsh",
 	Short: "Install zsh completion",
-	Long:  `Installs zsh completion script for the current binary name.
+	Long: `Installs zsh completion script for the current binary name.
 
 After installation, restart your shell or run:
   autoload -U compinit && compinit`,
