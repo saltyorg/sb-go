@@ -88,24 +88,58 @@ func init() {
 	completionCmd.AddCommand(zshCompletionCmd)
 }
 
-// generateStaticBashCompletion creates a static completion script with tags embedded
+// generateStaticBashCompletion creates a hybrid bash completion script:
+// - Uses Cobra's native completion for all commands and subcommands
+// - Adds custom tag completion logic for the 'install' command
 func generateStaticBashCompletion(path, cmdName string) error {
-	// Load cache and get tags
+	// Load cache and get tags for install command
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
 		return fmt.Errorf("failed to load cache: %w", err)
 	}
 
-	// Get tags from cache
 	tags := getCompletionTags(cacheInstance)
 	if len(tags) == 0 {
 		return fmt.Errorf("no tags found in cache - run 'sb list' first to populate the cache")
 	}
 
-	// Generate the static completion script
-	script := fmt.Sprintf(`# bash completion for %s                                   -*- shell-script -*-
+	// Create a temporary file to get Cobra's native completion
+	tmpFile, err := os.CreateTemp("", "cobra-completion-*.bash")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
 
-_%s_install_completion() {
+	// Generate Cobra's native completion (without descriptions for cleaner output)
+	if err := rootCmd.GenBashCompletionV2(tmpFile, false); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to generate bash completion: %w", err)
+	}
+	tmpFile.Close()
+
+	// Read the generated completion
+	cobraCompletion, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to read cobra completion: %w", err)
+	}
+
+	// Create the hybrid completion file
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("failed to create completion file: %w", err)
+	}
+	defer file.Close()
+
+	// Write Cobra's native completion first
+	if _, err := file.Write(cobraCompletion); err != nil {
+		return fmt.Errorf("failed to write cobra completion: %w", err)
+	}
+
+	// Append our custom install tag completion wrapper
+	customInstallCompletion := fmt.Sprintf(`
+# Custom tag completion for 'install' command with comma-separated support
+_%s_custom_install_tags() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
     local prev="${COMP_WORDS[COMP_CWORD-1]}"
 
@@ -116,8 +150,6 @@ _%s_install_completion() {
 
     # Check if current word has commas without spaces - if so, reformat it
     if [[ "$cur" == *,* ]] && [[ "$cur" != *, ]]; then
-        # The current word has commas but doesn't end with comma
-        # Split it and reformat with spaces
         local reformatted=""
         IFS=',' read -ra parts <<< "$cur"
         local last_part=""
@@ -125,15 +157,12 @@ _%s_install_completion() {
 
         for ((i=0; i<${#parts[@]}; i++)); do
             local part="${parts[i]}"
-            # Trim any existing spaces
             part="${part# }"
             part="${part%% }"
 
             if [[ $i -eq $((${#parts[@]}-1)) ]]; then
-                # This is the last part (potentially incomplete)
                 last_part="$part"
             else
-                # Add to reformatted string with comma and space
                 if [[ -n "$reformatted" ]]; then
                     reformatted="${reformatted}, ${part}"
                 else
@@ -142,12 +171,10 @@ _%s_install_completion() {
             fi
         done
 
-        # Now set up completion based on the reformatted string
         if [[ -n "$reformatted" ]]; then
             local prefix="${reformatted}, "
             cur="$last_part"
 
-            # Get already specified tags from the reformatted string
             local already_specified=()
             IFS=',' read -ra specified_tags <<< "$reformatted"
             for tag in "${specified_tags[@]}"; do
@@ -158,7 +185,6 @@ _%s_install_completion() {
                 fi
             done
 
-            # Filter out already specified tags
             local available_tags=()
             for tag in "${tags[@]}"; do
                 local found=0
@@ -173,7 +199,6 @@ _%s_install_completion() {
                 fi
             done
 
-            # Generate completions
             local matches=()
             for tag in "${available_tags[@]}"; do
                 if [[ "$tag" == "$cur"* ]]; then
@@ -187,29 +212,24 @@ _%s_install_completion() {
         fi
     fi
 
-    # Get all already specified tags (from all previous words)
+    # Get all already specified tags
     local already_specified=()
     local i
     for ((i=2; i<=$COMP_CWORD; i++)); do
         local word="${COMP_WORDS[i]}"
-        # Remove trailing comma and spaces
         word="${word%%,}"
         word="${word# }"
         word="${word%% }"
 
-        # Skip empty words and the current word being completed
         if [[ -n "$word" ]] && [[ "$word" != "install" ]] && [[ $i -ne $COMP_CWORD ]]; then
             already_specified+=("$word")
         fi
     done
 
-    # Also check current word for already typed tags (before the last comma)
     if [[ "$cur" == *,* ]]; then
-        # Split by comma and add all but the last part
         local cur_prefix="${cur%%,*}"
         IFS=',' read -ra cur_tags <<< "$cur_prefix"
         for tag in "${cur_tags[@]}"; do
-            # Trim spaces
             tag="${tag# }"
             tag="${tag%% }"
             if [[ -n "$tag" ]]; then
@@ -233,36 +253,28 @@ _%s_install_completion() {
         fi
     done
 
-    # Handle comma-separated tags with spaces
+    # Handle comma-separated tags
     if [[ "$cur" == *,* ]]; then
-        # Get the prefix (everything before the last comma) and the partial tag after the last comma
         local prefix="${cur%%,*},"
         local partial="${cur##*,}"
 
-        # Handle case where there's a space after the comma
         if [[ "$partial" == " "* ]]; then
-            partial="${partial# }"  # Remove leading space
-            prefix="${prefix} "     # Add space to prefix
+            partial="${partial# }"
+            prefix="${prefix} "
         fi
 
-        # Generate completions for the partial tag
         local matches=()
         for tag in "${available_tags[@]}"; do
             if [[ "$tag" == "$partial"* ]]; then
-                # Add comma and space after the tag for easier chaining
                 matches+=("${prefix}${tag}, ")
             fi
         done
 
         COMPREPLY=("${matches[@]}")
-
-        # Disable space after completion since we're adding it ourselves
         compopt -o nospace 2>/dev/null
     elif [[ "$prev" == "," ]]; then
-        # If previous char is a comma, complete with available tags
         COMPREPLY=($(compgen -W "${available_tags[*]}" -- "$cur"))
 
-        # Add comma and space after each completion for chaining
         local i
         for i in "${!COMPREPLY[@]}"; do
             COMPREPLY[$i]="${COMPREPLY[$i]}, "
@@ -270,34 +282,19 @@ _%s_install_completion() {
 
         compopt -o nospace 2>/dev/null
     else
-        # No comma in current word, complete normally with available tags
         COMPREPLY=($(compgen -W "${available_tags[*]}" -- "$cur"))
 
-        # For space-separated completion, let bash add space automatically
-        # For potential comma-separated, disable space so user can add comma
         if [[ ${#COMPREPLY[@]} -eq 1 ]]; then
-            # Single match - user might want to add comma or space
             compopt -o nospace 2>/dev/null
         fi
     fi
 }
 
-_%s_completion() {
-    local cur prev
-    COMPREPLY=()
-    cur="${COMP_WORDS[COMP_CWORD]}"
-    prev="${COMP_WORDS[COMP_CWORD-1]}"
+# Wrapper to override completion for 'install' command
+_%s_custom() {
+    local cur="${COMP_WORDS[COMP_CWORD]}"
 
-    # List of main commands
-    local commands="install list update version completion"
-
-    # If we're completing the first argument (the command)
-    if [ $COMP_CWORD -eq 1 ]; then
-        COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-        return 0
-    fi
-
-    # Check if 'install' command was used anywhere in the command line
+    # Check if 'install' command is in the command line
     local has_install=0
     local i
     for ((i=1; i<COMP_CWORD; i++)); do
@@ -307,25 +304,22 @@ _%s_completion() {
         fi
     done
 
-    # If we have 'install' command, complete with tags
-    if [[ $has_install -eq 1 ]] || [[ "$cur" == *,* ]]; then
-        _%s_install_completion
-        return 0
+    # If install command and we're past it, use custom tag completion
+    if [[ $has_install -eq 1 ]] && [[ $COMP_CWORD -gt 1 ]]; then
+        _%s_custom_install_tags
+        return
     fi
+
+    # Otherwise use Cobra's native completion
+    __start_%s
 }
 
-complete -F _%s_completion %s
-`, cmdName, cmdName, formatTagsForBash(tags), cmdName, cmdName, cmdName, cmdName)
+# Replace the default completion function with our custom wrapper
+complete -o default -F _%s_custom %s
+`, cmdName, formatTagsForBash(tags), cmdName, cmdName, cmdName, cmdName, cmdName)
 
-	// Write to file
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	if _, err := file.WriteString(script); err != nil {
-		return err
+	if _, err := file.WriteString(customInstallCompletion); err != nil {
+		return fmt.Errorf("failed to write custom completion: %w", err)
 	}
 
 	return nil
@@ -340,79 +334,81 @@ func formatTagsForBash(tags []string) string {
 	return strings.Join(lines, "\n")
 }
 
-// generateStaticZshCompletion creates a static zsh completion script with tags embedded
+// generateStaticZshCompletion creates a hybrid zsh completion script:
+// - Uses Cobra's native completion for all commands and subcommands
+// - Adds custom tag completion logic for the 'install' command
 func generateStaticZshCompletion(path, cmdName string) error {
-	// Load cache and get tags
+	// Load cache and get tags for install command
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
 		return fmt.Errorf("failed to load cache: %w", err)
 	}
 
-	// Get tags from cache
 	tags := getCompletionTags(cacheInstance)
 	if len(tags) == 0 {
 		return fmt.Errorf("no tags found in cache - run 'sb list' first to populate the cache")
 	}
 
-	// Generate the static completion script
-	script := fmt.Sprintf(`#compdef %s
+	// Create a temporary file to get Cobra's native completion
+	tmpFile, err := os.CreateTemp("", "cobra-completion-*.zsh")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
 
-# %s zsh completion script
+	// Generate Cobra's native completion
+	if err := rootCmd.GenZshCompletion(tmpFile); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to generate zsh completion: %w", err)
+	}
+	tmpFile.Close()
 
-_%s() {
-    local -a tags commands
-    local context state line
+	// Read the generated completion
+	cobraCompletion, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to read cobra completion: %w", err)
+	}
 
-    # List of main commands
-    commands=(
-        'install:Install specified tags'
-        'list:List available tags'
-        'update:Update %s'
-        'version:Show version'
-        'completion:Generate completion script'
-    )
+	// Create the hybrid completion file
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("failed to create completion file: %w", err)
+	}
+	defer file.Close()
+
+	// Write Cobra's native completion first
+	if _, err := file.Write(cobraCompletion); err != nil {
+		return fmt.Errorf("failed to write cobra completion: %w", err)
+	}
+
+	// Append our custom install tag completion wrapper
+	customInstallCompletion := fmt.Sprintf(`
+# Custom tag completion for 'install' command with comma-separated support
+_%s_custom_install_tags() {
+    local cur_word="${words[CURRENT]}"
+    local -a already_specified available_tags
 
     # Static list of available tags
+    local -a tags
     tags=(
 %s
     )
 
-    # First argument should be a command
-    if [[ CURRENT -eq 2 ]]; then
-        _describe -t commands '%s commands' commands
-        return
-    fi
-
-    # If we're past the command and the command was 'install'
-    if [[ ${words[2]} == "install" ]] && [[ CURRENT -ge 3 ]]; then
-        _%s_install_tags
-    fi
-}
-
-_%s_install_tags() {
-    local cur_word="${words[CURRENT]}"
-    local -a already_specified available_tags
-    local tag specified
-
-    # Function to extract all already specified tags from the command line
+    # Function to extract all already specified tags
     _extract_specified_tags() {
         local word part
         already_specified=()
 
-        # Check all previous words (skip '%s' and 'install')
         for ((i=3; i<CURRENT; i++)); do
             word="${words[i]}"
-            # Handle both space-separated and comma-separated tags
             if [[ "$word" == *,* ]]; then
-                # Split by comma
                 for part in ${(s:,:)word}; do
-                    # Trim spaces
                     part="${part## }"
                     part="${part%%%% }"
                     [[ -n "$part" ]] && already_specified+=("$part")
                 done
             else
-                # Single tag
                 word="${word%%,}"
                 word="${word## }"
                 word="${word%%%% }"
@@ -420,9 +416,7 @@ _%s_install_tags() {
             fi
         done
 
-        # Also process the current word if it contains commas
         if [[ "$cur_word" == *,* ]]; then
-            # Get all but the last comma-separated part
             local prefix="${cur_word%%,*}"
             for part in ${(s:,:)prefix}; do
                 part="${part## }"
@@ -432,7 +426,6 @@ _%s_install_tags() {
         fi
     }
 
-    # Extract already specified tags
     _extract_specified_tags
 
     # Filter available tags
@@ -450,32 +443,26 @@ _%s_install_tags() {
 
     # Handle comma-separated input
     if [[ "$cur_word" == *,* ]]; then
-        # Check if we need to reformat (has commas without proper spaces)
         local needs_reformat=0
         local test_word="$cur_word"
 
-        # Check if there are commas not followed by spaces (except at the end)
         if [[ "$test_word" =~ ',[^ ]' ]] && [[ "$test_word" != *, ]]; then
             needs_reformat=1
         fi
 
         if [[ $needs_reformat -eq 1 ]]; then
-            # Split and reformat with spaces
             local reformatted=""
             local parts=(${(s:,:)cur_word})
             local last_part=""
 
             for ((i=1; i<=$#parts; i++)); do
                 local part="${parts[i]}"
-                # Trim spaces
                 part="${part## }"
                 part="${part%%%% }"
 
                 if [[ $i -eq $#parts ]]; then
-                    # Last part (potentially incomplete)
                     last_part="$part"
                 else
-                    # Add to reformatted string
                     if [[ -n "$reformatted" ]]; then
                         reformatted="${reformatted}, ${part}"
                     else
@@ -484,7 +471,6 @@ _%s_install_tags() {
                 fi
             done
 
-            # Build completions with reformatted prefix
             if [[ -n "$reformatted" ]]; then
                 local prefix="${reformatted}, "
                 local -a matches
@@ -496,28 +482,21 @@ _%s_install_tags() {
                 done
 
                 if [[ ${#matches} -gt 0 ]]; then
-                    # -U: Use the matches as-is, replacing the entire current word
-                    # -Q: Don't quote special characters
-                    # -S ', ': Add suffix for continuation
                     compadd -U -Q -S ', ' -- $matches
                     return
                 fi
             fi
         else
-            # Already properly formatted or ends with comma
             local prefix="${cur_word%%,*},"
             local partial="${cur_word##*,}"
 
-            # Handle space after comma
             if [[ "$partial" == " "* ]]; then
                 partial="${partial# }"
                 prefix="${prefix} "
             else
-                # No space after comma, add it
                 prefix="${prefix} "
             fi
 
-            # Generate matches
             local -a matches
             for tag in $available_tags; do
                 if [[ "$tag" == ${partial}* ]]; then
@@ -526,14 +505,11 @@ _%s_install_tags() {
             done
 
             if [[ ${#matches} -gt 0 ]]; then
-                # Replace the entire word with properly formatted version
                 compadd -U -Q -S ', ' -- $matches
                 return
             fi
         fi
     else
-        # No comma in current word
-        # Complete and add ", " suffix to encourage proper formatting
         if [[ ${#available_tags} -gt 0 ]]; then
             local -a matching_tags
             for tag in $available_tags; do
@@ -543,36 +519,43 @@ _%s_install_tags() {
             done
 
             if [[ ${#matching_tags} -gt 0 ]]; then
-                # Add completions with ", " suffix to encourage comma-space format
                 compadd -Q -S ', ' -- $matching_tags
             fi
         fi
     fi
 }
 
-# Special handling for zsh's menu completion
-zstyle ':completion:*:*:%s:*:*' menu select
+# Wrapper function to override install command completion
+_%s_custom() {
+    local line state
 
-# Group the completions nicely
-zstyle ':completion:*:descriptions' format '%%B%%d%%b'
-zstyle ':completion:*:*:%s:*' group-name ''
+    _arguments -C \
+        "1: :->cmds" \
+        "*::arg:->args"
 
-# Don't sort the tags alphabetically - keep them in the order defined
-zstyle ':completion:*:*:%s:*:*' sort false
+    case "$state" in
+        cmds)
+            _%s
+            ;;
+        args)
+            case ${line[1]} in
+                install)
+                    _%s_custom_install_tags
+                    ;;
+                *)
+                    _%s
+                    ;;
+            esac
+            ;;
+    esac
+}
 
-# Register the completion function
-compdef _%s %s
-`, cmdName, cmdName, cmdName, cmdName, formatTagsForZsh(tags), cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName)
+# Replace default completion with custom wrapper
+compdef _%s_custom %s
+`, cmdName, formatTagsForZsh(tags), cmdName, cmdName, cmdName, cmdName, cmdName, cmdName)
 
-	// Write to file
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	if _, err := file.WriteString(script); err != nil {
-		return err
+	if _, err := file.WriteString(customInstallCompletion); err != nil {
+		return fmt.Errorf("failed to write custom completion: %w", err)
 	}
 
 	return nil
