@@ -192,7 +192,7 @@ func ConfigureLocale(ctx context.Context) error {
 // PythonVenv installs Python using uv and creates the Ansible venv.
 // The context parameter allows for cancellation of long-running operations.
 func PythonVenv(ctx context.Context, verbose bool) error {
-	_ = spinners.RunInfoSpinner("Installing Python 3.12 using uv")
+	_ = spinners.RunInfoSpinner(fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion))
 
 	// Download and install uv
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Downloading and installing uv", func() error {
@@ -209,11 +209,11 @@ func PythonVenv(ctx context.Context, verbose bool) error {
 		return fmt.Errorf("error creating %s: %w", pythonDir, err)
 	}
 
-	// Install Python 3.12 using uv
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing Python 3.12 using uv", func() error {
+	// Install Python using uv
+	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion), func() error {
 		return uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
-		return fmt.Errorf("error installing Python 3.12: %w", err)
+		return fmt.Errorf("error installing Python %s: %w", constants.AnsibleVenvPythonVersion, err)
 	}
 
 	// Create venv using uv

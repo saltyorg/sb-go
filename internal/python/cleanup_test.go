@@ -9,20 +9,20 @@ import (
 
 // TestDeadsnakesPackages tests that the correct package list is generated
 func TestDeadsnakesPackages(t *testing.T) {
-	pythonVersion := "3.12"
+	pythonVersion := constants.AnsibleVenvPythonVersion
 	packages := DeadsnakesPackages(pythonVersion)
 
 	// Check that we have the expected packages
 	expectedPackages := []string{
-		"python3.12",
-		"python3.12-dev",
-		"python3.12-distutils",
-		"python3.12-venv",
-		"libpython3.12",
-		"libpython3.12-dev",
-		"libpython3.12-minimal",
-		"libpython3.12-stdlib",
-		"python3.12-minimal",
+		"python" + pythonVersion,
+		"python" + pythonVersion + "-dev",
+		"python" + pythonVersion + "-distutils",
+		"python" + pythonVersion + "-venv",
+		"libpython" + pythonVersion,
+		"libpython" + pythonVersion + "-dev",
+		"libpython" + pythonVersion + "-minimal",
+		"libpython" + pythonVersion + "-stdlib",
+		"python" + pythonVersion + "-minimal",
 	}
 
 	if len(packages) != len(expectedPackages) {

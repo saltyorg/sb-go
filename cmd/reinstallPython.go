@@ -36,7 +36,7 @@ func handleReinstallPython(ctx context.Context, verbose bool) error {
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
-	_ = spinners.RunInfoSpinner("Reinstalling Python 3.12 using uv and recreating Ansible venv")
+	_ = spinners.RunInfoSpinner(fmt.Sprintf("Reinstalling Python %s using uv and recreating Ansible venv", constants.AnsibleVenvPythonVersion))
 
 	// Ensure uv is installed
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Ensuring uv is installed", func() error {
@@ -52,7 +52,7 @@ func handleReinstallPython(ctx context.Context, verbose bool) error {
 		return fmt.Errorf("error creating python install dir: %w", err)
 	}
 
-	// Check if Python 3.12 is installed
+	// Check if Python is already installed
 	pythonInstalled := false
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for installed Python versions", func() error {
 		versions, err := uv.ListInstalledPythons(ctx)

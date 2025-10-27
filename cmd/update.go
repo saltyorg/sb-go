@@ -175,11 +175,11 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 		return fmt.Errorf("error creating Python install directory: %w", err)
 	}
 
-	// Ensure Python 3.12 is installed via uv
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Ensuring Python 3.12 is installed", func() error {
+	// Ensure Python is installed via uv
+	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion), func() error {
 		return uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
-		return fmt.Errorf("error installing Python 3.12: %w", err)
+		return fmt.Errorf("error installing Python %s: %w", constants.AnsibleVenvPythonVersion, err)
 	}
 
 	// Get old commit hash

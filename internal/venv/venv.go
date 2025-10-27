@@ -39,7 +39,7 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 			return err
 		}
 	} else if pythonMissing {
-		if err := spinners.RunWarningSpinner("Python 3.12 not detected in venv, recreation required"); err != nil {
+		if err := spinners.RunWarningSpinner(fmt.Sprintf("Python %s not detected in venv, recreation required", constants.AnsibleVenvPythonVersion)); err != nil {
 			return err
 		}
 	}
@@ -146,7 +146,7 @@ func checkPythonVersion(ctx context.Context, ansibleVenvPath, venvPythonPath str
 		return true, nil
 	}
 
-	// Parse version output (format: "Python 3.12.x")
+	// Parse version output (format: "Python X.YZ.x")
 	versionStr := strings.TrimSpace(string(result.Combined))
 	if !strings.HasPrefix(versionStr, "Python "+constants.AnsibleVenvPythonVersion) {
 		// Wrong Python version, needs recreation
