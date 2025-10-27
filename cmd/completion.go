@@ -100,8 +100,14 @@ func generateStaticBashCompletion(path, cmdName string) error {
 
 	tags := getCompletionTags(cacheInstance)
 	if len(tags) == 0 {
-		return fmt.Errorf("no tags found in cache - run 'sb list' first to populate the cache")
+		return fmt.Errorf("no tags found in cache - run '%s list' first to populate the cache", cmdName)
 	}
+
+	// Temporarily set the root command's Use field to match the binary name
+	// so Cobra generates completion with the correct command name
+	originalUse := rootCmd.Use
+	rootCmd.Use = cmdName
+	defer func() { rootCmd.Use = originalUse }()
 
 	// Create a temporary file to get Cobra's native completion
 	tmpFile, err := os.CreateTemp("", "cobra-completion-*.bash")
@@ -346,8 +352,14 @@ func generateStaticZshCompletion(path, cmdName string) error {
 
 	tags := getCompletionTags(cacheInstance)
 	if len(tags) == 0 {
-		return fmt.Errorf("no tags found in cache - run 'sb list' first to populate the cache")
+		return fmt.Errorf("no tags found in cache - run '%s list' first to populate the cache", cmdName)
 	}
+
+	// Temporarily set the root command's Use field to match the binary name
+	// so Cobra generates completion with the correct command name
+	originalUse := rootCmd.Use
+	rootCmd.Use = cmdName
+	defer func() { rootCmd.Use = originalUse }()
 
 	// Create a temporary file to get Cobra's native completion
 	tmpFile, err := os.CreateTemp("", "cobra-completion-*.zsh")
