@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/executor"
 )
@@ -51,23 +52,64 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 // The verbose flag determines whether the command output is streamed to the console or discarded.
 // If the command fails, a detailed error message is returned, including the exit code.
 // The context parameter allows for cancellation of the update process.
+//
+// This function implements retry logic with exponential backoff to handle transient mirror sync
+// failures that can occur during CI runs. If apt-get update fails and the error message indicates
+// a mirror sync issue (e.g., "Mirror sync in progress?", "File has unexpected size"), it will
+// retry up to 3 times with delays of 5s, 10s, and 20s between attempts.
 func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 	return func() error {
-		// Run the command with the unified executor
-		err := executor.RunVerbose(ctx, "sudo", []string{"apt-get", "update"}, verbose,
-			executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
+		const maxRetries = 3
+		const initialDelay = 5 * time.Second
 
-		// Handle errors from the update command.
-		if err != nil {
-			return fmt.Errorf("failed to update package lists: %w", err)
+		var lastErr error
+		delay := initialDelay
+
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			// Run the command with the unified executor
+			err := executor.RunVerbose(ctx, "sudo", []string{"apt-get", "update"}, verbose,
+				executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
+
+			// Success - return immediately
+			if err == nil {
+				if verbose {
+					fmt.Println("Package lists updated successfully.")
+				}
+				return nil
+			}
+
+			// Save the error for potential retry
+			lastErr = err
+
+			// Check if this is a transient mirror sync error worth retrying
+			errStr := err.Error()
+			isMirrorSyncError := strings.Contains(errStr, "Mirror sync in progress") ||
+				strings.Contains(errStr, "File has unexpected size") ||
+				strings.Contains(errStr, "Hashes of expected file")
+
+			// If it's not a mirror sync error, or we've exhausted retries, fail immediately
+			if !isMirrorSyncError || attempt == maxRetries {
+				break
+			}
+
+			// Log retry attempt if verbose
+			if verbose {
+				fmt.Printf("apt-get update failed (attempt %d/%d), retrying in %v due to transient mirror sync error...\n",
+					attempt, maxRetries, delay)
+			}
+
+			// Wait before retrying
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("failed to update package lists: context cancelled during retry: %w", ctx.Err())
+			case <-time.After(delay):
+				// Double the delay for next attempt (exponential backoff: 5s -> 10s -> 20s)
+				delay *= 2
+			}
 		}
 
-		// Notify success if verbose.
-		if verbose {
-			fmt.Println("Package lists updated successfully.")
-		}
-
-		return nil
+		// All retries exhausted or non-retryable error
+		return fmt.Errorf("failed to update package lists: %w", lastErr)
 	}
 }
 
