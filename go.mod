@@ -11,13 +11,13 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/cloudflare/cloudflare-go/v6 v6.1.0
+	github.com/cloudflare/cloudflare-go/v6 v6.2.0
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/moby/moby/api v1.52.0-beta.2
 	github.com/moby/moby/client v0.1.0-beta.2
 	github.com/saltydk/go-rtorrent v1.0.1
-	github.com/sj14/jellyfin-go v0.3.4-0.20251003074752-9965db6d6b4d
+	github.com/sj14/jellyfin-go v0.4.1
 	github.com/spf13/cobra v1.10.1
 	golang.org/x/crypto v0.43.0
 	golang.org/x/net v0.46.0
@@ -29,7 +29,7 @@ require (
 )
 
 require (
-	code.gitea.io/sdk/gitea v0.22.0 // indirect
+	code.gitea.io/sdk/gitea v0.22.1 // indirect
 	github.com/42wim/httpsig v1.2.3 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
@@ -42,9 +42,10 @@ require (
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/x/ansi v0.10.2 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
-	github.com/charmbracelet/x/exp/slice v0.0.0-20251013190359-01371c2be815 // indirect
+	github.com/charmbracelet/x/exp/slice v0.0.0-20251028133951-21a390f3cede // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
-	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
+	github.com/clipperhouse/stringish v0.1.1 // indirect
+	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
@@ -54,7 +55,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -93,13 +94,13 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
-	gitlab.com/gitlab-org/api/client-go v0.157.0 // indirect
+	gitlab.com/gitlab-org/api/client-go v0.157.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/metric v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
-	golang.org/x/exp v0.0.0-20251009144603-d2f985daa21b // indirect
+	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/oauth2 v0.32.0 // indirect
 	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
