@@ -57,18 +57,28 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 // failures that can occur during CI runs. If apt-get update fails and the error message indicates
 // a mirror sync issue (e.g., "Mirror sync in progress?", "File has unexpected size"), it will
 // retry up to 3 times with delays of 5s, 10s, and 20s between attempts.
+//
+// Each attempt has a 2-minute timeout to prevent indefinite hangs on extremely slow mirrors.
+// Timeout errors are treated as retryable, just like mirror sync errors.
 func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 	return func() error {
 		const maxRetries = 3
 		const initialDelay = 5 * time.Second
+		const attemptTimeout = 2 * time.Minute
 
 		var lastErr error
 		delay := initialDelay
 
 		for attempt := 1; attempt <= maxRetries; attempt++ {
+			// Create a timeout context for this attempt
+			attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+
 			// Run the command with the unified executor
-			err := executor.RunVerbose(ctx, "sudo", []string{"apt-get", "update"}, verbose,
+			err := executor.RunVerbose(attemptCtx, "sudo", []string{"apt-get", "update"}, verbose,
 				executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
+
+			// Clean up the timeout context
+			cancel()
 
 			// Success - return immediately
 			if err == nil {
@@ -81,21 +91,32 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 			// Save the error for potential retry
 			lastErr = err
 
+			// Check if the attempt timed out
+			isTimeout := attemptCtx.Err() == context.DeadlineExceeded
+
 			// Check if this is a transient mirror sync error worth retrying
 			errStr := err.Error()
 			isMirrorSyncError := strings.Contains(errStr, "Mirror sync in progress") ||
 				strings.Contains(errStr, "File has unexpected size") ||
 				strings.Contains(errStr, "Hashes of expected file")
 
-			// If it's not a mirror sync error, or we've exhausted retries, fail immediately
-			if !isMirrorSyncError || attempt == maxRetries {
+			// Determine if this error is retryable
+			isRetryable := isTimeout || isMirrorSyncError
+
+			// If it's not retryable, or we've exhausted retries, fail immediately
+			if !isRetryable || attempt == maxRetries {
 				break
 			}
 
 			// Log retry attempt if verbose
 			if verbose {
-				fmt.Printf("apt-get update failed (attempt %d/%d), retrying in %v due to transient mirror sync error...\n",
-					attempt, maxRetries, delay)
+				if isTimeout {
+					fmt.Printf("apt-get update timed out after %v (attempt %d/%d), retrying in %v...\n",
+						attemptTimeout, attempt, maxRetries, delay)
+				} else {
+					fmt.Printf("apt-get update failed (attempt %d/%d), retrying in %v due to transient mirror sync error...\n",
+						attempt, maxRetries, delay)
+				}
 			}
 
 			// Wait before retrying
