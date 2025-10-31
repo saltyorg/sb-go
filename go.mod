@@ -14,10 +14,10 @@ require (
 	github.com/cloudflare/cloudflare-go/v6 v6.2.0
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/go-playground/validator/v10 v10.28.0
-	github.com/moby/moby/api v1.52.0-beta.2
-	github.com/moby/moby/client v0.1.0-beta.2
+	github.com/moby/moby/api v1.52.0-beta.4
+	github.com/moby/moby/client v0.1.0-beta.3
 	github.com/saltydk/go-rtorrent v1.0.1
-	github.com/sj14/jellyfin-go v0.4.1
+	github.com/sj14/jellyfin-go v0.4.2
 	github.com/spf13/cobra v1.10.1
 	golang.org/x/crypto v0.43.0
 	golang.org/x/net v0.46.0
@@ -31,7 +31,6 @@ require (
 require (
 	code.gitea.io/sdk/gitea v0.22.1 // indirect
 	github.com/42wim/httpsig v1.2.3 // indirect
-	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/alecthomas/chroma/v2 v2.20.0 // indirect
@@ -42,8 +41,8 @@ require (
 	github.com/charmbracelet/colorprofile v0.3.2 // indirect
 	github.com/charmbracelet/x/ansi v0.10.2 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
-	github.com/charmbracelet/x/exp/slice v0.0.0-20251028133951-21a390f3cede // indirect
-	github.com/charmbracelet/x/term v0.2.1 // indirect
+	github.com/charmbracelet/x/exp/slice v0.0.0-20251031172406-4542a189d0fb // indirect
+	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -75,7 +74,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/term v0.5.2 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect

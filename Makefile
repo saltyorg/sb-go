@@ -30,7 +30,7 @@ NC := \033[0m # No Color
 .DEFAULT_GOAL := build
 
 # Phony targets (don't produce files with these names)
-.PHONY: all build test clean fmt vet lint run help version deps tidy check modernize
+.PHONY: all build test clean fmt vet lint run help version deps tidy update update-patch check modernize
 
 ##@ General
 
@@ -121,6 +121,18 @@ tidy: ## Tidy and verify dependencies
 	@echo "$(GREEN)Tidying dependencies...$(NC)"
 	go mod tidy
 	go mod verify
+
+update: ## Update all dependencies to latest minor/patch versions
+	@echo "$(GREEN)Updating dependencies...$(NC)"
+	go get -u ./...
+	go mod tidy
+	@echo "$(GREEN)Dependencies updated$(NC)"
+
+update-patch: ## Update dependencies to latest patch versions only
+	@echo "$(GREEN)Updating dependencies (patch only)...$(NC)"
+	go get -u=patch ./...
+	go mod tidy
+	@echo "$(GREEN)Dependencies updated (patch only)$(NC)"
 
 ##@ Running
 
