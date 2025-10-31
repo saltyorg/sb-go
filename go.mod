@@ -14,10 +14,10 @@ require (
 	github.com/cloudflare/cloudflare-go/v6 v6.2.0
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/go-playground/validator/v10 v10.28.0
-	github.com/moby/moby/api v1.52.0-beta.2
+	github.com/moby/moby/api v1.52.0-beta.3
 	github.com/moby/moby/client v0.1.0-beta.2
 	github.com/saltydk/go-rtorrent v1.0.1
-	github.com/sj14/jellyfin-go v0.4.1
+	github.com/sj14/jellyfin-go v0.4.2
 	github.com/spf13/cobra v1.10.1
 	golang.org/x/crypto v0.43.0
 	golang.org/x/net v0.46.0
