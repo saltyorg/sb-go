@@ -43,36 +43,36 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 
 		// Process container information
 		var containers []containerInfo
-		for _, cs := range containersSummary {
-			containerInspect, err := cli.ContainerInspect(ctx, cs.ID)
+		for _, cs := range containersSummary.Items {
+			containerInspect, err := cli.ContainerInspect(ctx, cs.ID, client.ContainerInspectOptions{})
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "Error inspecting container %s: %v\n", cs.ID[:12], err)
 				continue
 			}
 
-			internalPorts := getTraefikInternalPorts(containerInspect.Config.Labels)
+			internalPorts := getTraefikInternalPorts(containerInspect.Container.Config.Labels)
 			deduplicatedInternalPorts := deduplicate(internalPorts)
-			externalPorts := getExternalPortBindings(containerInspect.NetworkSettings.Ports)
+			externalPorts := getExternalPortBindings(containerInspect.Container.NetworkSettings.Ports)
 
 			containerName := cs.Names[0][1:] // Remove the leading slash
 
 			var statusText string
 			var statusStyle lipgloss.Style
 
-			switch containerInspect.State.Status {
+			switch containerInspect.Container.State.Status {
 			case "running":
-				if containerInspect.State.Health != nil && containerInspect.State.Health.Status != "healthy" {
-					statusText = fmt.Sprintf("%s (%s)", containerInspect.State.Status, containerInspect.State.Health.Status)
+				if containerInspect.Container.State.Health != nil && containerInspect.Container.State.Health.Status != "healthy" {
+					statusText = fmt.Sprintf("%s (%s)", containerInspect.Container.State.Status, containerInspect.Container.State.Health.Status)
 					statusStyle = yellowStyle
 				} else {
-					statusText = containerInspect.State.Status
+					statusText = containerInspect.Container.State.Status
 					statusStyle = greenStyle
 				}
 			case "exited":
-				statusText = containerInspect.State.Status
+				statusText = containerInspect.Container.State.Status
 				statusStyle = redStyle
 			default:
-				statusText = containerInspect.State.Status
+				statusText = containerInspect.Container.State.Status
 				statusStyle = yellowStyle // Consider other states as unhealthy/restarting
 			}
 
