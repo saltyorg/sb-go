@@ -46,6 +46,10 @@ jobs:
       - name: Symlink Saltbox repository
         run: ln -s $GITHUB_WORKSPACE/saltbox /srv/git/saltbox
 
+      - name: Run tidy
+        working-directory: sb-go
+        run: make tidy
+
       - name: Run tests
         working-directory: sb-go
         run: make test
