@@ -107,5 +107,3 @@ require (
 	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/validator.v2 v2.0.1 // indirect
 )
-
-replace github.com/moby/moby => github.com/moby/moby/api v1.52.0-beta.1
