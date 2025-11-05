@@ -23,15 +23,10 @@ jobs:
           repository: saltyorg/Saltbox
           path: saltbox
 
-      - name: Extract Go version from go.mod
-        id: go_version
-        working-directory: sb-go
-        run: echo "version=$(grep '^go ' go.mod | awk '{print $2}')" >> "$GITHUB_OUTPUT"
-
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: ${{ steps.go_version.outputs.version }}
+          go-version-file: 'sb-go/go.mod'
           cache-dependency-path: sb-go/go.sum
 
       - name: Tune GitHub-hosted runner network
@@ -60,6 +55,7 @@ jobs:
           make build
           sudo cp build/sb /usr/local/bin/sb
           /usr/local/bin/sb version
+
       - name: Print pip dependencies
         run: cat /srv/git/saltbox/requirements/requirements-saltbox.txt
 
