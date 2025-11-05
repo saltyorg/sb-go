@@ -63,7 +63,7 @@ func InitialSetup(ctx context.Context, verbose bool) error {
 
 	// Add apt repos
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Adding apt repositories", func() error {
-		return apt.AddAptRepositories(ctx)
+		return apt.AddAptRepositories(ctx, verbose)
 	}); err != nil {
 		return fmt.Errorf("error adding apt repositories: %w", err)
 	}

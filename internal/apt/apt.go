@@ -142,16 +142,23 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 // If the release codename is unsupported or any step fails, an error is returned.
 // The context parameter is used for external command execution but not for local file I/O
 // operations, as Go's standard library does not provide context-aware file operations.
+// The verbose flag controls whether informative messages about the configuration process are printed.
 //
 //goland:noinspection HttpUrlsUsage
-func AddAptRepositories(ctx context.Context) error {
+func AddAptRepositories(ctx context.Context, verbose bool) error {
 	// Get the Ubuntu release codename.
+	if verbose {
+		fmt.Println("Detecting Ubuntu release codename...")
+	}
 	result, err := executor.Run(ctx, "lsb_release",
 		executor.WithArgs("-sc"))
 	if err != nil {
 		return fmt.Errorf("error getting Ubuntu release codename: %w", err)
 	}
 	release := strings.TrimSpace(string(result.Combined))
+	if verbose {
+		fmt.Printf("Detected Ubuntu release: %s\n", release)
+	}
 
 	sourcesFile := "/etc/apt/sources.list"
 
@@ -161,24 +168,41 @@ func AddAptRepositories(ctx context.Context) error {
 
 	// Remove repository configuration files, but preserve ubuntu.sources on Noble
 	sourcesDir := "/etc/apt/sources.list.d/"
+	if verbose {
+		fmt.Printf("Cleaning up existing repository configuration files in %s\n", sourcesDir)
+	}
 	entries, err := os.ReadDir(sourcesDir)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("error reading %s: %w", sourcesDir, err)
 	}
 
+	removedCount := 0
 	for _, entry := range entries {
 		filePath := filepath.Join(sourcesDir, entry.Name())
 		// On Noble, skip deleting ubuntu.sources
 		if nobleRegex.MatchString(release) && entry.Name() == "ubuntu.sources" {
+			if verbose {
+				fmt.Printf("  Preserving %s (required for Noble)\n", entry.Name())
+			}
 			continue
 		}
 		if err := os.Remove(filePath); err != nil {
 			return fmt.Errorf("error removing %s: %w", filePath, err)
 		}
+		if verbose {
+			fmt.Printf("  Removed %s\n", entry.Name())
+		}
+		removedCount++
+	}
+	if verbose {
+		fmt.Printf("Removed %d repository configuration file(s)\n", removedCount)
 	}
 
 	// Based on the release codename, select and add the appropriate repository lines.
 	if jammyRegex.MatchString(release) {
+		if verbose {
+			fmt.Printf("Configuring repositories for Ubuntu %s\n", release)
+		}
 		repos := []string{
 			"deb http://archive.ubuntu.com/ubuntu/ " + release + " main",
 			"deb http://archive.ubuntu.com/ubuntu/ " + release + " universe",
@@ -186,13 +210,25 @@ func AddAptRepositories(ctx context.Context) error {
 			"deb http://archive.ubuntu.com/ubuntu/ " + release + " multiverse",
 		}
 		for _, repo := range repos {
+			if verbose {
+				fmt.Printf("  Adding repository: %s\n", repo)
+			}
 			if err := addRepo(repo, sourcesFile); err != nil {
 				return err
 			}
 		}
+		if verbose {
+			fmt.Printf("Successfully configured %d repositories in %s\n", len(repos), sourcesFile)
+		}
 	} else if nobleRegex.MatchString(release) {
+		if verbose {
+			fmt.Printf("Configuring repositories for Ubuntu %s (using DEB822 format)\n", release)
+		}
 		// On Noble, check if the existing ubuntu.sources uses the official archive
 		ubuntuSourcesFile := filepath.Join(sourcesDir, "ubuntu.sources")
+		if verbose {
+			fmt.Printf("Checking existing mirror configuration in %s\n", ubuntuSourcesFile)
+		}
 		usingArchive, err := isUsingArchiveMirror(ubuntuSourcesFile)
 		if err != nil {
 			return fmt.Errorf("error checking ubuntu.sources mirror configuration: %w", err)
@@ -202,6 +238,9 @@ func AddAptRepositories(ctx context.Context) error {
 		// (i.e., if using a custom mirror like corporate/regional mirrors)
 		// This adds the official archives alongside the custom mirror
 		if !usingArchive {
+			if verbose {
+				fmt.Println("Custom mirror detected, adding official Ubuntu archive as alternative source")
+			}
 			archiveSourcesFile := filepath.Join(sourcesDir, "ubuntu-archive.sources")
 
 			// Create DEB822 format content for official Ubuntu archives
@@ -209,6 +248,13 @@ func AddAptRepositories(ctx context.Context) error {
 
 			if err := writeDeb822Sources(archiveSourcesFile, deb822Content); err != nil {
 				return fmt.Errorf("error writing ubuntu-archive.sources: %w", err)
+			}
+			if verbose {
+				fmt.Printf("Created %s with official Ubuntu archive configuration\n", archiveSourcesFile)
+			}
+		} else {
+			if verbose {
+				fmt.Println("Already using official Ubuntu archive, no additional configuration needed")
 			}
 		}
 		// If already using archive mirror, skip adding - ubuntu.sources already has what we need
