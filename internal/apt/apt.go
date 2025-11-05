@@ -229,6 +229,16 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 		if verbose {
 			fmt.Printf("Checking existing mirror configuration in %s\n", ubuntuSourcesFile)
 		}
+
+		// Read and display the current ubuntu.sources content if verbose
+		if verbose {
+			if content, err := os.ReadFile(ubuntuSourcesFile); err == nil {
+				fmt.Printf("Current ubuntu.sources content:\n%s\n", string(content))
+			} else if !os.IsNotExist(err) {
+				fmt.Printf("Warning: Could not read %s: %v\n", ubuntuSourcesFile, err)
+			}
+		}
+
 		usingArchive, err := isUsingArchiveMirror(ubuntuSourcesFile)
 		if err != nil {
 			return fmt.Errorf("error checking ubuntu.sources mirror configuration: %w", err)
@@ -245,6 +255,10 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 
 			// Create DEB822 format content for official Ubuntu archives
 			deb822Content := buildNobleSourcesContent(release)
+
+			if verbose {
+				fmt.Printf("Writing ubuntu-archive.sources with content:\n%s\n", deb822Content)
+			}
 
 			if err := writeDeb822Sources(archiveSourcesFile, deb822Content); err != nil {
 				return fmt.Errorf("error writing ubuntu-archive.sources: %w", err)
