@@ -191,17 +191,27 @@ func AddAptRepositories(ctx context.Context) error {
 			}
 		}
 	} else if nobleRegex.MatchString(release) {
-		repos := []string{
-			"deb http://archive.ubuntu.com/ubuntu/ " + release + " main restricted universe multiverse",
-			"deb http://archive.ubuntu.com/ubuntu/ " + release + "-updates main restricted universe multiverse",
-			"deb http://archive.ubuntu.com/ubuntu/ " + release + "-backports main restricted universe multiverse",
-			"deb http://security.ubuntu.com/ubuntu " + release + "-security main restricted universe multiverse",
+		// On Noble, check if the existing ubuntu.sources uses the official archive
+		ubuntuSourcesFile := filepath.Join(sourcesDir, "ubuntu.sources")
+		usingArchive, err := isUsingArchiveMirror(ubuntuSourcesFile)
+		if err != nil {
+			return fmt.Errorf("error checking ubuntu.sources mirror configuration: %w", err)
 		}
-		for _, repo := range repos {
-			if err := addRepo(repo, sourcesFile); err != nil {
-				return err
+
+		// Only add ubuntu-archive.sources if NOT using the official archive mirror
+		// (i.e., if using a custom mirror like corporate/regional mirrors)
+		// This adds the official archives alongside the custom mirror
+		if !usingArchive {
+			archiveSourcesFile := filepath.Join(sourcesDir, "ubuntu-archive.sources")
+
+			// Create DEB822 format content for official Ubuntu archives
+			deb822Content := buildNobleSourcesContent(release)
+
+			if err := writeDeb822Sources(archiveSourcesFile, deb822Content); err != nil {
+				return fmt.Errorf("error writing ubuntu-archive.sources: %w", err)
 			}
 		}
+		// If already using archive mirror, skip adding - ubuntu.sources already has what we need
 	} else {
 		return fmt.Errorf("unsupported Ubuntu release: %s", release)
 	}
@@ -209,21 +219,162 @@ func AddAptRepositories(ctx context.Context) error {
 	return nil
 }
 
-// addRepo is a helper function that appends a repository line to the specified sources file.
-// It opens the file in append mode (creating it if necessary), writes the repository line followed by a newline,
-// and then flushes the write buffer. It returns an error if any file operation fails.
-func addRepo(repoLine, sourcesFile string) error {
-	file, err := os.OpenFile(sourcesFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+// buildNobleSourcesContent generates DEB822 format content for Noble Ubuntu archives.
+// It returns a properly formatted .sources file content string.
+func buildNobleSourcesContent(release string) string {
+	return fmt.Sprintf(
+		"Types: deb\n"+
+		"URIs: http://archive.ubuntu.com/ubuntu/\n"+
+		"Suites: %s %s-updates %s-backports\n"+
+		"Components: main restricted universe multiverse\n"+
+		"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"+
+		"\n"+
+		"Types: deb\n"+
+		"URIs: http://security.ubuntu.com/ubuntu/\n"+
+		"Suites: %s-security\n"+
+		"Components: main restricted universe multiverse\n"+
+		"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
+		release, release, release, release)
+}
+
+// parseUbuntuSources parses a DEB822 format .sources file and extracts all URIs.
+// It returns a slice of URIs found in the file, or an empty slice if the file doesn't exist
+// or contains no URIs.
+func parseUbuntuSources(sourcesFile string) ([]string, error) {
+	content, err := os.ReadFile(sourcesFile)
 	if err != nil {
-		return fmt.Errorf("error opening %s: %w", sourcesFile, err)
+		if os.IsNotExist(err) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("error reading %s: %w", sourcesFile, err)
+	}
+
+	var uris []string
+	scanner := bufio.NewScanner(strings.NewReader(string(content)))
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+
+		// Look for URIs: lines in DEB822 format
+		if strings.HasPrefix(line, "URIs:") {
+			// Extract the URI value after "URIs:"
+			uriValue := strings.TrimSpace(strings.TrimPrefix(line, "URIs:"))
+			if uriValue != "" {
+				uris = append(uris, uriValue)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error scanning %s: %w", sourcesFile, err)
+	}
+
+	return uris, nil
+}
+
+// isUsingArchiveMirror checks if the ubuntu.sources file is using official Ubuntu archive mirrors.
+// Returns true if using archive.ubuntu.com or security.ubuntu.com, false for custom mirrors.
+func isUsingArchiveMirror(sourcesFile string) (bool, error) {
+	uris, err := parseUbuntuSources(sourcesFile)
+	if err != nil {
+		return false, err
+	}
+
+	// If no URIs found, consider it as not using archive (empty/missing file)
+	if len(uris) == 0 {
+		return false, nil
+	}
+
+	// Check if any URI uses the official archive endpoints
+	for _, uri := range uris {
+		if strings.Contains(uri, "archive.ubuntu.com") || strings.Contains(uri, "security.ubuntu.com") {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// writeDeb822Sources writes repository configuration in DEB822 format to a .sources file.
+// It creates the file if it doesn't exist, or overwrites it if it does.
+func writeDeb822Sources(sourcesFile, content string) error {
+	file, err := os.OpenFile(sourcesFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("error opening %s for writing: %w", sourcesFile, err)
 	}
 	defer file.Close()
 
 	writer := bufio.NewWriter(file)
-	_, err = writer.WriteString(repoLine + "\n")
-	if err != nil {
+	if _, err := writer.WriteString(content); err != nil {
 		return fmt.Errorf("error writing to %s: %w", sourcesFile, err)
 	}
+
+	return writer.Flush()
+}
+
+// addRepo is a helper function that adds a repository line to the specified sources file
+// only if it doesn't already exist. It reads the file, deduplicates all lines, adds the new
+// line if missing, and writes the deduplicated content back. This both prevents and cleans up
+// duplicate repository entries.
+func addRepo(repoLine, sourcesFile string) error {
+	// Read existing content
+	existingContent, err := os.ReadFile(sourcesFile)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("error reading %s: %w", sourcesFile, err)
+	}
+
+	// Use a map to track unique lines (preserves order via slice)
+	seenLines := make(map[string]bool)
+	var uniqueLines []string
+	repoExists := false
+
+	// Process existing lines
+	if existingContent != nil {
+		scanner := bufio.NewScanner(strings.NewReader(string(existingContent)))
+		for scanner.Scan() {
+			line := scanner.Text()
+			trimmedLine := strings.TrimSpace(line)
+
+			// Skip empty lines
+			if trimmedLine == "" {
+				continue
+			}
+
+			// Check if this is the repo we're trying to add
+			if trimmedLine == repoLine {
+				repoExists = true
+			}
+
+			// Add line only if we haven't seen it before
+			if !seenLines[trimmedLine] {
+				seenLines[trimmedLine] = true
+				uniqueLines = append(uniqueLines, trimmedLine)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("error scanning %s: %w", sourcesFile, err)
+		}
+	}
+
+	// Add the new repository line if it doesn't exist
+	if !repoExists {
+		uniqueLines = append(uniqueLines, repoLine)
+	}
+
+	// Write the deduplicated content back to the file
+	file, err := os.OpenFile(sourcesFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("error opening %s for writing: %w", sourcesFile, err)
+	}
+	defer file.Close()
+
+	writer := bufio.NewWriter(file)
+	for _, line := range uniqueLines {
+		if _, err := writer.WriteString(line + "\n"); err != nil {
+			return fmt.Errorf("error writing to %s: %w", sourcesFile, err)
+		}
+	}
+
 	return writer.Flush()
 }
 

@@ -3,8 +3,11 @@ package python
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
@@ -38,6 +41,77 @@ func IsPackageInstalled(ctx context.Context, pkgName string) (bool, error) {
 	// Check if the package is actually installed
 	status := string(result.Combined)
 	return strings.Contains(status, "install ok installed"), nil
+}
+
+// RemoveDeadsnakesRepositories scans /etc/apt/sources.list.d/ for files containing
+// deadsnakes repository entries, removes those files, and runs apt update if any files were removed.
+func RemoveDeadsnakesRepositories(ctx context.Context, verbose bool) (bool, error) {
+	sourcesDir := "/etc/apt/sources.list.d/"
+
+	// Read all files in the sources.list.d directory
+	entries, err := os.ReadDir(sourcesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Directory doesn't exist, nothing to clean up
+			return false, nil
+		}
+		return false, fmt.Errorf("error reading %s: %w", sourcesDir, err)
+	}
+
+	var removedFiles []string
+
+	// Check each file for deadsnakes entries
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filePath := filepath.Join(sourcesDir, entry.Name())
+
+		// Read file content
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			// Skip files we can't read
+			if verbose {
+				fmt.Printf("Warning: could not read %s: %v\n", filePath, err)
+			}
+			continue
+		}
+
+		// Check if the file contains deadsnakes references
+		contentStr := string(content)
+		if strings.Contains(contentStr, "deadsnakes") {
+			if verbose {
+				fmt.Printf("Found deadsnakes repository in: %s\n", filePath)
+			}
+
+			// Remove the file
+			if err := os.Remove(filePath); err != nil {
+				return false, fmt.Errorf("error removing %s: %w", filePath, err)
+			}
+
+			removedFiles = append(removedFiles, entry.Name())
+			if verbose {
+				fmt.Printf("Removed: %s\n", filePath)
+			}
+		}
+	}
+
+	// If we removed any files, run apt update
+	if len(removedFiles) > 0 {
+		if verbose {
+			fmt.Printf("Removed %d deadsnakes repository file(s), running apt update...\n", len(removedFiles))
+		}
+
+		updateFunc := apt.UpdatePackageLists(ctx, verbose)
+		if err := updateFunc(); err != nil {
+			return true, fmt.Errorf("error running apt update after removing repository files: %w", err)
+		}
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // RemoveDeadsnakesPackages removes deadsnakes Python packages if they exist.
@@ -103,7 +177,8 @@ func ShouldCleanupDeadsnakes() (bool, error) {
 	return versionID == "20.04" || versionID == "22.04", nil
 }
 
-// CleanupDeadsnakesIfNeeded checks if cleanup is needed and performs it
+// CleanupDeadsnakesIfNeeded checks if cleanup is needed and performs it.
+// This function removes both deadsnakes packages and their apt repository files.
 func CleanupDeadsnakesIfNeeded(ctx context.Context, verbose bool) (bool, error) {
 	shouldCleanup, err := ShouldCleanupDeadsnakes()
 	if err != nil {
@@ -113,6 +188,8 @@ func CleanupDeadsnakesIfNeeded(ctx context.Context, verbose bool) (bool, error) 
 	if !shouldCleanup {
 		return false, nil
 	}
+
+	var cleanedUp bool
 
 	// Check if any deadsnakes packages are installed
 	pythonVersion := constants.AnsibleVenvPythonVersion
@@ -130,15 +207,23 @@ func CleanupDeadsnakesIfNeeded(ctx context.Context, verbose bool) (bool, error) 
 		}
 	}
 
-	// If no packages found, no cleanup needed
-	if len(installedPackages) == 0 {
-		return false, nil
+	// Perform package cleanup if packages are installed
+	if len(installedPackages) > 0 {
+		if err := RemoveDeadsnakesPackages(ctx, pythonVersion, verbose); err != nil {
+			return false, fmt.Errorf("error removing deadsnakes packages: %w", err)
+		}
+		cleanedUp = true
 	}
 
-	// Perform cleanup
-	if err := RemoveDeadsnakesPackages(ctx, pythonVersion, verbose); err != nil {
-		return false, fmt.Errorf("error removing deadsnakes packages: %w", err)
+	// Always check for and remove deadsnakes repository files
+	reposRemoved, err := RemoveDeadsnakesRepositories(ctx, verbose)
+	if err != nil {
+		return cleanedUp, fmt.Errorf("error removing deadsnakes repositories: %w", err)
 	}
 
-	return true, nil
+	if reposRemoved {
+		cleanedUp = true
+	}
+
+	return cleanedUp, nil
 }
