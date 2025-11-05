@@ -233,7 +233,11 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 		// Read and display the current ubuntu.sources content if verbose
 		if verbose {
 			if content, err := os.ReadFile(ubuntuSourcesFile); err == nil {
-				fmt.Printf("Current ubuntu.sources content:\n%s\n", string(content))
+				fmt.Println("\nCurrent ubuntu.sources content:")
+				fmt.Println("---")
+				fmt.Print(string(content))
+				fmt.Println("---")
+				fmt.Println()
 			} else if !os.IsNotExist(err) {
 				fmt.Printf("Warning: Could not read %s: %v\n", ubuntuSourcesFile, err)
 			}
@@ -257,7 +261,11 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 			deb822Content := buildNobleSourcesContent(release)
 
 			if verbose {
-				fmt.Printf("Writing ubuntu-archive.sources with content:\n%s\n", deb822Content)
+				fmt.Println("\nWriting ubuntu-archive.sources with content:")
+				fmt.Println("---")
+				fmt.Print(deb822Content)
+				fmt.Println("---")
+				fmt.Println()
 			}
 
 			if err := writeDeb822Sources(archiveSourcesFile, deb822Content); err != nil {
