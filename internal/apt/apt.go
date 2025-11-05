@@ -224,16 +224,16 @@ func AddAptRepositories(ctx context.Context) error {
 func buildNobleSourcesContent(release string) string {
 	return fmt.Sprintf(
 		"Types: deb\n"+
-		"URIs: http://archive.ubuntu.com/ubuntu/\n"+
-		"Suites: %s %s-updates %s-backports\n"+
-		"Components: main restricted universe multiverse\n"+
-		"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"+
-		"\n"+
-		"Types: deb\n"+
-		"URIs: http://security.ubuntu.com/ubuntu/\n"+
-		"Suites: %s-security\n"+
-		"Components: main restricted universe multiverse\n"+
-		"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
+			"URIs: http://archive.ubuntu.com/ubuntu/\n"+
+			"Suites: %s %s-updates %s-backports\n"+
+			"Components: main restricted universe multiverse\n"+
+			"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"+
+			"\n"+
+			"Types: deb\n"+
+			"URIs: http://security.ubuntu.com/ubuntu/\n"+
+			"Suites: %s-security\n"+
+			"Components: main restricted universe multiverse\n"+
+			"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
 		release, release, release, release)
 }
 
@@ -256,9 +256,9 @@ func parseUbuntuSources(sourcesFile string) ([]string, error) {
 		line := strings.TrimSpace(scanner.Text())
 
 		// Look for URIs: lines in DEB822 format
-		if strings.HasPrefix(line, "URIs:") {
+		if after, ok := strings.CutPrefix(line, "URIs:"); ok {
 			// Extract the URI value after "URIs:"
-			uriValue := strings.TrimSpace(strings.TrimPrefix(line, "URIs:"))
+			uriValue := strings.TrimSpace(after)
 			if uriValue != "" {
 				uris = append(uris, uriValue)
 			}
