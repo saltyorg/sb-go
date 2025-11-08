@@ -388,9 +388,7 @@ main() {
     local version
     local temp_binary
 
-    echo ""
     log_info "Saltbox CLI Installer"
-    echo ""
 
     check_privileges
     check_saltbox_exists
@@ -415,10 +413,8 @@ main() {
     # Run setup
     run_setup "${VERBOSE_MODE}"
 
-    echo ""
     log_success "Installation complete!"
     log_info "You can now use the '${BINARY_NAME}' command"
-    echo ""
 }
 
 # Parse arguments and run main function
