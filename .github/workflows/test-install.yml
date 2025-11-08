@@ -1,0 +1,94 @@
+name: Test Install Script
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'install.sh'
+      - '.github/workflows/test-install.yml'
+  pull_request:
+    paths:
+      - 'install.sh'
+      - '.github/workflows/test-install.yml'
+  workflow_dispatch:
+
+jobs:
+  test-install:
+    name: Test install.sh with ${{ matrix.download-tool }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        download-tool:
+          - curl
+          - wget
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Test install script with ${{ matrix.download-tool }}
+        run: |
+          chmod +x install.sh
+          sudo ./install.sh --force-${{ matrix.download-tool }} --verbose
+
+      - name: Verify installation
+        run: |
+          if [[ ! -f /usr/local/bin/sb ]]; then
+            echo "ERROR: Binary was not installed to /usr/local/bin/sb"
+            exit 1
+          fi
+
+          if [[ ! -x /usr/local/bin/sb ]]; then
+            echo "ERROR: Binary is not executable"
+            exit 1
+          fi
+
+          # Verify version command works
+          VERSION_OUTPUT=$(/usr/local/bin/sb version)
+          echo "Version output: ${VERSION_OUTPUT}"
+
+          if [[ ! "${VERSION_OUTPUT}" =~ "Saltbox CLI version:" ]]; then
+            echo "ERROR: Version output format incorrect"
+            exit 1
+          fi
+
+          # Verify ansible is installed and working
+          if ! command -v ansible &> /dev/null; then
+            echo "ERROR: ansible command not found"
+            exit 1
+          fi
+
+          ANSIBLE_VERSION=$(ansible --version)
+          echo "Ansible version: ${ANSIBLE_VERSION}"
+
+          if [[ ! "${ANSIBLE_VERSION}" =~ "ansible" ]]; then
+            echo "ERROR: ansible --version output incorrect"
+            exit 1
+          fi
+
+          # Verify Saltbox repository exists
+          if [[ ! -d /srv/git/saltbox ]]; then
+            echo "ERROR: /srv/git/saltbox directory does not exist"
+            exit 1
+          fi
+
+          # Verify it's a git repository
+          if [[ ! -d /srv/git/saltbox/.git ]]; then
+            echo "ERROR: /srv/git/saltbox is not a git repository"
+            exit 1
+          fi
+
+          # Verify we can run git commands in the repo
+          cd /srv/git/saltbox
+          if ! git status &> /dev/null; then
+            echo "ERROR: Cannot run git commands in /srv/git/saltbox"
+            exit 1
+          fi
+
+          echo "Git repository status:"
+          git status
+
+          echo ""
+          echo "Installation verified successfully with ${{ matrix.download-tool }}!"
