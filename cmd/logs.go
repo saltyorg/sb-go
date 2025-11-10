@@ -38,8 +38,11 @@ func init() {
 }
 
 const (
-	logPageSize        = 500 // Number of log entries per page
-	prefetchPagesAhead = 10  // Number of pages to stay ahead when prefetching
+	logPageSize         = 500   // Number of log entries per page
+	prefetchPagesAhead  = 10    // Number of pages to stay ahead when prefetching
+	maxBufferEntries    = 20000 // Maximum entries to keep in memory
+	viewportsAhead      = 5     // Prefetch when within 5 viewports of edge
+	viewportsToKeep     = 10    // Keep 10 viewports on each side when trimming
 )
 
 type serviceItem struct {
@@ -187,6 +190,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Only fetch new logs if a different service was selected
 					if newService != m.selectedService {
+						// Clean up old buffer before switching
+						if m.logBuf != nil {
+							m.logBuf.Cleanup()
+						}
+
 						m.selectedService = newService
 						m.loading = true
 						m.err = nil
@@ -240,7 +248,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 			if m.logBuf != nil {
-				m.logBuf.prefetching = false
+				if msg.reverse {
+					m.logBuf.prefetching = false
+				} else {
+					m.logBuf.prefetchingAfter = false
+				}
 			}
 			m.loading = false
 		} else {
@@ -249,7 +261,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Clear loading flag
 			if msg.isPrefetch {
 				if m.logBuf != nil {
-					m.logBuf.prefetching = false
+					if msg.reverse {
+						m.logBuf.prefetching = false
+					} else {
+						m.logBuf.prefetchingAfter = false
+					}
 				}
 			} else {
 				m.loading = false
@@ -260,8 +276,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// No entries returned - we hit a boundary
 					if msg.reverse {
 						m.logBuf.hasMoreBefore = false
+						m.logBuf.prefetching = false
 					} else {
 						m.logBuf.hasMoreAfter = false
+						m.logBuf.prefetchingAfter = false
 					}
 					// Don't update display, just stop loading
 					return m, nil
@@ -317,7 +335,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					} else {
 						// Append newer logs
-						m.logBuf.AppendNewer(msg.entries, msg.lastCursor, msg.hasMore)
+						prefetchCmd := m.logBuf.AppendNewer(msg.entries, msg.lastCursor, msg.hasMore)
 
 						// Update viewport content
 						m.viewport.SetContent(m.logBuf.GetContent())
@@ -328,6 +346,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.viewportYPosition = m.viewport.YOffset
 						}
 						// For prefetch: viewport stays where it is
+
+						// Check if logBuffer wants to prefetch more
+						if prefetchCmd != nil {
+							cmds = append(cmds, prefetchCmd)
+						}
 					}
 				}
 			}
@@ -347,10 +370,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	} else if m.activeView == "logs" && !m.loading {
 		// Handle viewport navigation when showing logs
+		oldYOffset := m.viewport.YOffset
 		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)
+
 		// Track position changes
 		m.viewportYPosition = m.viewport.YOffset
+
+		// Check if viewport position changed and we need to prefetch or trim
+		if m.logBuf != nil && oldYOffset != m.viewport.YOffset {
+			// Check if we need to prefetch more logs based on viewport position
+			prefetchCmds := m.logBuf.CheckPrefetchNeeds(
+				m.viewport.YOffset,
+				m.viewport.Height,
+				m.viewport.TotalLineCount(),
+			)
+			if len(prefetchCmds) > 0 {
+				cmds = append(cmds, prefetchCmds...)
+			}
+
+			// Trim buffer if it's too large
+			linesTrimmed := m.logBuf.TrimBuffer(m.viewport.YOffset, m.viewport.Height)
+			if linesTrimmed > 0 {
+				// Update viewport content after trimming
+				m.viewport.SetContent(m.logBuf.GetContent())
+				// Adjust viewport position to account for trimmed lines
+				m.viewport.YOffset = max(0, m.viewport.YOffset-linesTrimmed)
+				m.viewportYPosition = m.viewport.YOffset
+			}
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -473,14 +521,15 @@ type logEntry struct {
 
 // logBuffer manages log entries and handles prefetching
 type logBuffer struct {
-	entries       []logEntry
-	beforeCursor  string
-	afterCursor   string
-	hasMoreBefore bool
-	hasMoreAfter  bool
-	serviceName   string
-	prefetching   bool
-	targetSize    int // Target number of entries to keep loaded
+	entries          []logEntry
+	beforeCursor     string
+	afterCursor      string
+	hasMoreBefore    bool
+	hasMoreAfter     bool
+	serviceName      string
+	prefetching      bool
+	prefetchingAfter bool
+	targetSize       int // Target number of entries to keep loaded
 }
 
 func newLogBuffer(serviceName string, targetSize int) *logBuffer {
@@ -533,10 +582,111 @@ func (lb *logBuffer) PrependOlder(entries []logEntry, oldestCursor string, hasMo
 }
 
 // AppendNewer adds newer logs to the end
-func (lb *logBuffer) AppendNewer(entries []logEntry, lastCursor string, hasMore bool) {
+func (lb *logBuffer) AppendNewer(entries []logEntry, lastCursor string, hasMore bool) tea.Cmd {
 	lb.entries = append(lb.entries, entries...)
 	lb.afterCursor = lastCursor
 	lb.hasMoreAfter = hasMore
+	lb.prefetchingAfter = false
+	// For forward prefetching, we could continue prefetching newer logs
+	// but typically we want to stay near "now", so we don't auto-prefetch forward
+	return nil
+}
+
+// Cleanup clears all log entries and resets state for memory cleanup
+func (lb *logBuffer) Cleanup() {
+	lb.entries = nil
+	lb.beforeCursor = ""
+	lb.afterCursor = ""
+	lb.hasMoreBefore = false
+	lb.hasMoreAfter = false
+	lb.prefetching = false
+	lb.prefetchingAfter = false
+}
+
+// TrimBuffer removes entries far from viewport to limit memory usage
+// Returns the number of lines trimmed from the top (for viewport offset adjustment)
+func (lb *logBuffer) TrimBuffer(viewportY, viewportHeight int) int {
+	if len(lb.entries) <= maxBufferEntries {
+		return 0 // No need to trim
+	}
+
+	// Calculate viewport position in terms of log entries
+	// We need to estimate which entries are visible
+	totalLines := 0
+	visibleStartEntry := 0
+	visibleEndEntry := len(lb.entries) - 1
+
+	// Find which entries correspond to the viewport position
+	for i, entry := range lb.entries {
+		entryLines := len(strings.Split(formatLogEntry(entry), "\n"))
+		if totalLines+entryLines > viewportY {
+			visibleStartEntry = i
+			break
+		}
+		totalLines += entryLines
+	}
+
+	// Calculate how many entries to keep on each side
+	entriesToKeep := viewportsToKeep * viewportHeight / 3 // Rough estimate: ~3 lines per entry
+	if entriesToKeep < logPageSize {
+		entriesToKeep = logPageSize // Keep at least one page
+	}
+
+	// Calculate trim boundaries
+	trimStart := max(0, visibleStartEntry-entriesToKeep)
+	trimEnd := min(len(lb.entries), visibleEndEntry+entriesToKeep)
+
+	// Don't trim if we're not actually removing much
+	if trimStart < 100 && trimEnd > len(lb.entries)-100 {
+		return 0 // Not worth trimming
+	}
+
+	// Calculate lines being removed from the top
+	linesTrimmed := 0
+	for i := 0; i < trimStart; i++ {
+		linesTrimmed += len(strings.Split(formatLogEntry(lb.entries[i]), "\n"))
+	}
+
+	// Trim the entries
+	oldEntries := lb.entries
+	lb.entries = make([]logEntry, trimEnd-trimStart)
+	copy(lb.entries, oldEntries[trimStart:trimEnd])
+
+	// Update cursors if we trimmed from edges
+	if trimStart > 0 {
+		lb.beforeCursor = lb.entries[0].cursor
+		lb.hasMoreBefore = true // We know there are more entries we trimmed
+	}
+	if trimEnd < len(oldEntries) {
+		lb.afterCursor = lb.entries[len(lb.entries)-1].cursor
+		lb.hasMoreAfter = true // We know there are more entries we trimmed
+	}
+
+	return linesTrimmed
+}
+
+// CheckPrefetchNeeds checks if prefetching should be triggered based on viewport position
+// Returns commands for prefetching in both directions if needed
+func (lb *logBuffer) CheckPrefetchNeeds(viewportY, viewportHeight, totalHeight int) []tea.Cmd {
+	var cmds []tea.Cmd
+
+	// Calculate threshold for prefetching (viewportsAhead * viewport height)
+	prefetchThreshold := viewportsAhead * viewportHeight
+
+	// Check if we should prefetch older logs (scrolling near top)
+	if viewportY < prefetchThreshold && lb.hasMoreBefore && lb.beforeCursor != "" && !lb.prefetching {
+		lb.prefetching = true
+		cmds = append(cmds, fetchLogs(lb.serviceName, true, lb.beforeCursor, true))
+	}
+
+	// Check if we should prefetch newer logs (scrolling near bottom)
+	distanceFromBottom := totalHeight - (viewportY + viewportHeight)
+	if distanceFromBottom < prefetchThreshold && lb.hasMoreAfter && lb.afterCursor != "" && !lb.prefetchingAfter {
+		lb.prefetchingAfter = true
+		cmds = append(cmds, fetchLogs(lb.serviceName, false, lb.afterCursor, true))
+	}
+
+	return cmds
 }
 
 func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea.Cmd {
