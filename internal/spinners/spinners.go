@@ -3,12 +3,14 @@ package spinners
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/saltyorg/sb-go/internal/styles"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-isatty"
 )
 
 // GlobalSpinnerStyle holds the default style for the spinner itself.
@@ -16,6 +18,12 @@ var GlobalSpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.Co
 var VerboseMode bool
 
 type TaskFunc func() error
+
+// isTTY checks if stdout is a terminal.
+// Returns false if output is redirected, piped, or in a non-interactive environment.
+func isTTY() bool {
+	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+}
 
 // SpinnerOptions defines the options for creating a spinner.
 type SpinnerOptions struct {
@@ -27,9 +35,12 @@ type SpinnerOptions struct {
 	StopFailMessage string
 }
 
-// SetVerboseMode sets the verbose mode for all spinners
+// SetVerboseMode sets the verbose mode for all spinners.
+// If verbose is false but there's no TTY available, verbose mode is automatically enabled.
 func SetVerboseMode(verbose bool) {
-	VerboseMode = verbose
+	// If verbose is explicitly enabled, use it
+	// If verbose is false, check if we have a TTY - if not, enable verbose mode
+	VerboseMode = verbose || !isTTY()
 }
 
 // RunTaskWithSpinnerContext provides a spinner with default options or text output in verbose mode.
@@ -64,6 +75,17 @@ func RunTaskWithSpinnerContext(ctx context.Context, message string, taskFunc Tas
 func RunTaskWithSpinnerCustomContext(ctx context.Context, opts SpinnerOptions, taskFunc TaskFunc) error {
 	if opts.TaskName == "" {
 		return fmt.Errorf("taskName is required")
+	}
+
+	if VerboseMode {
+		fmt.Println(opts.TaskName + "...")
+		err := taskFunc()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+		} else {
+			fmt.Println(opts.TaskName + " completed")
+		}
+		return err
 	}
 
 	if opts.Color == "" {
