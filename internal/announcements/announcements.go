@@ -440,12 +440,23 @@ func PromptForMigrations(diffs []*AnnouncementDiff) ([]MigrationRequest, error) 
 	for _, diff := range diffs {
 		for _, announcement := range diff.NewAnnouncements {
 			if announcement.Migration.Required && announcement.Migration.Tag != "" {
-				// Simple prompt for migration approval
+				// Prompt for migration approval with validation
 				prompt := fmt.Sprintf("Run migration '%s' for %s repository? (y/N): ", announcement.Migration.Tag, diff.RepoName)
-				fmt.Print(prompt)
 
-				scanner.Scan()
-				response := strings.TrimSpace(strings.ToLower(scanner.Text()))
+				var response string
+				for {
+					fmt.Print(prompt)
+					scanner.Scan()
+					response = strings.TrimSpace(strings.ToLower(scanner.Text()))
+
+					// Validate input - require explicit y/yes/n/no
+					if response == "y" || response == "yes" || response == "n" || response == "no" {
+						break
+					}
+
+					// Show error for invalid input
+					fmt.Println("Invalid input. Please enter 'y' (yes) or 'n' (no).")
+				}
 
 				if response == "y" || response == "yes" {
 					migrationRequests = append(migrationRequests, MigrationRequest{
