@@ -59,21 +59,33 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 			var statusText string
 			var statusStyle lipgloss.Style
 
-			switch containerInspect.Container.State.Status {
+			state := containerInspect.Container.State.Status
+			switch state {
 			case "running":
-				if containerInspect.Container.State.Health != nil && containerInspect.Container.State.Health.Status != "healthy" {
-					statusText = fmt.Sprintf("%s (%s)", containerInspect.Container.State.Status, containerInspect.Container.State.Health.Status)
-					statusStyle = yellowStyle
+				if containerInspect.Container.State.Health != nil {
+					healthStatus := containerInspect.Container.State.Health.Status
+					statusText = fmt.Sprintf("%s (%s)", state, healthStatus)
+					if healthStatus == "healthy" {
+						statusStyle = greenStyle
+					} else {
+						statusStyle = yellowStyle
+					}
 				} else {
-					statusText = containerInspect.Container.State.Status
+					statusText = state
 					statusStyle = greenStyle
 				}
-			case "exited":
-				statusText = containerInspect.Container.State.Status
+			case "exited", "dead":
+				statusText = state
 				statusStyle = redStyle
+			case "created", "paused":
+				statusText = state
+				statusStyle = yellowStyle
+			case "restarting", "removing":
+				statusText = state
+				statusStyle = yellowStyle
 			default:
-				statusText = containerInspect.Container.State.Status
-				statusStyle = yellowStyle // Consider other states as unhealthy/restarting
+				statusText = state
+				statusStyle = yellowStyle
 			}
 
 			coloredStatus := statusStyle.Render(statusText)
@@ -108,6 +120,7 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 		// Configure table settings
 		t.SetHeaders("Container", "Status", "Traefik Port", "Port Bindings")
 		t.SetHeaderStyle(table.StyleBold)
+		t.SetAlignment(table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignRight)
 		t.SetBorders(true)
 		t.SetRowLines(true)
 		t.SetDividers(table.UnicodeRoundedDividers)
@@ -150,20 +163,50 @@ func getTraefikInternalPorts(labels map[string]string) []string {
 }
 
 func getExternalPortBindings(ports network.PortMap) []string {
-	var bindings []string
+	// First pass: collect bindings and find max port lengths
+	type bindingParts struct {
+		hostIP       string
+		hostPort     string
+		internalPort string
+	}
+	var parts []bindingParts
+	maxHostPortLen := 0
+	maxInternalPortLen := 0
+
 	for internalPort, hostBindings := range ports {
+		internalPortStr := internalPort.String()
 		for _, binding := range hostBindings {
 			if binding.HostPort != "" {
-				// Always include the bind IP, even if it's 0.0.0.0
 				hostIP := binding.HostIP.String()
 				if !binding.HostIP.IsValid() {
 					hostIP = "0.0.0.0"
 				}
-				bindingStr := fmt.Sprintf("%s:%s->%s", hostIP, binding.HostPort, internalPort.String())
-				bindings = append(bindings, bindingStr)
+				// Use [::] notation for IPv6 addresses for clarity
+				if hostIP == "::" {
+					hostIP = "[::]"
+				}
+				parts = append(parts, bindingParts{
+					hostIP:       hostIP,
+					hostPort:     binding.HostPort,
+					internalPort: internalPortStr,
+				})
+				if len(binding.HostPort) > maxHostPortLen {
+					maxHostPortLen = len(binding.HostPort)
+				}
+				if len(internalPortStr) > maxInternalPortLen {
+					maxInternalPortLen = len(internalPortStr)
+				}
 			}
 		}
 	}
+
+	// Second pass: format with padding
+	var bindings []string
+	for _, p := range parts {
+		bindingStr := fmt.Sprintf("%s:%*s->%*s", p.hostIP, maxHostPortLen, p.hostPort, maxInternalPortLen, p.internalPort)
+		bindings = append(bindings, bindingStr)
+	}
+
 	return bindings
 }
 
