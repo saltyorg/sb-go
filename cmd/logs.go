@@ -113,6 +113,7 @@ type keyMap struct {
 	Quit     key.Binding
 	PageUp   key.Binding
 	PageDown key.Binding
+	Toggle   key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -133,7 +134,7 @@ func (k keyMap) ShortHelpForList() []key.Binding {
 
 // ShortHelpForLogs returns help bindings for logs view
 func (k keyMap) ShortHelpForLogs() []key.Binding {
-	return []key.Binding{k.Left, k.Right, k.Back, k.Quit}
+	return []key.Binding{k.Left, k.Right, k.Toggle, k.Back, k.Quit}
 }
 
 var keys = keyMap{
@@ -173,6 +174,10 @@ var keys = keyMap{
 		key.WithKeys("pgdown"),
 		key.WithHelp("pgdown", "next page"),
 	),
+	Toggle: key.NewBinding(
+		key.WithKeys("t"),
+		key.WithHelp("t", "toggle timestamp/host"),
+	),
 }
 
 type model struct {
@@ -190,8 +195,9 @@ type model struct {
 	viewportInitialized bool
 	loading             bool
 	err                 error
-	viewportYPosition   int // Store viewport scroll position
+	viewportYPosition   int  // Store viewport scroll position
 	quitting            bool
+	showTimestampHost   bool // Toggle for showing timestamp and hostname columns
 }
 
 func (m model) Init() tea.Cmd {
@@ -330,6 +336,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeView == "logs" && m.viewportInitialized {
 				m.viewport.ScrollRight(10)
 			}
+
+		case "t":
+			// Toggle timestamp and hostname visibility
+			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
+				m.showTimestampHost = !m.showTimestampHost
+				// Update viewport content with new formatting
+				m.viewport.SetContent(m.logBuf.GetContentFormatted(m.showTimestampHost))
+			}
 		}
 
 	case logsMsg:
@@ -387,7 +401,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					entriesAdded := len(m.logBuf.entries) - oldLen
 					linesAdded := 0
 					for i := range entriesAdded {
-						linesAdded += len(strings.Split(formatLogEntry(m.logBuf.entries[i]), "\n"))
+						linesAdded += len(strings.Split(formatLogEntry(m.logBuf.entries[i], m.showTimestampHost), "\n"))
 					}
 					// Add boundary markers if present (only if this update caused hasMoreBefore to become false)
 					if !m.logBuf.hasMoreBefore && msg.hasMore {
@@ -549,7 +563,7 @@ func (m model) View() string {
 }
 
 // formatLogEntriesWithBoundaries formats log entries with boundary indicators inline
-func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAfter bool) string {
+func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAfter bool, showTimestampHost bool) string {
 	if len(entries) == 0 {
 		return "No log entries"
 	}
@@ -564,7 +578,7 @@ func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAf
 
 	// Add all log entries
 	for _, entry := range entries {
-		lines = append(lines, formatLogEntry(entry))
+		lines = append(lines, formatLogEntry(entry, showTimestampHost))
 	}
 
 	// Add end indicator at the end if we've hit the end boundary
@@ -577,15 +591,24 @@ func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAf
 }
 
 // formatLogEntry formats a single log entry for display
-func formatLogEntry(entry logEntry) string {
-	// Format: timestamp hostname unit: message
-	// Similar to journalctl short-iso format
-	if entry.hostname != "" && entry.unit != "" {
-		return fmt.Sprintf("%s %s %s: %s", entry.timestamp, entry.hostname, entry.unit, entry.message)
-	} else if entry.unit != "" {
-		return fmt.Sprintf("%s %s: %s", entry.timestamp, entry.unit, entry.message)
+func formatLogEntry(entry logEntry, showTimestampHost bool) string {
+	if showTimestampHost {
+		// Format: timestamp hostname unit: message
+		// Similar to journalctl short-iso format
+		if entry.hostname != "" && entry.unit != "" {
+			return fmt.Sprintf("%s %s %s: %s", entry.timestamp, entry.hostname, entry.unit, entry.message)
+		} else if entry.unit != "" {
+			return fmt.Sprintf("%s %s: %s", entry.timestamp, entry.unit, entry.message)
+		} else {
+			return fmt.Sprintf("%s %s", entry.timestamp, entry.message)
+		}
 	} else {
-		return fmt.Sprintf("%s %s", entry.timestamp, entry.message)
+		// Simplified format: unit: message (no timestamp or hostname)
+		if entry.unit != "" {
+			return fmt.Sprintf("%s: %s", entry.unit, entry.message)
+		} else {
+			return entry.message
+		}
 	}
 }
 
@@ -630,9 +653,14 @@ func newLogBuffer(serviceName string, targetSize int) *logBuffer {
 	}
 }
 
-// GetContent returns formatted content for display with boundary markers
+// GetContent returns formatted content for display with boundary markers (timestamp/host shown)
 func (lb *logBuffer) GetContent() string {
-	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter)
+	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter, true)
+}
+
+// GetContentFormatted returns formatted content with optional timestamp/hostname visibility
+func (lb *logBuffer) GetContentFormatted(showTimestampHost bool) string {
+	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter, showTimestampHost)
 }
 
 // ShouldPrefetch returns true if we need to fetch more older logs
@@ -706,7 +734,8 @@ func (lb *logBuffer) TrimBuffer(viewportY, viewportHeight int) int {
 
 	// Find which entries correspond to the viewport position
 	for i, entry := range lb.entries {
-		entryLines := len(strings.Split(formatLogEntry(entry), "\n"))
+		// Use true for timestamp/host since this is just for line counting
+		entryLines := len(strings.Split(formatLogEntry(entry, true), "\n"))
 		if totalLines+entryLines > viewportY {
 			visibleStartEntry = i
 			break
@@ -733,7 +762,8 @@ func (lb *logBuffer) TrimBuffer(viewportY, viewportHeight int) int {
 	// Calculate lines being removed from the top
 	linesTrimmed := 0
 	for i := range trimStart {
-		linesTrimmed += len(strings.Split(formatLogEntry(lb.entries[i]), "\n"))
+		// Use true for timestamp/host since this is just for line counting
+		linesTrimmed += len(strings.Split(formatLogEntry(lb.entries[i], true), "\n"))
 	}
 
 	// Trim the entries
@@ -1023,6 +1053,7 @@ func handleLogs() error {
 		viewportInitialized: false,
 		loading:             false,
 		err:                 nil,
+		showTimestampHost:   true, // Show timestamp/host by default
 	}
 
 	// Run the program with the initial model
