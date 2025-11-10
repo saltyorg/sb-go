@@ -3,14 +3,13 @@ package spinners
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/saltyorg/sb-go/internal/styles"
+	"github.com/saltyorg/sb-go/internal/tty"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-isatty"
 )
 
 // GlobalSpinnerStyle holds the default style for the spinner itself.
@@ -18,12 +17,6 @@ var GlobalSpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.Co
 var VerboseMode bool
 
 type TaskFunc func() error
-
-// isTTY checks if stdout is a terminal.
-// Returns false if output is redirected, piped, or in a non-interactive environment.
-func isTTY() bool {
-	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
-}
 
 // SpinnerOptions defines the options for creating a spinner.
 type SpinnerOptions struct {
@@ -40,7 +33,7 @@ type SpinnerOptions struct {
 func SetVerboseMode(verbose bool) {
 	// If verbose is explicitly enabled, use it
 	// If verbose is false, check if we have a TTY - if not, enable verbose mode
-	VerboseMode = verbose || !isTTY()
+	VerboseMode = verbose || !tty.IsInteractive()
 }
 
 // RunTaskWithSpinnerContext provides a spinner with default options or text output in verbose mode.

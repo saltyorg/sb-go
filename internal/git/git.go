@@ -9,6 +9,7 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/tty"
 )
 
 // CloneRepository clones a Git repository to a specified path and branch.
@@ -71,19 +72,28 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 		}
 
 		if branchReset == nil {
-			// No flag specified, prompt user
-			reader := bufio.NewReader(os.Stdin)
-			fmt.Printf("%s: Do you want to reset to the '%s' branch? (y/n): ", repoName, defaultBranch)
-			input, _ := reader.ReadString('\n')
-			input = strings.TrimSpace(strings.ToLower(input))
-
-			if input != "y" {
-				if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
+			// No flag specified - prompt user if TTY, otherwise stay on current branch
+			if !tty.IsInteractive() {
+				// No TTY: default to keeping current branch (conservative approach)
+				if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s' (no TTY detected)", repoName, currentBranch)); err != nil {
 					return err
 				}
 				branch = currentBranch
 			} else {
-				branch = defaultBranch
+				// TTY available: prompt user
+				reader := bufio.NewReader(os.Stdin)
+				fmt.Printf("%s: Do you want to reset to the '%s' branch? (y/n): ", repoName, defaultBranch)
+				input, _ := reader.ReadString('\n')
+				input = strings.TrimSpace(strings.ToLower(input))
+
+				if input != "y" {
+					if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
+						return err
+					}
+					branch = currentBranch
+				} else {
+					branch = defaultBranch
+				}
 			}
 		} else if *branchReset {
 			// --reset-branch flag: reset to default branch
