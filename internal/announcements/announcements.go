@@ -52,9 +52,13 @@ type MigrationRequest struct {
 
 // announcementViewer is a Bubble Tea model for displaying announcements
 type announcementViewer struct {
-	viewport      viewport.Model
-	currentIndex  int
-	announcements []announcementItem
+	viewport        viewport.Model
+	currentIndex    int
+	announcements   []announcementItem
+	renderedContent map[int]string // Pre-rendered markdown content by index
+	ready           bool
+	err             error
+	renderer        *glamour.TermRenderer // Stored for potential future use
 }
 
 type announcementItem struct {
@@ -216,122 +220,100 @@ func GetAnnouncementFilePath(repoPath string) string {
 }
 
 // newAnnouncementViewer creates a new announcement viewer
-func newAnnouncementViewer(announcements []announcementItem) (*announcementViewer, error) {
-	const width = 78
-	const height = 20
-
-	vp := viewport.New(width, height)
-	vp.Style = lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("62")).
-		PaddingRight(2)
-
-	viewer := &announcementViewer{
-		viewport:      vp,
-		currentIndex:  0,
-		announcements: announcements,
+func newAnnouncementViewer(announcements []announcementItem) *announcementViewer {
+	return &announcementViewer{
+		viewport:        viewport.New(0, 0), // Will be sized on first WindowSizeMsg
+		currentIndex:    0,
+		announcements:   announcements,
+		renderedContent: make(map[int]string),
+		ready:           false,
+		renderer:        nil,
 	}
-
-	// Render first announcement
-	if len(announcements) > 0 {
-		if err := viewer.renderCurrentAnnouncement(); err != nil {
-			return nil, err
-		}
-	}
-
-	return viewer, nil
 }
 
-func (av *announcementViewer) renderCurrentAnnouncement() error {
-	if av.currentIndex >= len(av.announcements) {
-		return nil
-	}
-
-	item := av.announcements[av.currentIndex]
-	announcement := item.announcement
-	repoName := item.repoName
-
-	// Parse the date and format it for the host locale
-	parsedDate, err := time.Parse("2006-01-02", announcement.Date)
-	var formattedDate string
-	if err != nil {
-		// If parsing fails, use the original date
-		formattedDate = announcement.Date
-	} else {
-		// Format for host locale
-		formattedDate = parsedDate.Format("January 2, 2006")
-	}
-
-	// Build content with repo header and formatted date, then the raw message
-	content := fmt.Sprintf("# %s Announcement - %s\n%s", repoName, formattedDate, announcement.Message)
-
-	const glamourGutter = 2
-	glamourRenderWidth := 78 - av.viewport.Style.GetHorizontalFrameSize() - glamourGutter
-
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(glamourRenderWidth),
-		glamour.WithPreservedNewLines(),
-	)
-	if err != nil {
-		return err
-	}
-
-	str, err := renderer.Render(content)
-	if err != nil {
-		return err
-	}
-
-	av.viewport.SetContent(str)
-
+func (av *announcementViewer) Init() tea.Cmd {
+	// Wait for WindowSizeMsg before rendering
 	return nil
 }
 
-func (av announcementViewer) Init() tea.Cmd {
-	return nil
-}
-
-func (av announcementViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (av *announcementViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if !av.ready {
+			// First time setup with fixed dimensions (original 78x20)
+			const width = 78
+			const height = 20
+
+			av.viewport = viewport.New(width, height)
+			av.viewport.Style = lipgloss.NewStyle().
+				BorderStyle(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("62")).
+				PaddingRight(2)
+			av.ready = true
+
+			// Display the first pre-rendered announcement immediately
+			if content, ok := av.renderedContent[av.currentIndex]; ok {
+				av.viewport.SetContent(content)
+				av.viewport.GotoTop()
+			}
+		}
+		// Ignore window resizes - we keep the fixed 78x20 dimensions
+		return av, nil
+
 	case tea.KeyMsg:
+		// Global quit keys
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			return av, tea.Quit
-		case "right":
-			// Move to next announcement
+		case "right", "l":
+			// Move to next announcement (all pre-rendered - instant!)
 			if av.currentIndex < len(av.announcements)-1 {
 				av.currentIndex++
-				if err := av.renderCurrentAnnouncement(); err != nil {
-					return av, tea.Quit
+				if content, ok := av.renderedContent[av.currentIndex]; ok {
+					av.viewport.SetContent(content)
+					av.viewport.GotoTop()
 				}
-				return av, nil
 			}
 			return av, nil
-		case "left":
-			// Move to previous announcement
+		case "left", "h":
+			// Move to previous announcement (all pre-rendered - instant!)
 			if av.currentIndex > 0 {
 				av.currentIndex--
-				if err := av.renderCurrentAnnouncement(); err != nil {
-					return av, tea.Quit
+				if content, ok := av.renderedContent[av.currentIndex]; ok {
+					av.viewport.SetContent(content)
+					av.viewport.GotoTop()
 				}
-				return av, nil
 			}
 			return av, nil
 		default:
+			// Delegate viewport scrolling to the viewport model
 			var cmd tea.Cmd
 			av.viewport, cmd = av.viewport.Update(msg)
 			return av, cmd
 		}
+
 	default:
-		return av, nil
+		// Pass other messages to viewport
+		var cmd tea.Cmd
+		av.viewport, cmd = av.viewport.Update(msg)
+		return av, cmd
 	}
 }
 
-func (av announcementViewer) View() string {
+func (av *announcementViewer) View() string {
+	if av.err != nil {
+		return fmt.Sprintf("Error rendering announcement: %v\n", av.err)
+	}
+
+	if !av.ready {
+		return "Initializing..."
+	}
+
+	// Compose view using pre-rendered viewport content
 	return av.viewport.View() + av.helpView()
 }
 
-func (av announcementViewer) helpView() string {
+func (av *announcementViewer) helpView() string {
 	if len(av.announcements) <= 1 {
 		return helpStyle("\n  ↑/↓: Navigate • q: Quit\n")
 	}
@@ -342,10 +324,10 @@ func (av announcementViewer) helpView() string {
 
 	var navigation []string
 	if av.currentIndex > 0 {
-		navigation = append(navigation, "← Previous")
+		navigation = append(navigation, "←/h: Previous")
 	}
 	if av.currentIndex < len(av.announcements)-1 {
-		navigation = append(navigation, "→ Next")
+		navigation = append(navigation, "→/l: Next")
 	}
 
 	navText := strings.Join(navigation, " • ")
@@ -378,14 +360,54 @@ func DisplayAnnouncements(diffs []*AnnouncementDiff) error {
 		return err
 	}
 
-	// Create and run the announcement viewer
-	viewer, err := newAnnouncementViewer(allAnnouncements)
+	// Pre-render all announcements BEFORE starting Bubbletea
+	// This avoids any async complexity and matches the fast plain-text version
+	renderedContent := make(map[int]string)
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle("dark"),
+		glamour.WithWordWrap(78), // Use a reasonable default width
+		glamour.WithPreservedNewLines(),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to create announcement viewer: %w", err)
+		return fmt.Errorf("failed to create renderer: %w", err)
 	}
 
-	if _, err := tea.NewProgram(viewer).Run(); err != nil {
+	for i, item := range allAnnouncements {
+		parsedDate, err := time.Parse("2006-01-02", item.announcement.Date)
+		var formattedDate string
+		if err != nil {
+			formattedDate = item.announcement.Date
+		} else {
+			formattedDate = parsedDate.Format("January 2, 2006")
+		}
+
+		content := fmt.Sprintf("# %s Announcement - %s\n%s", item.repoName, formattedDate, item.announcement.Message)
+		rendered, err := renderer.Render(content)
+		if err != nil {
+			return fmt.Errorf("failed to render announcement: %w", err)
+		}
+		renderedContent[i] = rendered
+	}
+
+	// Create viewer with pre-rendered content
+	viewer := newAnnouncementViewer(allAnnouncements)
+	viewer.renderedContent = renderedContent
+	viewer.renderer = renderer // Store for potential resizes
+
+	// Run with alt screen - use stdin/stdout explicitly to avoid TTY issues
+	p := tea.NewProgram(
+		viewer,
+		tea.WithAltScreen(),
+		tea.WithInput(os.Stdin),
+		tea.WithOutput(os.Stdout),
+	)
+	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("failed to run announcement viewer: %w", err)
+	}
+
+	// Check if there was an error during rendering
+	if viewer.err != nil {
+		return fmt.Errorf("error during announcement display: %w", viewer.err)
 	}
 
 	return nil
