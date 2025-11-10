@@ -38,11 +38,11 @@ func init() {
 }
 
 const (
-	logPageSize         = 500   // Number of log entries per page
-	prefetchPagesAhead  = 10    // Number of pages to stay ahead when prefetching
-	maxBufferEntries    = 20000 // Maximum entries to keep in memory
-	viewportsAhead      = 5     // Prefetch when within 5 viewports of edge
-	viewportsToKeep     = 10    // Keep 10 viewports on each side when trimming
+	logPageSize        = 500   // Number of log entries per page
+	prefetchPagesAhead = 10    // Number of pages to stay ahead when prefetching
+	maxBufferEntries   = 20000 // Maximum entries to keep in memory
+	viewportsAhead     = 5     // Prefetch when within 5 viewports of edge
+	viewportsToKeep    = 10    // Keep 10 viewports on each side when trimming
 )
 
 type serviceItem struct {
@@ -75,6 +75,16 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	}
 }
 
+// ShortHelpForList returns help bindings for list view (no "back" option)
+func (k keyMap) ShortHelpForList() []key.Binding {
+	return []key.Binding{k.Enter, k.Quit}
+}
+
+// ShortHelpForLogs returns help bindings for logs view
+func (k keyMap) ShortHelpForLogs() []key.Binding {
+	return []key.Binding{k.Back, k.Quit}
+}
+
 var keys = keyMap{
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),
@@ -89,8 +99,8 @@ var keys = keyMap{
 		key.WithHelp("enter", "view logs"),
 	),
 	Back: key.NewBinding(
-		key.WithKeys("left", "esc"),
-		key.WithHelp("←/esc", "back to list"),
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "back to list"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),
@@ -122,6 +132,7 @@ type model struct {
 	loading             bool
 	err                 error
 	viewportYPosition   int // Store viewport scroll position
+	quitting            bool
 }
 
 func (m model) Init() tea.Cmd {
@@ -137,23 +148,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Calculate list width dynamically - use 1/4 of screen but minimum 20 chars
-		listWidth := max(msg.Width/4, 20)
-		logsWidth := msg.Width - listWidth
+		helpHeight := lipgloss.Height(m.help.View(m.keys))
 
-		m.list.SetWidth(listWidth)
-		// Reserve space for help at bottom
-		m.list.SetHeight(msg.Height - lipgloss.Height(m.help.View(m.keys)))
+		if m.activeView == "list" {
+			// Inline list view - use full width, compact height
+			m.list.SetWidth(msg.Width)
+			m.list.SetHeight(15) // Compact height for inline display
+		} else {
+			// Logs view - viewport uses full screen in alt screen mode
+			if m.viewportInitialized {
+				// Store current position before resize
+				m.viewportYPosition = m.viewport.YOffset
 
-		if m.viewportInitialized {
-			// Store current position before resize
-			m.viewportYPosition = m.viewport.YOffset
+				m.viewport.Width = msg.Width
+				m.viewport.Height = msg.Height - helpHeight
 
-			m.viewport.Width = logsWidth
-			m.viewport.Height = msg.Height - lipgloss.Height(m.help.View(m.keys))
-
-			// Restore scroll position after resize
-			m.viewport.YOffset = min(m.viewportYPosition, max(0, m.viewport.TotalLineCount()-m.viewport.Height))
+				// Restore scroll position after resize
+				m.viewport.YOffset = min(m.viewportYPosition, max(0, m.viewport.TotalLineCount()-m.viewport.Height))
+			}
 		}
 
 		m.help.Width = msg.Width
@@ -168,6 +180,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+c", "q":
+			m.quitting = true
+			// If we're in logs view (alt screen), exit alt screen before quitting
+			if m.activeView == "logs" {
+				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+			}
 			return m, tea.Quit
 
 		case "enter":
@@ -178,12 +195,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// Initialize the viewport if necessary
 					if !m.viewportInitialized {
-						// Split view layout
-						listWidth := max(m.width/4, 20)
-						logsWidth := m.width - listWidth
-
 						helpHeight := lipgloss.Height(m.help.View(m.keys))
-						m.viewport = viewport.New(logsWidth, m.height-helpHeight)
+						// Use full terminal width and height for fullscreen viewport
+						m.viewport = viewport.New(m.width, m.height-helpHeight)
 						m.viewport.Style = lipgloss.NewStyle().Padding(1, 2)
 						m.viewportInitialized = true
 					}
@@ -201,22 +215,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.viewportYPosition = 0
 						// Create new log buffer with target size of 10 pages
 						m.logBuf = newLogBuffer(m.selectedService, prefetchPagesAhead*logPageSize)
-						return m, fetchLogs(m.selectedService, false, "", false)
+						// Enter alt screen and fetch logs
+						return m, tea.Batch(tea.EnterAltScreen, fetchLogs(m.selectedService, false, "", false))
 					} else {
 						// Make sure we re-apply the current log content with boundaries
 						if m.logBuf != nil {
 							m.viewport.SetContent(m.logBuf.GetContent())
 						}
+						// Enter alt screen to view existing logs
+						return m, tea.EnterAltScreen
 					}
 				}
 			}
 
-		case "left", "esc":
+		case "esc":
 			if m.activeView == "logs" && !m.loading {
 				m.activeView = "list"
 				m.err = nil // Clear any errors when going back
-				// Focus back on the list but keep the split view
-				return m, nil
+				// Exit alt screen and return to inline list view
+				return m, tea.ExitAltScreen
 			}
 
 		case "pgup", "u":
@@ -241,6 +258,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, fetchLogs(m.selectedService, false, m.logBuf.afterCursor, false)
 				}
 				// Otherwise, let the viewport handle scrolling
+			}
+
+		case "left":
+			// Scroll viewport left for long lines
+			if m.activeView == "logs" && m.viewportInitialized {
+				m.viewport.ScrollLeft(10)
+			}
+
+		case "right":
+			// Scroll viewport right for long lines
+			if m.activeView == "logs" && m.viewportInitialized {
+				m.viewport.ScrollRight(10)
 			}
 		}
 
@@ -405,28 +434,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	helpView := m.help.View(m.keys)
-	helpHeight := lipgloss.Height(helpView)
+	// If quitting, return empty string to clean up viewport
+	if m.quitting {
+		return ""
+	}
 
-	// Calculate list width with proper measurement
-	listWidth := m.list.Width()
-	listViewContent := m.list.View()
+	// Get context-aware help based on active view
+	var helpView string
+	if m.activeView == "list" {
+		helpView = m.help.ShortHelpView(m.keys.ShortHelpForList())
+	} else {
+		helpView = m.help.ShortHelpView(m.keys.ShortHelpForLogs())
+	}
 
-	listView := lipgloss.NewStyle().
-		Width(listWidth).
-		Height(m.height - helpHeight).
-		Render(listViewContent)
+	if m.activeView == "list" {
+		// Inline list view - render list with help at bottom
+		return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpView)
+	}
 
-	// Build logs view content
-	var logsViewContent string
-	logsWidth := m.width - listWidth
+	// Fullscreen logs view (in alt screen)
+	var logsContent string
 
 	if m.err != nil {
 		// Show error with styling
 		errorMsg := styles.ErrorStyle.Render("Error: " + m.err.Error())
-		logsViewContent = lipgloss.NewStyle().
-			Width(logsWidth).
-			Height(m.height - helpHeight).
+		logsContent = lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height - lipgloss.Height(helpView)).
 			Padding(2).
 			Render(errorMsg)
 	} else if m.loading {
@@ -434,30 +468,25 @@ func (m model) View() string {
 		loadingMsg := fmt.Sprintf("%s Loading logs for %s...",
 			m.spinner.View(),
 			styles.InfoStyle.Render(m.selectedService))
-		logsViewContent = lipgloss.NewStyle().
-			Width(logsWidth).
-			Height(m.height - helpHeight).
+		logsContent = lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height - lipgloss.Height(helpView)).
 			Padding(2).
 			Render(loadingMsg)
 	} else if m.viewportInitialized && m.selectedService != "" {
-		// Show viewport with logs (boundaries are now inline in the content)
-		logsViewContent = lipgloss.NewStyle().
-			Width(logsWidth).
-			Height(m.height - helpHeight).
-			Render(m.viewport.View())
+		// Show viewport with logs
+		logsContent = m.viewport.View()
 	} else {
 		// Show prompt to select a service
 		promptMsg := styles.DimStyle.Render("Select a service to view logs")
-		logsViewContent = lipgloss.NewStyle().
-			Width(logsWidth).
-			Height(m.height - helpHeight).
+		logsContent = lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height - lipgloss.Height(helpView)).
 			Padding(2).
 			Render(promptMsg)
 	}
 
-	mainView := lipgloss.JoinHorizontal(lipgloss.Top, listView, logsViewContent)
-
-	return lipgloss.JoinVertical(lipgloss.Left, mainView, helpView)
+	return lipgloss.JoinVertical(lipgloss.Left, logsContent, helpView)
 }
 
 // formatLogEntriesWithBoundaries formats log entries with boundary indicators inline
@@ -880,11 +909,12 @@ func handleLogs() error {
 		items[i] = serviceItem{name: service}
 	}
 
-	// Create a list with styling
+	// Create a list with styling for inline display
 	listDelegate := list.NewDefaultDelegate()
 	listDelegate.ShowDescription = false
 
-	listModel := list.New(items, listDelegate, 0, 0)
+	// Start with compact size for inline display
+	listModel := list.New(items, listDelegate, 80, 15)
 	listModel.Title = "Systemd Services"
 	listModel.Styles.Title = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).UnsetBackground()
 	listModel.SetShowStatusBar(false)
@@ -914,7 +944,8 @@ func handleLogs() error {
 	}
 
 	// Run the program with the initial model
-	p := tea.NewProgram(initialModel, tea.WithAltScreen())
+	// Start in normal terminal mode (inline), only use alt screen when viewing logs
+	p := tea.NewProgram(initialModel)
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running logs UI: %w", err)
 	}
