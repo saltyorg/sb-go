@@ -122,17 +122,17 @@ tidy: ## Tidy and verify dependencies
 	go mod tidy
 	go mod verify
 
-update: ## Update all dependencies to latest minor/patch versions
-	@echo "$(GREEN)Updating dependencies...$(NC)"
-	go get -u ./...
+update: ## Update direct dependencies to latest minor/patch versions (excludes indirect)
+	@echo "$(GREEN)Updating direct dependencies...$(NC)"
+	@go list -f '{{if not .Indirect}}{{.Path}}{{end}}' -m all | grep -v '^$(MODULE)$$' | xargs -r go get -u
 	go mod tidy
-	@echo "$(GREEN)Dependencies updated$(NC)"
+	@echo "$(GREEN)Direct dependencies updated$(NC)"
 
-update-patch: ## Update dependencies to latest patch versions only
-	@echo "$(GREEN)Updating dependencies (patch only)...$(NC)"
-	go get -u=patch ./...
+update-patch: ## Update direct dependencies to latest patch versions only (excludes indirect)
+	@echo "$(GREEN)Updating direct dependencies (patch only)...$(NC)"
+	@go list -f '{{if not .Indirect}}{{.Path}}{{end}}' -m all | grep -v '^$(MODULE)$$' | xargs -r go get -u=patch
 	go mod tidy
-	@echo "$(GREEN)Dependencies updated (patch only)$(NC)"
+	@echo "$(GREEN)Direct dependencies updated (patch only)$(NC)"
 
 ##@ Running
 
