@@ -3,13 +3,20 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/styles"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -30,7 +37,10 @@ func init() {
 	rootCmd.AddCommand(logsCmd)
 }
 
-const logPageSize = 500
+const (
+	logPageSize        = 500 // Number of log entries per page
+	prefetchPagesAhead = 10  // Number of pages to stay ahead when prefetching
+)
 
 type serviceItem struct {
 	name string
@@ -40,22 +50,79 @@ func (i serviceItem) Title() string       { return i.name }
 func (i serviceItem) Description() string { return "" }
 func (i serviceItem) FilterValue() string { return i.name }
 
+// Key bindings for help
+type keyMap struct {
+	Up       key.Binding
+	Down     key.Binding
+	Enter    key.Binding
+	Back     key.Binding
+	Quit     key.Binding
+	PageUp   key.Binding
+	PageDown key.Binding
+}
+
+func (k keyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Enter, k.Back, k.Quit}
+}
+
+func (k keyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Up, k.Down, k.PageUp, k.PageDown},
+		{k.Enter, k.Back, k.Quit},
+	}
+}
+
+var keys = keyMap{
+	Up: key.NewBinding(
+		key.WithKeys("up", "k"),
+		key.WithHelp("↑/k", "scroll up"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("down", "j"),
+		key.WithHelp("↓/j", "scroll down"),
+	),
+	Enter: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "view logs"),
+	),
+	Back: key.NewBinding(
+		key.WithKeys("left", "esc"),
+		key.WithHelp("←/esc", "back to list"),
+	),
+	Quit: key.NewBinding(
+		key.WithKeys("q", "ctrl+c"),
+		key.WithHelp("q", "quit"),
+	),
+	PageUp: key.NewBinding(
+		key.WithKeys("pgup"),
+		key.WithHelp("pgup", "previous page"),
+	),
+	PageDown: key.NewBinding(
+		key.WithKeys("pgdown"),
+		key.WithHelp("pgdown", "next page"),
+	),
+}
+
 type model struct {
 	list                list.Model
 	viewport            viewport.Model
+	spinner             spinner.Model
+	help                help.Model
+	keys                keyMap
 	serviceItems        []list.Item
 	selectedService     string
-	beforeCursor        string
-	afterCursor         string
+	logBuf              *logBuffer // Manages log entries and prefetching
 	width               int
 	height              int
-	logs                string
 	activeView          string
 	viewportInitialized bool
+	loading             bool
+	err                 error
+	viewportYPosition   int // Store viewport scroll position
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return m.spinner.Tick
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -67,21 +134,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		// Always use a split view layout
-		listWidth := msg.Width / 4
+		// Calculate list width dynamically - use 1/4 of screen but minimum 20 chars
+		listWidth := max(msg.Width/4, 20)
 		logsWidth := msg.Width - listWidth
 
 		m.list.SetWidth(listWidth)
-		m.list.SetHeight(msg.Height)
+		// Reserve space for help at bottom
+		m.list.SetHeight(msg.Height - lipgloss.Height(m.help.View(m.keys)))
 
 		if m.viewportInitialized {
+			// Store current position before resize
+			m.viewportYPosition = m.viewport.YOffset
+
 			m.viewport.Width = logsWidth
-			m.viewport.Height = msg.Height
+			m.viewport.Height = msg.Height - lipgloss.Height(m.help.View(m.keys))
+
+			// Restore scroll position after resize
+			m.viewport.YOffset = min(m.viewportYPosition, max(0, m.viewport.TotalLineCount()-m.viewport.Height))
 		}
+
+		m.help.Width = msg.Width
 
 		return m, nil
 
 	case tea.KeyMsg:
+		// Don't process navigation keys if loading
+		if m.loading && msg.String() != "q" && msg.String() != "ctrl+c" {
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -95,10 +176,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Initialize the viewport if necessary
 					if !m.viewportInitialized {
 						// Split view layout
-						listWidth := m.width / 4
+						listWidth := max(m.width/4, 20)
 						logsWidth := m.width - listWidth
 
-						m.viewport = viewport.New(logsWidth, m.height)
+						helpHeight := lipgloss.Height(m.help.View(m.keys))
+						m.viewport = viewport.New(logsWidth, m.height-helpHeight)
 						m.viewport.Style = lipgloss.NewStyle().Padding(1, 2)
 						m.viewportInitialized = true
 					}
@@ -106,111 +188,394 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Only fetch new logs if a different service was selected
 					if newService != m.selectedService {
 						m.selectedService = newService
-						m.beforeCursor = ""
-						m.afterCursor = ""
-						return m, fetchLogs(m.selectedService, false, "")
+						m.loading = true
+						m.err = nil
+						m.viewportYPosition = 0
+						// Create new log buffer with target size of 10 pages
+						m.logBuf = newLogBuffer(m.selectedService, prefetchPagesAhead*logPageSize)
+						return m, fetchLogs(m.selectedService, false, "", false)
 					} else {
-						// Make sure we re-apply the current log content
-						m.viewport.SetContent(m.logs)
+						// Make sure we re-apply the current log content with boundaries
+						if m.logBuf != nil {
+							m.viewport.SetContent(m.logBuf.GetContent())
+						}
 					}
 				}
 			}
 
 		case "left", "esc":
-			if m.activeView == "logs" {
+			if m.activeView == "logs" && !m.loading {
 				m.activeView = "list"
+				m.err = nil // Clear any errors when going back
 				// Focus back on the list but keep the split view
 				return m, nil
 			}
 
-		case "up":
-			if m.activeView == "logs" && m.beforeCursor != "" {
-				return m, fetchLogs(m.selectedService, true, m.beforeCursor)
+		case "pgup", "u":
+			// Fetch more older logs if we're at the top of viewport and have more to load
+			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
+				atTop := m.viewport.YOffset <= 0
+				if atTop && m.logBuf.beforeCursor != "" && m.logBuf.hasMoreBefore {
+					m.loading = true
+					m.err = nil
+					return m, fetchLogs(m.selectedService, true, m.logBuf.beforeCursor, false)
+				}
+				// Otherwise, let the viewport handle scrolling
 			}
 
-		case "down":
-			if m.activeView == "logs" && m.afterCursor != "" {
-				return m, fetchLogs(m.selectedService, false, m.afterCursor)
+		case "pgdown", "d":
+			// Only fetch more logs if we're at the bottom of viewport and have more to load
+			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
+				atBottom := m.viewport.YOffset >= m.viewport.TotalLineCount()-m.viewport.Height
+				if atBottom && m.logBuf.afterCursor != "" && m.logBuf.hasMoreAfter {
+					m.loading = true
+					m.err = nil
+					return m, fetchLogs(m.selectedService, false, m.logBuf.afterCursor, false)
+				}
+				// Otherwise, let the viewport handle scrolling
 			}
 		}
 
 	case logsMsg:
-		if m.activeView == "logs" {
-			m.logs = string(msg.logs)
-			m.viewport.SetContent(m.logs)
-			if msg.reverse {
-				// For reverse (older logs), we want to show from the beginning
-				m.viewport.GotoTop()
-				m.beforeCursor = msg.cursor
+		if msg.err != nil {
+			m.err = msg.err
+			if m.logBuf != nil {
+				m.logBuf.prefetching = false
+			}
+			m.loading = false
+		} else {
+			m.err = nil
+
+			// Clear loading flag
+			if msg.isPrefetch {
+				if m.logBuf != nil {
+					m.logBuf.prefetching = false
+				}
 			} else {
-				// For newer logs, we want to show the end
-				m.viewport.GotoBottom()
-				m.afterCursor = msg.cursor
+				m.loading = false
+			}
+
+			if m.activeView == "logs" && m.logBuf != nil {
+				if len(msg.entries) == 0 {
+					// No entries returned - we hit a boundary
+					if msg.reverse {
+						m.logBuf.hasMoreBefore = false
+					} else {
+						m.logBuf.hasMoreAfter = false
+					}
+					// Don't update display, just stop loading
+					return m, nil
+				}
+
+				if msg.reverse {
+					// Prepend older logs
+					oldLen := len(m.logBuf.entries)
+
+					// Save current viewport position before updating content
+					savedYOffset := m.viewport.YOffset
+
+					// Use firstCursor (oldest entry) to continue fetching even older logs
+					prefetchCmd := m.logBuf.PrependOlder(msg.entries, msg.firstCursor, msg.hasMore)
+
+					// Calculate how many lines were added
+					entriesAdded := len(m.logBuf.entries) - oldLen
+					linesAdded := 0
+					for i := 0; i < entriesAdded; i++ {
+						linesAdded += len(strings.Split(formatLogEntry(m.logBuf.entries[i]), "\n"))
+					}
+					// Add boundary markers if present (only if this update caused hasMoreBefore to become false)
+					if !m.logBuf.hasMoreBefore && msg.hasMore {
+						// Boundary marker was just added
+						linesAdded += 2 // "--- start of logs ---" + blank line
+					}
+
+					// Update viewport content
+					m.viewport.SetContent(m.logBuf.GetContent())
+
+					// ALWAYS adjust viewport position when prepending to prevent scroll jumping
+					// This keeps the user's view stable regardless of prefetch or user action
+					m.viewport.YOffset = min(savedYOffset+linesAdded, m.viewport.TotalLineCount()-m.viewport.Height)
+					m.viewportYPosition = m.viewport.YOffset
+
+					// Check if logBuffer wants to prefetch more
+					if prefetchCmd != nil {
+						cmds = append(cmds, prefetchCmd)
+					}
+				} else {
+					if len(m.logBuf.entries) == 0 {
+						// Initial load
+						prefetchCmd := m.logBuf.AppendInitial(msg.entries, msg.firstCursor, msg.lastCursor)
+
+						// Update viewport and position at bottom
+						m.viewport.SetContent(m.logBuf.GetContent())
+						m.viewport.GotoBottom()
+						m.viewportYPosition = m.viewport.YOffset
+
+						// Start prefetching if logBuffer wants to
+						if prefetchCmd != nil {
+							cmds = append(cmds, prefetchCmd)
+						}
+					} else {
+						// Append newer logs
+						m.logBuf.AppendNewer(msg.entries, msg.lastCursor, msg.hasMore)
+
+						// Update viewport content
+						m.viewport.SetContent(m.logBuf.GetContent())
+
+						if !msg.isPrefetch {
+							// User-initiated: go to bottom
+							m.viewport.GotoBottom()
+							m.viewportYPosition = m.viewport.YOffset
+						}
+						// For prefetch: viewport stays where it is
+					}
+				}
 			}
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
+
+	case spinner.TickMsg:
+		if m.loading {
+			m.spinner, cmd = m.spinner.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	// Handle list navigation
-	if m.activeView == "list" {
+	if m.activeView == "list" && !m.loading {
 		m.list, cmd = m.list.Update(msg)
 		cmds = append(cmds, cmd)
-	} else {
+	} else if m.activeView == "logs" && !m.loading {
 		// Handle viewport navigation when showing logs
 		m.viewport, cmd = m.viewport.Update(msg)
 		cmds = append(cmds, cmd)
+		// Track position changes
+		m.viewportYPosition = m.viewport.YOffset
 	}
 
 	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
-	// Always show a split view
-	listView := lipgloss.NewStyle().
-		Width(m.list.Width()).
-		Height(m.height).
-		Render(m.list.View())
+	helpView := m.help.View(m.keys)
+	helpHeight := lipgloss.Height(helpView)
 
-	// If the viewport isn't initialized yet, show an empty space
-	var logsView string
-	if m.viewportInitialized {
-		logsView = lipgloss.NewStyle().
-			Width(m.viewport.Width).
-			Height(m.height).
+	// Calculate list width with proper measurement
+	listWidth := m.list.Width()
+	listViewContent := m.list.View()
+
+	listView := lipgloss.NewStyle().
+		Width(listWidth).
+		Height(m.height - helpHeight).
+		Render(listViewContent)
+
+	// Build logs view content
+	var logsViewContent string
+	logsWidth := m.width - listWidth
+
+	if m.err != nil {
+		// Show error with styling
+		errorMsg := styles.ErrorStyle.Render("Error: " + m.err.Error())
+		logsViewContent = lipgloss.NewStyle().
+			Width(logsWidth).
+			Height(m.height - helpHeight).
+			Padding(2).
+			Render(errorMsg)
+	} else if m.loading {
+		// Show loading spinner
+		loadingMsg := fmt.Sprintf("%s Loading logs for %s...",
+			m.spinner.View(),
+			styles.InfoStyle.Render(m.selectedService))
+		logsViewContent = lipgloss.NewStyle().
+			Width(logsWidth).
+			Height(m.height - helpHeight).
+			Padding(2).
+			Render(loadingMsg)
+	} else if m.viewportInitialized && m.selectedService != "" {
+		// Show viewport with logs (boundaries are now inline in the content)
+		logsViewContent = lipgloss.NewStyle().
+			Width(logsWidth).
+			Height(m.height - helpHeight).
 			Render(m.viewport.View())
 	} else {
-		logsView = lipgloss.NewStyle().
-			Width(m.width - m.list.Width()).
-			Height(m.height).
-			Render("Select a service to view logs")
+		// Show prompt to select a service
+		promptMsg := styles.DimStyle.Render("Select a service to view logs")
+		logsViewContent = lipgloss.NewStyle().
+			Width(logsWidth).
+			Height(m.height - helpHeight).
+			Padding(2).
+			Render(promptMsg)
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, listView, logsView)
+	mainView := lipgloss.JoinHorizontal(lipgloss.Top, listView, logsViewContent)
+
+	return lipgloss.JoinVertical(lipgloss.Left, mainView, helpView)
+}
+
+// formatLogEntriesWithBoundaries formats log entries with boundary indicators inline
+func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAfter bool) string {
+	if len(entries) == 0 {
+		return "No log entries"
+	}
+
+	var lines []string
+
+	// Add start indicator at the beginning if we've hit the start boundary
+	if !hasMoreBefore {
+		lines = append(lines, styles.DimStyle.Render("--- start of logs ---"))
+		lines = append(lines, "")
+	}
+
+	// Add all log entries
+	for _, entry := range entries {
+		lines = append(lines, formatLogEntry(entry))
+	}
+
+	// Add end indicator at the end if we've hit the end boundary
+	if !hasMoreAfter {
+		lines = append(lines, "")
+		lines = append(lines, styles.DimStyle.Render("--- end of logs ---"))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// formatLogEntry formats a single log entry for display
+func formatLogEntry(entry logEntry) string {
+	// Format: timestamp hostname unit: message
+	// Similar to journalctl short-iso format
+	if entry.hostname != "" && entry.unit != "" {
+		return fmt.Sprintf("%s %s %s: %s", entry.timestamp, entry.hostname, entry.unit, entry.message)
+	} else if entry.unit != "" {
+		return fmt.Sprintf("%s %s: %s", entry.timestamp, entry.unit, entry.message)
+	} else {
+		return fmt.Sprintf("%s %s", entry.timestamp, entry.message)
+	}
 }
 
 type logsMsg struct {
-	logs    []byte
-	cursor  string
-	reverse bool
+	entries     []logEntry // Parsed log entries
+	firstCursor string     // First cursor in the result (for bidirectional nav)
+	lastCursor  string     // Last cursor in the result
+	reverse     bool
+	hasMore     bool // Whether there are more entries in this direction
+	isPrefetch  bool // Whether this is a background prefetch request
+	err         error
 }
 
-func fetchLogs(service string, reverse bool, cursor string) tea.Cmd {
+type logEntry struct {
+	timestamp string
+	hostname  string
+	unit      string
+	message   string
+	cursor    string
+}
+
+// logBuffer manages log entries and handles prefetching
+type logBuffer struct {
+	entries       []logEntry
+	beforeCursor  string
+	afterCursor   string
+	hasMoreBefore bool
+	hasMoreAfter  bool
+	serviceName   string
+	prefetching   bool
+	targetSize    int // Target number of entries to keep loaded
+}
+
+func newLogBuffer(serviceName string, targetSize int) *logBuffer {
+	return &logBuffer{
+		entries:       []logEntry{},
+		serviceName:   serviceName,
+		targetSize:    targetSize,
+		hasMoreBefore: true,
+		hasMoreAfter:  false,
+	}
+}
+
+// GetContent returns formatted content for display with boundary markers
+func (lb *logBuffer) GetContent() string {
+	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter)
+}
+
+// ShouldPrefetch returns true if we need to fetch more older logs
+func (lb *logBuffer) ShouldPrefetch() bool {
+	return len(lb.entries) < lb.targetSize && lb.hasMoreBefore && lb.beforeCursor != "" && !lb.prefetching
+}
+
+// StartPrefetch marks prefetch as in progress and returns the fetch command
+func (lb *logBuffer) StartPrefetch() tea.Cmd {
+	if !lb.ShouldPrefetch() {
+		return nil
+	}
+	lb.prefetching = true
+	return fetchLogs(lb.serviceName, true, lb.beforeCursor, true)
+}
+
+// AppendInitial sets initial logs (most recent)
+func (lb *logBuffer) AppendInitial(entries []logEntry, firstCursor, lastCursor string) tea.Cmd {
+	lb.entries = entries
+	lb.beforeCursor = firstCursor
+	lb.afterCursor = lastCursor
+	lb.hasMoreBefore = true
+	lb.hasMoreAfter = false
+	return lb.StartPrefetch()
+}
+
+// PrependOlder adds older logs to the beginning
+// oldestCursor should be the cursor of the oldest entry in the batch (to fetch even older logs)
+func (lb *logBuffer) PrependOlder(entries []logEntry, oldestCursor string, hasMore bool) tea.Cmd {
+	lb.entries = append(entries, lb.entries...)
+	lb.beforeCursor = oldestCursor
+	lb.hasMoreBefore = hasMore
+	lb.prefetching = false
+	return lb.StartPrefetch()
+}
+
+// AppendNewer adds newer logs to the end
+func (lb *logBuffer) AppendNewer(entries []logEntry, lastCursor string, hasMore bool) {
+	lb.entries = append(lb.entries, entries...)
+	lb.afterCursor = lastCursor
+	lb.hasMoreAfter = hasMore
+}
+
+func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea.Cmd {
 	return func() tea.Msg {
-		// Use short-iso output format instead of cat to keep timestamps
-		// This format looks like: "2023-03-14 15:30:45 Log message here"
-		args := []string{"journalctl", "-u", service, "-n", fmt.Sprintf("%d", logPageSize), "-o", "short-iso"}
-		if cursor != "" {
-			if reverse {
-				args = append(args, "--before-cursor", cursor)
-			} else {
-				args = append(args, "--after-cursor", cursor)
-			}
-		}
-		if reverse {
-			args = append(args, "-r")
+		// Build journalctl command with JSON output for proper parsing
+		// Add .service suffix to ensure exact unit match
+		serviceUnit := service
+		if !strings.HasSuffix(serviceUnit, ".service") {
+			serviceUnit = serviceUnit + ".service"
 		}
 
-		// Use context with timeout for the journalctl command
+		args := []string{
+			"journalctl",
+			"-u", serviceUnit,
+			"-o", "json", // Use JSON for structured parsing
+		}
+
+		if cursor != "" {
+			// Use --cursor with the given cursor position
+			args = append(args, "--cursor", cursor)
+			if reverse {
+				// Get entries before this cursor (older logs)
+				// --reverse makes it go backward from the cursor
+				args = append(args, "--reverse", "-n", fmt.Sprintf("%d", logPageSize))
+			} else {
+				// Get entries after this cursor (newer logs)
+				// Forward from the cursor (default behavior)
+				args = append(args, "-n", fmt.Sprintf("%d", logPageSize))
+			}
+		} else {
+			// No cursor - show most recent entries
+			if reverse {
+				args = append(args, "--reverse", "-n", fmt.Sprintf("%d", logPageSize))
+			} else {
+				args = append(args, "-n", fmt.Sprintf("%d", logPageSize))
+			}
+		}
+
+		// Use context with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
@@ -218,35 +583,132 @@ func fetchLogs(service string, reverse bool, cursor string) tea.Cmd {
 			executor.WithArgs(args[1:]...),
 			executor.WithOutputMode(executor.OutputModeCombined),
 		)
-		var output []byte
+
 		if err != nil {
-			output = fmt.Appendf(nil, "Error fetching logs: %v", err)
+			return logsMsg{isPrefetch: isPrefetch, err: fmt.Errorf("failed to fetch logs: %w", err)}
+		}
+
+		output := result.Combined
+
+		// Parse JSON entries
+		entries, err := parseJSONLogs(output)
+		if err != nil {
+			return logsMsg{isPrefetch: isPrefetch, err: fmt.Errorf("failed to parse logs: %w", err)}
+		}
+
+		// When using --cursor, journalctl ALWAYS includes the cursor entry as the first result
+		// We need to skip it in both forward and reverse modes to avoid duplicates
+		if cursor != "" && len(entries) > 0 {
+			if entries[0].cursor == cursor {
+				entries = entries[1:]
+			}
+		}
+
+		// If no entries returned (after skipping cursor), we've hit a boundary
+		if len(entries) == 0 {
+			return logsMsg{
+				entries:     nil,
+				firstCursor: cursor,
+				lastCursor:  cursor,
+				reverse:     reverse,
+				hasMore:     false,
+				isPrefetch:  isPrefetch,
+				err:         nil,
+			}
+		}
+
+		// Determine if there are more entries available
+		// After cursor skip, we get logPageSize-1 entries if more exist
+		// If we got fewer entries, we've hit a boundary
+		hasMore := len(entries) >= logPageSize-1
+
+		// Extract cursors BEFORE normalizing entry order
+		// For reverse mode: journalctl returns newest→oldest, so last entry is oldest
+		// For forward mode: journalctl returns oldest→newest, so first entry is oldest
+		var firstCursor, lastCursor string
+		if reverse {
+			// In reverse mode, last entry is the oldest (to fetch even older logs)
+			firstCursor = entries[len(entries)-1].cursor
+			lastCursor = entries[0].cursor
 		} else {
-			output = result.Combined
+			// In forward mode, first is oldest, last is newest
+			firstCursor = entries[0].cursor
+			lastCursor = entries[len(entries)-1].cursor
 		}
 
-		// Handle potential encoding issues
-		text := string(output)
-		if !strings.HasPrefix(text, "\xef\xbb\xbf") {
-			text = strings.ToValidUTF8(text, "")
+		// Normalize entry order: our buffer always maintains oldest→newest order
+		// journalctl with --reverse returns newest→oldest, so we need to reverse it back
+		if reverse {
+			// Reverse the slice to convert newest→oldest to oldest→newest
+			for i := 0; i < len(entries)/2; i++ {
+				entries[i], entries[len(entries)-1-i] = entries[len(entries)-1-i], entries[i]
+			}
 		}
 
-		cursor = extractCursor(output)
-		return logsMsg{logs: []byte(text), cursor: cursor, reverse: reverse}
+		return logsMsg{
+			entries:     entries,
+			firstCursor: firstCursor,
+			lastCursor:  lastCursor,
+			reverse:     reverse,
+			hasMore:     hasMore,
+			isPrefetch:  isPrefetch,
+			err:         nil,
+		}
 	}
 }
 
-func extractCursor(output []byte) string {
+// parseJSONLogs parses line-delimited JSON from journalctl -o json
+func parseJSONLogs(output []byte) ([]logEntry, error) {
+	var entries []logEntry
 	lines := strings.Split(string(output), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.HasPrefix(lines[i], "-- cursor:") {
-			parts := strings.Split(lines[i], ": ")
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Parse JSON entry
+		var rawEntry map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &rawEntry); err != nil {
+			// Skip malformed lines
+			continue
+		}
+
+		entry := logEntry{}
+
+		// Extract timestamp
+		if ts, ok := rawEntry["__REALTIME_TIMESTAMP"].(string); ok {
+			// Convert microseconds to time
+			if usec, err := strconv.ParseInt(ts, 10, 64); err == nil {
+				t := time.Unix(0, usec*1000)
+				entry.timestamp = t.Format("2006-01-02T15:04:05-0700")
 			}
 		}
+
+		// Extract fields
+		if hostname, ok := rawEntry["_HOSTNAME"].(string); ok {
+			entry.hostname = hostname
+		}
+		if unit, ok := rawEntry["_SYSTEMD_UNIT"].(string); ok {
+			entry.unit = unit
+		} else if unit, ok := rawEntry["SYSLOG_IDENTIFIER"].(string); ok {
+			entry.unit = unit
+		}
+		if message, ok := rawEntry["MESSAGE"].(string); ok {
+			entry.message = message
+		}
+		if cursor, ok := rawEntry["__CURSOR"].(string); ok {
+			entry.cursor = cursor
+		}
+
+		// Only add entries that have at least a cursor
+		if entry.cursor != "" {
+			entries = append(entries, entry)
+		}
 	}
-	return ""
+
+	return entries, nil
 }
 
 func handleLogs() error {
@@ -277,14 +739,28 @@ func handleLogs() error {
 	listModel.Styles.Title = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).UnsetBackground()
 	listModel.SetShowStatusBar(false)
 	listModel.SetFilteringEnabled(false)
-	listModel.SetShowHelp(true)
+	listModel.SetShowHelp(false) // We'll use our own help
+
+	// Initialize spinner
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	// Initialize help
+	h := help.New()
+	h.ShowAll = false
 
 	// Initial model
 	initialModel := model{
 		list:                listModel,
+		spinner:             s,
+		help:                h,
+		keys:                keys,
 		serviceItems:        items,
 		activeView:          "list",
 		viewportInitialized: false,
+		loading:             false,
+		err:                 nil,
 	}
 
 	// Run the program with the initial model
@@ -301,34 +777,64 @@ func getFilteredSystemdServices(filters []string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	result, err := executor.Run(ctx, "systemctl",
-		executor.WithArgs("list-unit-files", "--type=service", "--state=enabled"),
-		executor.WithOutputMode(executor.OutputModeCombined),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list systemd services: %w", err)
-	}
+	// Use a map to deduplicate services across multiple filter queries
+	serviceMap := make(map[string]bool)
 
-	output := result.Combined
+	// For each filter pattern, run a targeted systemctl query
+	for _, filter := range filters {
+		// Use list-units with glob pattern for faster, targeted queries
+		// This filters at the systemd level instead of fetching all services
+		pattern := filter + "*"
+		result, err := executor.Run(ctx, "systemctl",
+			executor.WithArgs("list-units", pattern, "--type=service", "--all", "--no-pager"),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list systemd services for pattern %s: %w", pattern, err)
+		}
 
-	var filteredServices []string
-	scanner := bufio.NewScanner(strings.NewReader(string(output)))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, ".service") && strings.Contains(line, "enabled") {
-			serviceName := strings.Split(line, ".service")[0]
-			for _, filter := range filters {
-				if strings.HasPrefix(serviceName, filter) {
-					filteredServices = append(filteredServices, serviceName)
-					break
+		output := result.Combined
+
+		// Parse list-units output format: "UNIT LOAD ACTIVE SUB DESCRIPTION"
+		scanner := bufio.NewScanner(strings.NewReader(string(output)))
+		for scanner.Scan() {
+			line := scanner.Text()
+			trimmed := strings.TrimSpace(line)
+
+			// Skip empty lines, header, footer
+			if trimmed == "" || strings.HasPrefix(trimmed, "UNIT") ||
+				strings.HasPrefix(trimmed, "Legend:") || strings.HasPrefix(trimmed, "LOAD") ||
+				strings.Contains(line, "loaded units listed") ||
+				strings.HasPrefix(trimmed, "To show all") {
+				continue
+			}
+
+			// Extract service name (first column after trimming/splitting)
+			// Lines may start with ● for failed services
+			fields := strings.Fields(line)
+			if len(fields) > 0 {
+				serviceName := strings.TrimPrefix(fields[0], "●")
+				serviceName = strings.TrimSpace(serviceName)
+				if strings.HasSuffix(serviceName, ".service") {
+					serviceName = strings.TrimSuffix(serviceName, ".service")
+					serviceMap[serviceName] = true
 				}
 			}
 		}
+
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("scanning systemd services output failed: %w", err)
+		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanning systemd services output failed: %w", err)
+	// Convert map to sorted slice
+	filteredServices := make([]string, 0, len(serviceMap))
+	for service := range serviceMap {
+		filteredServices = append(filteredServices, service)
 	}
+
+	// Sort alphabetically
+	sort.Strings(filteredServices)
 
 	return filteredServices, nil
 }
