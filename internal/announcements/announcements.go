@@ -441,7 +441,7 @@ func PromptForMigrations(diffs []*AnnouncementDiff) ([]MigrationRequest, error) 
 		for _, announcement := range diff.NewAnnouncements {
 			if announcement.Migration.Required && announcement.Migration.Tag != "" {
 				// Prompt for migration approval with validation
-				prompt := fmt.Sprintf("Run migration '%s' for %s repository? (y/N): ", announcement.Migration.Tag, diff.RepoName)
+				prompt := fmt.Sprintf("Run migration '%s' for %s repository? (y/n): ", announcement.Migration.Tag, diff.RepoName)
 
 				var response string
 				for {
