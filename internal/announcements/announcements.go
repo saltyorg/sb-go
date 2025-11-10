@@ -414,58 +414,95 @@ func DisplayAnnouncements(diffs []*AnnouncementDiff) error {
 }
 
 // PromptForMigrations prompts the user for migration approvals and returns migration requests
+// Collects all required migrations and asks for permission once for all or none
 func PromptForMigrations(diffs []*AnnouncementDiff) ([]MigrationRequest, error) {
 	var migrationRequests []MigrationRequest
-	var hasMigrations bool
 
-	// Check if there are any migrations to prompt for
+	// Collect all migrations with their announcement dates
+	type migrationWithDate struct {
+		date    string
+		request MigrationRequest
+	}
+	var migrations []migrationWithDate
+
+	// Gather all migrations
 	for _, diff := range diffs {
 		for _, announcement := range diff.NewAnnouncements {
 			if announcement.Migration.Required && announcement.Migration.Tag != "" {
-				hasMigrations = true
-				break
-			}
-		}
-		if hasMigrations {
-			break
-		}
-	}
-
-	if !hasMigrations {
-		return migrationRequests, nil
-	}
-
-	scanner := bufio.NewScanner(os.Stdin)
-
-	for _, diff := range diffs {
-		for _, announcement := range diff.NewAnnouncements {
-			if announcement.Migration.Required && announcement.Migration.Tag != "" {
-				// Prompt for migration approval with validation
-				prompt := fmt.Sprintf("Run migration '%s' for %s repository? (y/n): ", announcement.Migration.Tag, diff.RepoName)
-
-				var response string
-				for {
-					fmt.Print(prompt)
-					scanner.Scan()
-					response = strings.TrimSpace(strings.ToLower(scanner.Text()))
-
-					// Validate input - require explicit y/yes/n/no
-					if response == "y" || response == "yes" || response == "n" || response == "no" {
-						break
-					}
-
-					// Show error for invalid input
-					fmt.Println("Invalid input. Please enter 'y' (yes) or 'n' (no).")
-				}
-
-				if response == "y" || response == "yes" {
-					migrationRequests = append(migrationRequests, MigrationRequest{
+				migrations = append(migrations, migrationWithDate{
+					date: announcement.Date,
+					request: MigrationRequest{
 						RepoName: diff.RepoName,
 						RepoPath: diff.RepoPath,
 						Tag:      announcement.Migration.Tag,
-					})
-				}
+					},
+				})
 			}
+		}
+	}
+
+	if len(migrations) == 0 {
+		return migrationRequests, nil
+	}
+
+	// Sort migrations by date (oldest first)
+	sort.Slice(migrations, func(i, j int) bool {
+		return migrations[i].date < migrations[j].date
+	})
+
+	// Display all migrations that will be run
+	fmt.Println("\nThe following tags need to be run to handle migrations:")
+
+	// Calculate the maximum length needed for repo name and tag for alignment
+	maxRepoLen := len("Repo")
+	maxTagLen := len("Tag")
+	for _, m := range migrations {
+		if len(m.request.RepoName) > maxRepoLen {
+			maxRepoLen = len(m.request.RepoName)
+		}
+		if len(m.request.Tag) > maxTagLen {
+			maxTagLen = len(m.request.Tag)
+		}
+	}
+
+	// Print header
+	fmt.Printf("\n  #  %-*s   %-*s   %s\n", maxRepoLen, "Repo", maxTagLen, "Tag", "Announcement Date")
+	fmt.Printf("  %s  %s   %s   %s\n",
+		strings.Repeat("-", 1),
+		strings.Repeat("-", maxRepoLen),
+		strings.Repeat("-", maxTagLen),
+		strings.Repeat("-", len("Announcement Date")))
+
+	// Print migrations
+	for i, m := range migrations {
+		fmt.Printf("  %d  %-*s   %-*s   %s\n",
+			i+1,
+			maxRepoLen, m.request.RepoName,
+			maxTagLen, m.request.Tag,
+			m.date)
+	}
+
+	// Prompt for approval once for all migrations
+	scanner := bufio.NewScanner(os.Stdin)
+	var response string
+	for {
+		fmt.Print("\nRun all migration tags? (y/n): ")
+		scanner.Scan()
+		response = strings.TrimSpace(strings.ToLower(scanner.Text()))
+
+		// Validate input - require explicit y/yes/n/no
+		if response == "y" || response == "yes" || response == "n" || response == "no" {
+			break
+		}
+
+		// Show error for invalid input
+		fmt.Println("Invalid input. Please enter 'y' (yes) or 'n' (no).")
+	}
+
+	// If approved, add all migrations in chronological order
+	if response == "y" || response == "yes" {
+		for _, m := range migrations {
+			migrationRequests = append(migrationRequests, m.request)
 		}
 	}
 
