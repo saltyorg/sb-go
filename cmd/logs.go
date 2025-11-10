@@ -46,17 +46,68 @@ const (
 )
 
 type serviceItem struct {
-	name string
+	name      string
+	active    string // ACTIVE status: active, inactive, failed
+	sub       string // SUB status: running, dead, failed, exited, etc.
+	runtime   string // Runtime duration string (e.g., "2h 15m", "5d 3h")
+	maxLength int    // Maximum name length for alignment
 }
 
-func (i serviceItem) Title() string       { return i.name }
+func (i serviceItem) Title() string {
+	statusIndicator := formatStatusIndicator(i.active, i.sub, i.runtime)
+	if statusIndicator != "" {
+		// Pad the name to align status indicators
+		padding := i.maxLength - len(i.name)
+		if padding < 0 {
+			padding = 0
+		}
+		return fmt.Sprintf("%s%s  %s", i.name, strings.Repeat(" ", padding), statusIndicator)
+	}
+	return i.name
+}
 func (i serviceItem) Description() string { return "" }
 func (i serviceItem) FilterValue() string { return i.name }
+
+// formatStatusIndicator creates a colored status indicator for service status
+func formatStatusIndicator(active, sub, runtime string) string {
+	var symbol string
+	var style lipgloss.Style
+
+	switch active {
+	case "active":
+		symbol = "✓"
+		style = styles.SuccessStyle
+	case "failed":
+		symbol = "✗"
+		style = styles.ErrorStyle
+	case "inactive":
+		symbol = "○"
+		style = styles.DimStyle
+	default:
+		symbol = "?"
+		style = styles.WarningStyle
+	}
+
+	// Show both active and sub status for more detail
+	statusText := active
+	if sub != "" && sub != active {
+		statusText = fmt.Sprintf("%s/%s", active, sub)
+	}
+
+	// Add runtime if available (only for active services)
+	if runtime != "" && active == "active" {
+		statusText = fmt.Sprintf("%s • %s", statusText, runtime)
+	}
+
+	return style.Render(fmt.Sprintf("[%s %s]", symbol, statusText))
+}
 
 // Key bindings for help
 type keyMap struct {
 	Up       key.Binding
 	Down     key.Binding
+	Left     key.Binding
+	Right    key.Binding
 	Enter    key.Binding
 	Back     key.Binding
 	Quit     key.Binding
@@ -82,7 +133,7 @@ func (k keyMap) ShortHelpForList() []key.Binding {
 
 // ShortHelpForLogs returns help bindings for logs view
 func (k keyMap) ShortHelpForLogs() []key.Binding {
-	return []key.Binding{k.Back, k.Quit}
+	return []key.Binding{k.Left, k.Right, k.Back, k.Quit}
 }
 
 var keys = keyMap{
@@ -93,6 +144,14 @@ var keys = keyMap{
 	Down: key.NewBinding(
 		key.WithKeys("down", "j"),
 		key.WithHelp("↓/j", "scroll down"),
+	),
+	Left: key.NewBinding(
+		key.WithKeys("left"),
+		key.WithHelp("←", "scroll left"),
+	),
+	Right: key.NewBinding(
+		key.WithKeys("right"),
+		key.WithHelp("→", "scroll right"),
 	),
 	Enter: key.NewBinding(
 		key.WithKeys("enter"),
@@ -891,8 +950,16 @@ func parseJSONLogs(output []byte) ([]logEntry, error) {
 	return entries, nil
 }
 
+// serviceInfo holds service name and status information
+type serviceInfo struct {
+	name    string
+	active  string
+	sub     string
+	runtime string
+}
+
 func handleLogs() error {
-	filters := []string{"saltbox_managed_"}
+	filters := []string{"saltbox_managed_", "docker"}
 
 	services, err := getFilteredSystemdServices(filters)
 	if err != nil {
@@ -904,10 +971,24 @@ func handleLogs() error {
 		return nil
 	}
 
-	// Convert string slice to list items
+	// Calculate maximum service name length for alignment
+	maxNameLength := 0
+	for _, service := range services {
+		if len(service.name) > maxNameLength {
+			maxNameLength = len(service.name)
+		}
+	}
+
+	// Convert serviceInfo slice to list items
 	items := make([]list.Item, len(services))
 	for i, service := range services {
-		items[i] = serviceItem{name: service}
+		items[i] = serviceItem{
+			name:      service.name,
+			active:    service.active,
+			sub:       service.sub,
+			runtime:   service.runtime,
+			maxLength: maxNameLength,
+		}
 	}
 
 	// Create a list with styling for inline display
@@ -954,13 +1035,13 @@ func handleLogs() error {
 	return nil
 }
 
-func getFilteredSystemdServices(filters []string) ([]string, error) {
+func getFilteredSystemdServices(filters []string) ([]serviceInfo, error) {
 	// Use context with timeout for systemctl command
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Use a map to deduplicate services across multiple filter queries
-	serviceMap := make(map[string]bool)
+	serviceMap := make(map[string]serviceInfo)
 
 	// For each filter pattern, run a targeted systemctl query
 	for _, filter := range filters {
@@ -991,15 +1072,20 @@ func getFilteredSystemdServices(filters []string) ([]string, error) {
 				continue
 			}
 
-			// Extract service name (first column after trimming/splitting)
+			// Extract service name and status (columns: UNIT LOAD ACTIVE SUB DESCRIPTION)
 			// Lines may start with ● for failed services
 			fields := strings.Fields(line)
-			if len(fields) > 0 {
+			if len(fields) >= 4 {
 				serviceName := strings.TrimPrefix(fields[0], "●")
 				serviceName = strings.TrimSpace(serviceName)
 				if strings.HasSuffix(serviceName, ".service") {
 					serviceName = strings.TrimSuffix(serviceName, ".service")
-					serviceMap[serviceName] = true
+					// fields[1] is LOAD, fields[2] is ACTIVE, fields[3] is SUB
+					serviceMap[serviceName] = serviceInfo{
+						name:   serviceName,
+						active: fields[2],
+						sub:    fields[3],
+					}
 				}
 			}
 		}
@@ -1010,13 +1096,104 @@ func getFilteredSystemdServices(filters []string) ([]string, error) {
 	}
 
 	// Convert map to sorted slice
-	filteredServices := make([]string, 0, len(serviceMap))
-	for service := range serviceMap {
+	filteredServices := make([]serviceInfo, 0, len(serviceMap))
+	for _, service := range serviceMap {
 		filteredServices = append(filteredServices, service)
 	}
 
-	// Sort alphabetically
-	sort.Strings(filteredServices)
+	// Sort alphabetically by name
+	sort.Slice(filteredServices, func(i, j int) bool {
+		return filteredServices[i].name < filteredServices[j].name
+	})
+
+	// Fetch runtime information for active services
+	for i := range filteredServices {
+		if filteredServices[i].active == "active" {
+			runtime, err := getServiceRuntime(ctx, filteredServices[i].name)
+			if err == nil {
+				filteredServices[i].runtime = runtime
+			}
+		}
+	}
 
 	return filteredServices, nil
+}
+
+// getServiceRuntime gets the runtime duration for an active service
+func getServiceRuntime(ctx context.Context, serviceName string) (string, error) {
+	serviceUnit := serviceName
+	if !strings.HasSuffix(serviceUnit, ".service") {
+		serviceUnit = serviceUnit + ".service"
+	}
+
+	result, err := executor.Run(ctx, "systemctl",
+		executor.WithArgs("show", serviceUnit, "--property=ActiveEnterTimestamp", "--no-pager"),
+		executor.WithOutputMode(executor.OutputModeCombined),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	output := strings.TrimSpace(string(result.Combined))
+	// Output format: ActiveEnterTimestamp=Mon 2025-11-10 10:11:29 CET
+	parts := strings.SplitN(output, "=", 2)
+	if len(parts) != 2 || parts[1] == "" {
+		return "", fmt.Errorf("no timestamp found")
+	}
+
+	timestampStr := parts[1]
+	// Parse the timestamp
+	// Try multiple formats that systemd might use
+	var startTime time.Time
+	formats := []string{
+		"Mon 2006-01-02 15:04:05 MST",
+		time.RFC1123,
+		time.RFC1123Z,
+		time.RFC3339,
+	}
+
+	for _, format := range formats {
+		t, err := time.Parse(format, timestampStr)
+		if err == nil {
+			startTime = t
+			break
+		}
+	}
+
+	if startTime.IsZero() {
+		return "", fmt.Errorf("failed to parse timestamp: %s", timestampStr)
+	}
+
+	// Calculate runtime duration
+	duration := time.Since(startTime)
+	return formatDuration(duration), nil
+}
+
+// formatDuration formats a duration into a human-readable string
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		minutes := int(d.Minutes())
+		seconds := int(d.Seconds()) % 60
+		if seconds > 0 {
+			return fmt.Sprintf("%dm %ds", minutes, seconds)
+		}
+		return fmt.Sprintf("%dm", minutes)
+	}
+	if d < 24*time.Hour {
+		hours := int(d.Hours())
+		minutes := int(d.Minutes()) % 60
+		if minutes > 0 {
+			return fmt.Sprintf("%dh %dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dh", hours)
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	if hours > 0 {
+		return fmt.Sprintf("%dd %dh", days, hours)
+	}
+	return fmt.Sprintf("%dd", days)
 }
