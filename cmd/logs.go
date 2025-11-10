@@ -327,7 +327,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Calculate how many lines were added
 					entriesAdded := len(m.logBuf.entries) - oldLen
 					linesAdded := 0
-					for i := 0; i < entriesAdded; i++ {
+					for i := range entriesAdded {
 						linesAdded += len(strings.Split(formatLogEntry(m.logBuf.entries[i]), "\n"))
 					}
 					// Add boundary markers if present (only if this update caused hasMoreBefore to become false)
@@ -656,10 +656,11 @@ func (lb *logBuffer) TrimBuffer(viewportY, viewportHeight int) int {
 	}
 
 	// Calculate how many entries to keep on each side
-	entriesToKeep := viewportsToKeep * viewportHeight / 3 // Rough estimate: ~3 lines per entry
-	if entriesToKeep < logPageSize {
-		entriesToKeep = logPageSize // Keep at least one page
-	}
+	entriesToKeep := max(
+		// Rough estimate: ~3 lines per entry
+		viewportsToKeep*viewportHeight/3,
+		// Keep at least one page
+		logPageSize)
 
 	// Calculate trim boundaries
 	trimStart := max(0, visibleStartEntry-entriesToKeep)
@@ -672,7 +673,7 @@ func (lb *logBuffer) TrimBuffer(viewportY, viewportHeight int) int {
 
 	// Calculate lines being removed from the top
 	linesTrimmed := 0
-	for i := 0; i < trimStart; i++ {
+	for i := range trimStart {
 		linesTrimmed += len(strings.Split(formatLogEntry(lb.entries[i]), "\n"))
 	}
 
@@ -839,16 +840,16 @@ func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea
 // parseJSONLogs parses line-delimited JSON from journalctl -o json
 func parseJSONLogs(output []byte) ([]logEntry, error) {
 	var entries []logEntry
-	lines := strings.Split(string(output), "\n")
+	lines := strings.SplitSeq(string(output), "\n")
 
-	for _, line := range lines {
+	for line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 
 		// Parse JSON entry
-		var rawEntry map[string]interface{}
+		var rawEntry map[string]any
 		if err := json.Unmarshal([]byte(line), &rawEntry); err != nil {
 			// Skip malformed lines
 			continue
