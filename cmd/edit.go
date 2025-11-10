@@ -74,6 +74,12 @@ func (m ConfigSelectorModel) View() string {
 }
 
 func openEditor(path string) {
+	// Check if file exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		fmt.Printf("Error: the configuration file does not yet exist: %s\n", path)
+		return
+	}
+
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = "nano" // Default to nano if EDITOR is not set
@@ -145,6 +151,11 @@ func runBubbleTeaList() error {
 			description: "Saltbox Hetzner VLAN configuration",
 			path:        constants.SaltboxHetznerVLANConfigPath,
 		},
+		ConfigItem{
+			title:       "localhost.yml",
+			description: "Saltbox inventory configuration",
+			path:        constants.SaltboxInventoryConfigPath,
+		},
 	}
 
 	// Initialize a list with proper dimensions
@@ -176,6 +187,7 @@ Available configurations:
   - adv_settings: Edit advanced settings (adv_settings.yml)
   - backup_config: Edit backup configuration (backup_config.yml)
   - hetzner_vlan: Edit Hetzner VLAN configuration (hetzner_vlan.yml)
+  - inventory: Edit inventory configuration (localhost.yml)
   - settings: Edit general settings (settings.yml)
 
 If no configuration is specified, an interactive menu will be shown.`,
@@ -196,6 +208,8 @@ If no configuration is specified, an interactive menu will be shown.`,
 			openEditor(constants.SaltboxBackupConfigPath)
 		case "hetzner_vlan":
 			openEditor(constants.SaltboxHetznerVLANConfigPath)
+		case "inventory":
+			openEditor(constants.SaltboxInventoryConfigPath)
 		case "settings":
 			openEditor(constants.SaltboxSettingsConfigPath)
 		default:
@@ -251,6 +265,15 @@ func init() {
 		Short: "Edit settings.yml",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxSettingsConfigPath)
+			return nil
+		},
+	})
+
+	editCmd.AddCommand(&cobra.Command{
+		Use:   "inventory",
+		Short: "Edit localhost.yml (inventory)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			openEditor(constants.SaltboxInventoryConfigPath)
 			return nil
 		},
 	})
