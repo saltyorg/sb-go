@@ -13,6 +13,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/python"
 	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/tty"
 	"github.com/saltyorg/sb-go/internal/utils"
 	"github.com/saltyorg/sb-go/internal/uv"
 	"github.com/saltyorg/sb-go/internal/validate"
@@ -54,6 +55,11 @@ func init() {
 }
 
 func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelfUpdate bool) error {
+	// Check if running in an interactive terminal
+	if !tty.IsInteractive() {
+		return fmt.Errorf("update command requires an interactive terminal (TTY not available)")
+	}
+
 	// Set verbose mode for spinners
 	spinners.SetVerboseMode(verbose)
 
