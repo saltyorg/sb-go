@@ -148,10 +148,10 @@ github.com/microcosm-cc/bluemonday v1.0.27 h1:MpEUotklkwCSLeH+Qdx1VJgNqLlpY2KXwX
 github.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
 github.com/moby/docker-image-spec v1.3.1/go.mod h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=
-github.com/moby/moby/api v1.52.0-rc.1 h1:yiNz/QzD4Jr1gyKl2iMo7OCZwwY+Xb3BltKv1xipwXo=
-github.com/moby/moby/api v1.52.0-rc.1/go.mod h1:v0K/motq8oWmx+rtApG1rBTIpQ8KUONUjpf+U73gags=
-github.com/moby/moby/client v0.1.0-rc.1 h1:NfuQec3HvQkPf4EvVkoFGPsBvlAc8CCyQN1m1kGSEX8=
-github.com/moby/moby/client v0.1.0-rc.1/go.mod h1:qYzoKHz8qu4Ie1j41CWYhfNRHo8uhs5ay7cfx309Aqc=
+github.com/moby/moby/api v1.52.0 h1:00BtlJY4MXkkt84WhUZPRqt5TvPbgig2FZvTbe3igYg=
+github.com/moby/moby/api v1.52.0/go.mod h1:8mb+ReTlisw4pS6BRzCMts5M49W5M7bKt1cJy/YbAqc=
+github.com/moby/moby/client v0.1.0 h1:nt+hn6O9cyJQqq5UWnFGqsZRTS/JirUqzPjEl0Bdc/8=
+github.com/moby/moby/client v0.1.0/go.mod h1:O+/tw5d4a1Ha/ZA/tPxIZJapJRUS6LNZ1wiVRxYHyUE=
 github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 h1:ZK8zHtRHOkbHy6Mmr5D264iyp3TiX5OmNcI5cIARiQI=
 github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6/go.mod h1:CJlz5H+gyd6CUWT45Oy4q24RdLyn7Md9Vj2/ldJBSIo=
 github.com/muesli/cancelreader v0.2.2 h1:3I4Kt4BQjOR54NavqnDogx/MIoWBFa0StPA8ELUXHmA=

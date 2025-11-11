@@ -60,31 +60,32 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 			var statusStyle lipgloss.Style
 
 			state := containerInspect.Container.State.Status
+			stateStr := string(state)
 			switch state {
 			case "running":
 				if containerInspect.Container.State.Health != nil {
 					healthStatus := containerInspect.Container.State.Health.Status
-					statusText = fmt.Sprintf("%s (%s)", state, healthStatus)
+					statusText = fmt.Sprintf("%s (%s)", stateStr, healthStatus)
 					if healthStatus == "healthy" {
 						statusStyle = greenStyle
 					} else {
 						statusStyle = yellowStyle
 					}
 				} else {
-					statusText = state
+					statusText = stateStr
 					statusStyle = greenStyle
 				}
 			case "exited", "dead":
-				statusText = state
+				statusText = stateStr
 				statusStyle = redStyle
 			case "created", "paused":
-				statusText = state
+				statusText = stateStr
 				statusStyle = yellowStyle
 			case "restarting", "removing":
-				statusText = state
+				statusText = stateStr
 				statusStyle = yellowStyle
 			default:
-				statusText = state
+				statusText = stateStr
 				statusStyle = yellowStyle
 			}
 
