@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
+	"strings"
 
+	"github.com/agnivade/levenshtein"
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/table"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -15,13 +19,28 @@ import (
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
-	Use:   "list",
+	Use:   "list [query]",
 	Short: "List available Saltbox, Sandbox or Saltbox-mod tags",
-	Long:  `List available Saltbox, Sandbox or Saltbox-mod tags`,
+	Long: `List available Saltbox, Sandbox or Saltbox-mod tags
+
+Without arguments, displays all available tags.
+With a query argument, performs fuzzy search across all tags.
+
+Examples:
+  sb list                # List all tags
+  sb list plex           # Search for tags matching "plex"
+  sb list arr            # Search for tags matching "arr"`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbosity, _ := cmd.Flags().GetCount("verbose")
-		return handleList(ctx, verbosity)
+
+		var query string
+		if len(args) > 0 {
+			query = args[0]
+		}
+
+		return handleList(ctx, verbosity, query)
 	},
 }
 
@@ -33,7 +52,15 @@ func init() {
 	listCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
 }
 
-func handleList(ctx context.Context, verbosity int) error {
+// tagResult holds a tag with its metadata for search results
+type tagResult struct {
+	tag      string
+	prefix   string
+	repoName string
+	distance int
+}
+
+func handleList(ctx context.Context, verbosity int, query string) error {
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
 		return fmt.Errorf("error creating cache: %w", err)
@@ -48,9 +75,11 @@ func handleList(ctx context.Context, verbosity int) error {
 		PlaybookPath  string
 		ExtraSkipTags string
 		BaseTitle     string
+		Prefix        string
+		RepoName      string
 	}{
-		{constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", "Saltbox tags:"},
-		{constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "sanity_check", "\nSandbox tags (prepend sandbox-):"},
+		{constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", "Saltbox tags:", "", "Saltbox"},
+		{constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "sanity_check", "\nSandbox tags (prepend sandbox-):", "sandbox-", "Sandbox"},
 	}
 
 	if includeMod {
@@ -60,12 +89,20 @@ func handleList(ctx context.Context, verbosity int) error {
 				PlaybookPath  string
 				ExtraSkipTags string
 				BaseTitle     string
-			}{constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), "sanity_check", "\nSaltbox_mod tags (prepend mod-):"})
+				Prefix        string
+				RepoName      string
+			}{constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), "sanity_check", "\nSaltbox_mod tags (prepend mod-):", "mod-", "Saltbox-mod"})
 		} else {
 			fmt.Println("Saltbox-mod directory not found, skipping.  Ensure Saltbox-mod is installed.")
 		}
 	}
 
+	// If search query provided, collect all tags first
+	if query != "" {
+		return handleSearch(ctx, query, repoInfo, cacheInstance, verbosity)
+	}
+
+	// Normal list mode - display by repository
 	for _, info := range repoInfo {
 		var tags []string // Declare tags here
 		cacheStatus := "" // Default to empty string
@@ -203,4 +240,180 @@ func printInColumns(tags []string, padding int) {
 		}
 		fmt.Println()
 	}
+}
+
+func handleSearch(ctx context.Context, query string, repoInfo []struct {
+	RepoPath      string
+	PlaybookPath  string
+	ExtraSkipTags string
+	BaseTitle     string
+	Prefix        string
+	RepoName      string
+}, cacheInstance *cache.Cache, verbosity int) error {
+	queryLower := strings.ToLower(query)
+	var allResults []tagResult
+
+	// Collect tags from all repositories
+	for _, info := range repoInfo {
+		var tags []string
+
+		if verbosity > 0 {
+			fmt.Printf("DEBUG: Processing repository: %s\n", info.RepoPath)
+		}
+
+		if info.RepoPath == constants.SaltboxModRepoPath {
+			// Always run ansible list tags for saltbox_mod
+			var err error
+			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
+			if err != nil {
+				handleInterruptError(err)
+				fmt.Printf("Error running ansible list tags for %s: %v\n", info.RepoPath, err)
+				continue
+			}
+		} else {
+			// Use cache for other repositories
+			_, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
+			if err != nil {
+				handleInterruptError(err)
+				fmt.Printf("Error running and caching ansible tags for %s: %v\n", info.RepoPath, err)
+				continue
+			}
+
+			repoCache, cacheFound := cacheInstance.GetRepoCache(info.RepoPath)
+			if !cacheFound {
+				continue
+			}
+
+			tagsInterface, ok := repoCache["tags"]
+			if !ok {
+				continue
+			}
+
+			tags = make([]string, 0)
+			switch v := tagsInterface.(type) {
+			case []any:
+				for _, tag := range v {
+					if strTag, ok := tag.(string); ok {
+						tags = append(tags, strTag)
+					}
+				}
+			case []string:
+				tags = v
+			}
+		}
+
+		// Search within tags
+		for _, tag := range tags {
+			tagLower := strings.ToLower(tag)
+
+			// Check for substring match (more lenient than exact match)
+			if strings.Contains(tagLower, queryLower) {
+				allResults = append(allResults, tagResult{
+					tag:      tag,
+					prefix:   info.Prefix,
+					repoName: info.RepoName,
+					distance: 0, // Exact substring match
+				})
+				continue
+			}
+
+			// Calculate Levenshtein distance for fuzzy matching
+			distance := levenshtein.ComputeDistance(queryLower, tagLower)
+
+			// Include tags with distance <= 2 (same threshold as install command)
+			if distance <= 2 {
+				allResults = append(allResults, tagResult{
+					tag:      tag,
+					prefix:   info.Prefix,
+					repoName: info.RepoName,
+					distance: distance,
+				})
+			}
+		}
+	}
+
+	if len(allResults) == 0 {
+		fmt.Printf("No tags found matching '%s'\n", query)
+		return nil
+	}
+
+	// Sort results: exact/substring matches first, then by distance, then by repo, then alphabetically
+	sort.Slice(allResults, func(i, j int) bool {
+		if allResults[i].distance != allResults[j].distance {
+			return allResults[i].distance < allResults[j].distance
+		}
+		if allResults[i].repoName != allResults[j].repoName {
+			// Saltbox first, then Sandbox, then Saltbox-mod
+			repoOrder := map[string]int{"Saltbox": 0, "Sandbox": 1, "Saltbox-mod": 2}
+			return repoOrder[allResults[i].repoName] < repoOrder[allResults[j].repoName]
+		}
+		return allResults[i].tag < allResults[j].tag
+	})
+
+	// Display results in table format
+	fmt.Printf("Found %d matching tag(s) for '%s':\n\n", len(allResults), query)
+
+	// Group results by repository
+	resultsByRepo := make(map[string][]tagResult)
+	for _, result := range allResults {
+		resultsByRepo[result.repoName] = append(resultsByRepo[result.repoName], result)
+	}
+
+	// Create a single table with all repositories
+	t := table.New(os.Stdout)
+	t.SetHeaders("Saltbox")
+	t.SetHeaderColSpans(0, 2)
+	t.SetHeaderStyle(table.StyleBold)
+	t.SetAlignment(table.AlignLeft, table.AlignLeft)
+	t.SetBorders(true)
+	t.SetRowLines(true)
+	t.SetDividers(table.UnicodeRoundedDividers)
+	t.SetLineStyle(table.StyleBlue)
+	t.SetPadding(1)
+
+	rowIndex := 0
+
+	// Add Saltbox rows
+	if saltboxResults, ok := resultsByRepo["Saltbox"]; ok && len(saltboxResults) > 0 {
+		for _, result := range saltboxResults {
+			usage := fmt.Sprintf("sb install %s", result.tag)
+			t.AddRow(result.tag, usage)
+			rowIndex++
+		}
+	}
+
+	// Add Sandbox section with header row
+	if sandboxResults, ok := resultsByRepo["Sandbox"]; ok && len(sandboxResults) > 0 {
+		// Add Sandbox as a bold centered row with colspan
+		sandboxHeader := "\033[1mSandbox\033[0m" // Bold text using ANSI codes
+		t.AddRow(sandboxHeader)
+		t.SetColSpans(rowIndex, 2)
+		rowIndex++
+
+		for _, result := range sandboxResults {
+			usage := fmt.Sprintf("sb install sandbox-%s", result.tag)
+			t.AddRow(result.tag, usage)
+			rowIndex++
+		}
+	}
+
+	// Add Saltbox-mod section with header row
+	if modResults, ok := resultsByRepo["Saltbox-mod"]; ok && len(modResults) > 0 {
+		// Add Saltbox-mod as a bold centered row with colspan
+		modHeader := "\033[1mSaltbox-mod\033[0m" // Bold text using ANSI codes
+		t.AddRow(modHeader)
+		t.SetColSpans(rowIndex, 2)
+		rowIndex++
+
+		for _, result := range modResults {
+			usage := fmt.Sprintf("sb install mod-%s", result.tag)
+			t.AddRow(result.tag, usage)
+			rowIndex++
+		}
+	}
+
+	t.Render()
+	fmt.Println()
+
+	return nil
 }

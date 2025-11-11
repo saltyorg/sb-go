@@ -15,6 +15,7 @@ require (
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-runewidth v0.0.19
 	github.com/moby/moby/api v1.52.0
 	github.com/moby/moby/client v0.1.0
 	github.com/saltydk/go-rtorrent v1.0.1
@@ -71,7 +72,6 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
