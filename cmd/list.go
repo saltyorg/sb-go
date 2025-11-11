@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/agnivade/levenshtein"
+	aquatable "github.com/aquasecurity/table"
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -363,12 +364,12 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 	t := table.New(os.Stdout)
 	t.SetHeaders("Saltbox")
 	t.SetHeaderColSpans(0, 2)
-	t.SetHeaderStyle(table.StyleBold)
-	t.SetAlignment(table.AlignLeft, table.AlignLeft)
+	t.SetHeaderStyle(aquatable.StyleBold)
+	t.SetAlignment(aquatable.AlignLeft, aquatable.AlignLeft)
 	t.SetBorders(true)
 	t.SetRowLines(true)
-	t.SetDividers(table.UnicodeRoundedDividers)
-	t.SetLineStyle(table.StyleBlue)
+	t.SetDividers(aquatable.UnicodeRoundedDividers)
+	t.SetLineStyle(aquatable.StyleBlue)
 	t.SetPadding(1)
 
 	rowIndex := 0

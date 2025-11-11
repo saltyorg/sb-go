@@ -5,7 +5,15 @@ import (
 	"io"
 	"strings"
 
+	aquatable "github.com/aquasecurity/table"
 	runewidth "github.com/mattn/go-runewidth"
+)
+
+// Use types directly from aquasecurity/table
+type (
+	Alignment = aquatable.Alignment
+	Dividers  = aquatable.Dividers
+	Style     = aquatable.Style
 )
 
 // Cell represents a single cell in the table
@@ -37,7 +45,7 @@ type Table struct {
 func New(w io.Writer) *Table {
 	return &Table{
 		writer:      w,
-		dividers:    UnicodeDividers,
+		dividers:    aquatable.UnicodeDividers,
 		padding:     1,
 		borders:     true,
 		rowLines:    false,
@@ -297,12 +305,12 @@ func (t *Table) renderHeaders(colWidths []int, numCols int) {
 
 		// Apply header style and alignment
 		content := newANSI(header)
-		if t.headerStyle != StyleNormal {
+		if t.headerStyle != aquatable.StyleNormal {
 			content = newANSI(fmt.Sprintf("\x1b[%dm%s\x1b[0m", t.headerStyle, header))
 		}
 
 		// Center align by default for headers, with padding
-		paddedContent := t.addPadding(content, totalWidth, AlignCenter)
+		paddedContent := t.addPadding(content, totalWidth, aquatable.AlignCenter)
 		line += paddedContent.String() + t.styledChar(t.dividers.NS)
 
 		colIdx += colspan
@@ -330,7 +338,7 @@ func (t *Table) renderRow(row []string, colWidths []int, numCols int) {
 		}
 
 		// Get alignment for this column
-		align := AlignLeft
+		align := aquatable.AlignLeft
 		if i < len(t.columnAlign) {
 			align = t.columnAlign[i]
 		}
@@ -362,7 +370,7 @@ func (t *Table) renderColspanRow(content string, colWidths []int, colspan int, n
 
 	// Center align the content with padding
 	cellContent := newANSI(content)
-	paddedContent := t.addPadding(cellContent, totalWidth, AlignCenter)
+	paddedContent := t.addPadding(cellContent, totalWidth, aquatable.AlignCenter)
 	line += paddedContent.String() + t.styledChar(t.dividers.NS)
 
 	t.writeLine(line)
@@ -413,9 +421,9 @@ func (t *Table) alignCell(content ansiBlob, width int, align Alignment) ansiBlob
 	}
 
 	switch align {
-	case AlignRight:
+	case aquatable.AlignRight:
 		return newANSI(strings.Repeat(" ", padSize) + content.String())
-	case AlignCenter:
+	case aquatable.AlignCenter:
 		leftPad := padSize / 2
 		rightPad := padSize - leftPad
 		result := content.String()
@@ -426,7 +434,7 @@ func (t *Table) alignCell(content ansiBlob, width int, align Alignment) ansiBlob
 			result = result + strings.Repeat(" ", rightPad)
 		}
 		return newANSI(result)
-	default: // AlignLeft
+	default: // aquatable.AlignLeft
 		return newANSI(content.String() + strings.Repeat(" ", padSize))
 	}
 }
@@ -537,7 +545,7 @@ func (t *Table) bottomBorder(colWidths []int) string {
 }
 
 func (t *Table) styledChar(char string) string {
-	if t.lineStyle != StyleNormal {
+	if t.lineStyle != aquatable.StyleNormal {
 		return fmt.Sprintf("\x1b[%dm%s\x1b[0m", t.lineStyle, char)
 	}
 	return char

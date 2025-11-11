@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	aquatable "github.com/aquasecurity/table"
 	runewidth "github.com/mattn/go-runewidth"
 )
 
@@ -33,8 +34,8 @@ func TestBasicTable(t *testing.T) {
 	table := New(buf)
 
 	table.SetHeaders("Column 1", "Column 2")
-	table.SetAlignment(AlignLeft, AlignLeft)
-	table.SetDividers(UnicodeRoundedDividers)
+	table.SetAlignment(aquatable.AlignLeft, aquatable.AlignLeft)
+	table.SetDividers(aquatable.UnicodeRoundedDividers)
 	table.SetBorders(true)
 
 	table.AddRow("Row 1 Col 1", "Row 1 Col 2")
@@ -73,8 +74,8 @@ func TestColspan(t *testing.T) {
 
 	table.SetHeaders("Main Header")
 	table.SetHeaderColSpans(0, 2)
-	table.SetAlignment(AlignLeft, AlignLeft)
-	table.SetDividers(UnicodeRoundedDividers)
+	table.SetAlignment(aquatable.AlignLeft, aquatable.AlignLeft)
+	table.SetDividers(aquatable.UnicodeRoundedDividers)
 	table.SetBorders(true)
 
 	table.AddRow("Row 1 Col 1", "Row 1 Col 2")
@@ -109,9 +110,9 @@ func TestHeaderColspan(t *testing.T) {
 
 	table.SetHeaders("Saltbox")
 	table.SetHeaderColSpans(0, 2)
-	table.SetHeaderStyle(StyleBold)
-	table.SetAlignment(AlignLeft, AlignLeft)
-	table.SetDividers(UnicodeRoundedDividers)
+	table.SetHeaderStyle(aquatable.StyleBold)
+	table.SetAlignment(aquatable.AlignLeft, aquatable.AlignLeft)
+	table.SetDividers(aquatable.UnicodeRoundedDividers)
 	table.SetBorders(true)
 
 	table.AddRow("plex", "sb install plex")
@@ -138,9 +139,9 @@ func TestStyling(t *testing.T) {
 	table := New(buf)
 
 	table.SetHeaders("Header")
-	table.SetHeaderStyle(StyleBold)
-	table.SetLineStyle(StyleBlue)
-	table.SetDividers(UnicodeRoundedDividers)
+	table.SetHeaderStyle(aquatable.StyleBold)
+	table.SetLineStyle(aquatable.StyleBlue)
+	table.SetDividers(aquatable.UnicodeRoundedDividers)
 	table.SetBorders(true)
 
 	table.AddRow("Test")
@@ -164,12 +165,12 @@ func TestMultipleColspanSections(t *testing.T) {
 
 	table.SetHeaders("Saltbox")
 	table.SetHeaderColSpans(0, 2)
-	table.SetHeaderStyle(StyleBold)
-	table.SetAlignment(AlignLeft, AlignLeft)
+	table.SetHeaderStyle(aquatable.StyleBold)
+	table.SetAlignment(aquatable.AlignLeft, aquatable.AlignLeft)
 	table.SetBorders(true)
 	table.SetRowLines(true)
-	table.SetDividers(UnicodeRoundedDividers)
-	table.SetLineStyle(StyleBlue)
+	table.SetDividers(aquatable.UnicodeRoundedDividers)
+	table.SetLineStyle(aquatable.StyleBlue)
 	table.SetPadding(1)
 
 	// Saltbox section
