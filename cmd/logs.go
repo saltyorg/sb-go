@@ -57,10 +57,7 @@ func (i serviceItem) Title() string {
 	statusIndicator := formatStatusIndicator(i.active, i.sub, i.runtime)
 	if statusIndicator != "" {
 		// Pad the name to align status indicators
-		padding := i.maxLength - len(i.name)
-		if padding < 0 {
-			padding = 0
-		}
+		padding := max(i.maxLength-len(i.name), 0)
 		return fmt.Sprintf("%s%s  %s", i.name, strings.Repeat(" ", padding), statusIndicator)
 	}
 	return i.name
@@ -195,7 +192,7 @@ type model struct {
 	viewportInitialized bool
 	loading             bool
 	err                 error
-	viewportYPosition   int  // Store viewport scroll position
+	viewportYPosition   int // Store viewport scroll position
 	quitting            bool
 	showTimestampHost   bool // Toggle for showing timestamp and hostname columns
 }
