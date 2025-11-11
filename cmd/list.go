@@ -360,9 +360,36 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 		resultsByRepo[result.repoName] = append(resultsByRepo[result.repoName], result)
 	}
 
+	// Define section order and check which sections have results
+	type section struct {
+		name    string
+		prefix  string
+		results []tagResult
+	}
+
+	sections := []section{
+		{"Saltbox", "", resultsByRepo["Saltbox"]},
+		{"Sandbox", "sandbox-", resultsByRepo["Sandbox"]},
+		{"Saltbox-mod", "mod-", resultsByRepo["Saltbox-mod"]},
+	}
+
+	// Filter out empty sections
+	var nonEmptySections []section
+	for _, s := range sections {
+		if len(s.results) > 0 {
+			nonEmptySections = append(nonEmptySections, s)
+		}
+	}
+
+	if len(nonEmptySections) == 0 {
+		return nil
+	}
+
 	// Create a single table with all repositories
 	t := table.New(os.Stdout)
-	t.SetHeaders("Saltbox")
+
+	// First section becomes the table header
+	t.SetHeaders(nonEmptySections[0].name)
 	t.SetHeaderColSpans(0, 2)
 	t.SetHeaderStyle(aquatable.StyleBold)
 	t.SetAlignment(aquatable.AlignLeft, aquatable.AlignLeft)
@@ -374,40 +401,23 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 
 	rowIndex := 0
 
-	// Add Saltbox rows
-	if saltboxResults, ok := resultsByRepo["Saltbox"]; ok && len(saltboxResults) > 0 {
-		for _, result := range saltboxResults {
-			usage := fmt.Sprintf("sb install %s", result.tag)
-			t.AddRow(result.tag, usage)
-			rowIndex++
-		}
+	// Add first section rows (no section header since it's the table header)
+	for _, result := range nonEmptySections[0].results {
+		usage := fmt.Sprintf("sb install %s%s", nonEmptySections[0].prefix, result.tag)
+		t.AddRow(result.tag, usage)
+		rowIndex++
 	}
 
-	// Add Sandbox section with header row
-	if sandboxResults, ok := resultsByRepo["Sandbox"]; ok && len(sandboxResults) > 0 {
-		// Add Sandbox as a bold centered row with colspan
-		sandboxHeader := "\033[1mSandbox\033[0m" // Bold text using ANSI codes
-		t.AddRow(sandboxHeader)
+	// Add remaining sections with section headers
+	for _, s := range nonEmptySections[1:] {
+		// Add section header as a bold centered row with colspan
+		sectionHeader := fmt.Sprintf("\033[1m%s\033[0m", s.name)
+		t.AddRow(sectionHeader)
 		t.SetColSpans(rowIndex, 2)
 		rowIndex++
 
-		for _, result := range sandboxResults {
-			usage := fmt.Sprintf("sb install sandbox-%s", result.tag)
-			t.AddRow(result.tag, usage)
-			rowIndex++
-		}
-	}
-
-	// Add Saltbox-mod section with header row
-	if modResults, ok := resultsByRepo["Saltbox-mod"]; ok && len(modResults) > 0 {
-		// Add Saltbox-mod as a bold centered row with colspan
-		modHeader := "\033[1mSaltbox-mod\033[0m" // Bold text using ANSI codes
-		t.AddRow(modHeader)
-		t.SetColSpans(rowIndex, 2)
-		rowIndex++
-
-		for _, result := range modResults {
-			usage := fmt.Sprintf("sb install mod-%s", result.tag)
+		for _, result := range s.results {
+			usage := fmt.Sprintf("sb install %s%s", s.prefix, result.tag)
 			t.AddRow(result.tag, usage)
 			rowIndex++
 		}
