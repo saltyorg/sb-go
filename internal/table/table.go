@@ -37,20 +37,20 @@ type Table struct {
 	padding     int
 	borders     bool
 	rowLines    bool
-	colspans    map[int]int       // map row index to colspan value
-	headerCols  map[int]int       // map header index to colspan value
+	colspans    map[int]int // map row index to colspan value
+	headerCols  map[int]int // map header index to colspan value
 }
 
 // New creates a new Table
 func New(w io.Writer) *Table {
 	return &Table{
-		writer:      w,
-		dividers:    aquatable.UnicodeDividers,
-		padding:     1,
-		borders:     true,
-		rowLines:    false,
-		colspans:    make(map[int]int),
-		headerCols:  make(map[int]int),
+		writer:     w,
+		dividers:   aquatable.UnicodeDividers,
+		padding:    1,
+		borders:    true,
+		rowLines:   false,
+		colspans:   make(map[int]int),
+		headerCols: make(map[int]int),
 	}
 }
 
@@ -329,7 +329,7 @@ func (t *Table) renderHeaders(colWidths []int, numCols int) {
 func (t *Table) renderRow(row []string, colWidths []int, numCols int) {
 	line := t.styledChar(t.dividers.NS)
 
-	for i := 0; i < numCols; i++ {
+	for i := range numCols {
 		var content ansiBlob
 		if i < len(row) {
 			content = newANSI(row[i])
@@ -401,10 +401,7 @@ func (t *Table) addPadding(content ansiBlob, width int, align Alignment) ansiBlo
 	// We need to: add padding, align content, then add padding again if needed
 
 	// Available width for content after removing padding spaces
-	contentWidth := width - (2 * t.padding)
-	if contentWidth < 0 {
-		contentWidth = 0
-	}
+	contentWidth := max(width-(2*t.padding), 0)
 
 	// Align the content within the available width
 	aligned := t.alignCell(content, contentWidth, align)
