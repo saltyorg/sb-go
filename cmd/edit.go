@@ -70,7 +70,7 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m ConfigSelectorModel) View() string {
-	return "\nSelect a configuration file to edit:\n\n" + m.list.View()
+	return "\nSelect a Saltbox configuration file to edit:\n\n" + m.list.View()
 }
 
 func openEditor(path string) {
@@ -127,33 +127,33 @@ func openEditor(path string) {
 func runBubbleTeaList() error {
 	configItems := []list.Item{
 		ConfigItem{
-			title:       "accounts.yml",
-			description: "Saltbox Accounts configuration",
+			title:       "Accounts",
+			description: "accounts.yml",
 			path:        constants.SaltboxAccountsConfigPath,
 		},
 		ConfigItem{
-			title:       "settings.yml",
-			description: "Saltbox basic configuration",
+			title:       "Settings",
+			description: "settings.yml",
 			path:        constants.SaltboxSettingsConfigPath,
 		},
 		ConfigItem{
-			title:       "adv_settings.yml",
-			description: "Saltbox advanced configuration",
+			title:       "Advanced Settings",
+			description: "adv_settings.yml",
 			path:        constants.SaltboxAdvancedSettingsConfigPath,
 		},
 		ConfigItem{
-			title:       "backup_config.yml",
-			description: "Saltbox backup configuration",
+			title:       "Backup Settings",
+			description: "backup_config.yml",
 			path:        constants.SaltboxBackupConfigPath,
 		},
 		ConfigItem{
-			title:       "hetzner_config.yml",
-			description: "Saltbox Hetzner VLAN configuration",
+			title:       "Hetzner VLAN Settings",
+			description: "hetzner_vlan.yml",
 			path:        constants.SaltboxHetznerVLANConfigPath,
 		},
 		ConfigItem{
-			title:       "localhost.yml",
-			description: "Saltbox inventory configuration",
+			title:       "Inventory Settings",
+			description: "localhost.yml",
 			path:        constants.SaltboxInventoryConfigPath,
 		},
 	}
@@ -226,7 +226,7 @@ func init() {
 	// Subcommands for each configuration file
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "accounts",
-		Short: "Edit accounts.yml",
+		Short: "Accounts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxAccountsConfigPath)
 			return nil
@@ -235,7 +235,7 @@ func init() {
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "adv_settings",
-		Short: "Edit adv_settings.yml",
+		Short: "Advanced Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxAdvancedSettingsConfigPath)
 			return nil
@@ -244,7 +244,7 @@ func init() {
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "backup_config",
-		Short: "Edit backup_config.yml",
+		Short: "Backup Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxBackupConfigPath)
 			return nil
@@ -253,7 +253,7 @@ func init() {
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "hetzner_vlan",
-		Short: "Edit hetzner_vlan.yml",
+		Short: "Hetzner VLAN Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxHetznerVLANConfigPath)
 			return nil
@@ -262,7 +262,7 @@ func init() {
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "settings",
-		Short: "Edit settings.yml",
+		Short: "Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxSettingsConfigPath)
 			return nil
@@ -271,7 +271,7 @@ func init() {
 
 	editCmd.AddCommand(&cobra.Command{
 		Use:   "inventory",
-		Short: "Edit localhost.yml (inventory)",
+		Short: "Inventory Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			openEditor(constants.SaltboxInventoryConfigPath)
 			return nil
