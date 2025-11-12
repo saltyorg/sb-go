@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/fang"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/saltyorg/sb-go/cmd"
@@ -60,9 +61,9 @@ func main() {
 	sigManager := signals.GetGlobalManager()
 	ctx := sigManager.Context()
 
-	// Execute commands with context
-	// Cobra will handle printing errors and exiting with code 1
-	if err := cmd.ExecuteContext(ctx); err != nil {
+	// Execute commands with fang for enhanced CLI UX
+	// Fang provides styled help, formatted errors, and improved presentation
+	if err := fang.Execute(ctx, cmd.GetRootCommand()); err != nil {
 		os.Exit(1)
 	}
 
