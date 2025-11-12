@@ -220,9 +220,9 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		helpHeight := lipgloss.Height(m.help.View(m.keys))
 
 		if m.activeView == "list" {
-			// Inline list view - use full width, use most of the screen
+			// Full-screen list view in alt screen mode
 			m.list.SetWidth(msg.Width)
-			m.list.SetHeight(msg.Height - 1) // Leave room for title and help
+			m.list.SetHeight(msg.Height - helpHeight)
 		} else {
 			// Logs view - viewport uses full screen in alt screen mode
 			if m.viewportInitialized {
@@ -1190,8 +1190,8 @@ func handleDockerLogs() error {
 	}
 
 	// Run the program with the initial model
-	// Start in normal terminal mode (inline), only use alt screen when viewing logs
-	p := tea.NewProgram(initialModel)
+	// Use alt screen for full-screen experience (both list and logs views)
+	p := tea.NewProgram(initialModel, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running docker logs UI: %w", err)
 	}
