@@ -111,6 +111,7 @@ type keyMap struct {
 	PageUp   key.Binding
 	PageDown key.Binding
 	Toggle   key.Binding
+	Follow   key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -131,7 +132,12 @@ func (k keyMap) ShortHelpForList() []key.Binding {
 
 // ShortHelpForLogs returns help bindings for logs view
 func (k keyMap) ShortHelpForLogs() []key.Binding {
-	return []key.Binding{k.Left, k.Right, k.Toggle, k.Back, k.Quit}
+	return []key.Binding{k.Left, k.Right, k.Toggle, k.Follow, k.Back, k.Quit}
+}
+
+// ShortHelpForFollow returns help bindings for follow mode
+func (k keyMap) ShortHelpForFollow() []key.Binding {
+	return []key.Binding{k.Left, k.Right, k.Toggle, k.Follow, k.Back, k.Quit}
 }
 
 var keys = keyMap{
@@ -175,6 +181,10 @@ var keys = keyMap{
 		key.WithKeys("t"),
 		key.WithHelp("t", "toggle timestamp/host"),
 	),
+	Follow: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "toggle follow mode"),
+	),
 }
 
 type model struct {
@@ -192,9 +202,10 @@ type model struct {
 	viewportInitialized bool
 	loading             bool
 	err                 error
-	viewportYPosition   int // Store viewport scroll position
+	viewportYPosition   int  // Store viewport scroll position
 	quitting            bool
 	showTimestampHost   bool // Toggle for showing timestamp and hostname columns
+	followMode          bool // Follow mode enabled
 }
 
 func (m model) Init() tea.Cmd {
@@ -275,6 +286,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.loading = true
 						m.err = nil
 						m.viewportYPosition = 0
+						m.followMode = false
 						// Create new log buffer with target size of 10 pages
 						m.logBuf = newLogBuffer(m.selectedService, prefetchPagesAhead*logPageSize)
 						// Enter alt screen and fetch logs
@@ -282,7 +294,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						// Make sure we re-apply the current log content with boundaries
 						if m.logBuf != nil {
-							m.viewport.SetContent(m.logBuf.GetContent())
+							m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 						}
 						// Enter alt screen to view existing logs
 						return m, tea.EnterAltScreen
@@ -299,6 +311,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "pgup", "u":
+			// Disable scrolling if in follow mode
+			if m.followMode {
+				return m, nil
+			}
 			// Fetch more older logs if we're at the top of viewport and have more to load
 			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
 				atTop := m.viewport.YOffset <= 0
@@ -311,6 +327,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "pgdown", "d":
+			// Disable scrolling if in follow mode
+			if m.followMode {
+				return m, nil
+			}
 			// Only fetch more logs if we're at the bottom of viewport and have more to load
 			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
 				atBottom := m.viewport.YOffset >= m.viewport.TotalLineCount()-m.viewport.Height
@@ -335,11 +355,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "t":
-			// Toggle timestamp and hostname visibility
-			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
+			// Toggle timestamp and hostname visibility (allowed in follow mode)
+			if m.activeView == "logs" && m.logBuf != nil {
 				m.showTimestampHost = !m.showTimestampHost
 				// Update viewport content with new formatting
-				m.viewport.SetContent(m.logBuf.GetContentFormatted(m.showTimestampHost))
+				m.viewport.SetContent(m.logBuf.GetContentFormatted(m.showTimestampHost, m.followMode))
+				// If in follow mode, scroll back to bottom after refresh
+				if m.followMode {
+					m.viewport.GotoBottom()
+					m.viewportYPosition = m.viewport.YOffset
+				}
+			}
+
+		case "f":
+			// Toggle follow mode
+			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
+				m.followMode = !m.followMode
+				if m.followMode {
+					// Enable follow mode - scroll to bottom and start background fetcher
+					m.viewport.SetContent(m.logBuf.GetContentFormatted(m.showTimestampHost, m.followMode))
+					m.viewport.GotoBottom()
+					m.viewportYPosition = m.viewport.YOffset
+					cmds = append(cmds, m.logBuf.StartFollow())
+				} else {
+					// Disable follow mode - stop background fetcher
+					m.logBuf.StopFollow()
+					// Update content to show "end of logs" instead of "watching"
+					m.viewport.SetContent(m.logBuf.GetContentFormatted(m.showTimestampHost, m.followMode))
+				}
 			}
 		}
 
@@ -407,7 +450,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 
 					// Update viewport content
-					m.viewport.SetContent(m.logBuf.GetContent())
+					m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 
 					// ALWAYS adjust viewport position when prepending to prevent scroll jumping
 					// This keeps the user's view stable regardless of prefetch or user action
@@ -424,7 +467,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						prefetchCmd := m.logBuf.AppendInitial(msg.entries, msg.firstCursor, msg.lastCursor)
 
 						// Update viewport and position at bottom
-						m.viewport.SetContent(m.logBuf.GetContent())
+						m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 						m.viewport.GotoBottom()
 						m.viewportYPosition = m.viewport.YOffset
 
@@ -437,10 +480,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						prefetchCmd := m.logBuf.AppendNewer(msg.entries, msg.lastCursor, msg.hasMore)
 
 						// Update viewport content
-						m.viewport.SetContent(m.logBuf.GetContent())
+						m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 
-						if !msg.isPrefetch {
-							// User-initiated: go to bottom
+						if !msg.isPrefetch || m.followMode {
+							// User-initiated or follow mode: go to bottom
 							m.viewport.GotoBottom()
 							m.viewportYPosition = m.viewport.YOffset
 						}
@@ -461,6 +504,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+
+	case followTickMsg:
+		// Background ticker for follow mode
+		if m.followMode && m.logBuf != nil && !m.loading {
+			// Fetch new logs from the current end cursor
+			cmds = append(cmds, fetchLogs(m.selectedService, false, m.logBuf.afterCursor, true))
+		}
+		// Continue ticking if still in follow mode
+		if m.followMode {
+			cmds = append(cmds, tickFollow())
+		}
+		return m, tea.Batch(cmds...)
 	}
 
 	// Handle list navigation
@@ -470,8 +525,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else if m.activeView == "logs" && !m.loading {
 		// Handle viewport navigation when showing logs
 		oldYOffset := m.viewport.YOffset
-		m.viewport, cmd = m.viewport.Update(msg)
-		cmds = append(cmds, cmd)
+		// Only allow viewport updates if not in follow mode (disable arrow up/down in follow mode)
+		if !m.followMode {
+			m.viewport, cmd = m.viewport.Update(msg)
+			cmds = append(cmds, cmd)
+		}
 
 		// Track position changes
 		m.viewportYPosition = m.viewport.YOffset
@@ -492,7 +550,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			linesTrimmed := m.logBuf.TrimBuffer(m.viewport.YOffset, m.viewport.Height)
 			if linesTrimmed > 0 {
 				// Update viewport content after trimming
-				m.viewport.SetContent(m.logBuf.GetContent())
+				m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 				// Adjust viewport position to account for trimmed lines
 				m.viewport.YOffset = max(0, m.viewport.YOffset-linesTrimmed)
 				m.viewportYPosition = m.viewport.YOffset
@@ -513,6 +571,8 @@ func (m model) View() string {
 	var helpView string
 	if m.activeView == "list" {
 		helpView = m.help.ShortHelpView(m.keys.ShortHelpForList())
+	} else if m.followMode {
+		helpView = m.help.ShortHelpView(m.keys.ShortHelpForFollow())
 	} else {
 		helpView = m.help.ShortHelpView(m.keys.ShortHelpForLogs())
 	}
@@ -560,7 +620,7 @@ func (m model) View() string {
 }
 
 // formatLogEntriesWithBoundaries formats log entries with boundary indicators inline
-func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAfter bool, showTimestampHost bool) string {
+func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAfter bool, showTimestampHost bool, followMode bool) string {
 	if len(entries) == 0 {
 		return "No log entries"
 	}
@@ -581,7 +641,11 @@ func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAf
 	// Add end indicator at the end if we've hit the end boundary
 	if !hasMoreAfter {
 		lines = append(lines, "")
-		lines = append(lines, styles.DimStyle.Render("--- end of logs ---"))
+		if followMode {
+			lines = append(lines, styles.InfoStyle.Render("--- watching for new logs (press 'f' to disable) ---"))
+		} else {
+			lines = append(lines, styles.DimStyle.Render("--- end of logs ---"))
+		}
 	}
 
 	return strings.Join(lines, "\n")
@@ -637,7 +701,8 @@ type logBuffer struct {
 	serviceName      string
 	prefetching      bool
 	prefetchingAfter bool
-	targetSize       int // Target number of entries to keep loaded
+	targetSize       int  // Target number of entries to keep loaded
+	followActive     bool // Whether follow mode background fetching is active
 }
 
 func newLogBuffer(serviceName string, targetSize int) *logBuffer {
@@ -651,13 +716,13 @@ func newLogBuffer(serviceName string, targetSize int) *logBuffer {
 }
 
 // GetContent returns formatted content for display with boundary markers (timestamp/host shown)
-func (lb *logBuffer) GetContent() string {
-	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter, true)
+func (lb *logBuffer) GetContent(followMode bool) string {
+	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter, true, followMode)
 }
 
 // GetContentFormatted returns formatted content with optional timestamp/hostname visibility
-func (lb *logBuffer) GetContentFormatted(showTimestampHost bool) string {
-	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter, showTimestampHost)
+func (lb *logBuffer) GetContentFormatted(showTimestampHost bool, followMode bool) string {
+	return formatLogEntriesWithBoundaries(lb.entries, lb.hasMoreBefore, lb.hasMoreAfter, showTimestampHost, followMode)
 }
 
 // ShouldPrefetch returns true if we need to fetch more older logs
@@ -803,6 +868,17 @@ func (lb *logBuffer) CheckPrefetchNeeds(viewportY, viewportHeight, totalHeight i
 	}
 
 	return cmds
+}
+
+// StartFollow starts follow mode background fetching
+func (lb *logBuffer) StartFollow() tea.Cmd {
+	lb.followActive = true
+	return tickFollow()
+}
+
+// StopFollow stops follow mode background fetching
+func (lb *logBuffer) StopFollow() {
+	lb.followActive = false
 }
 
 func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea.Cmd {
