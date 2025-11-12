@@ -178,19 +178,9 @@ func runBubbleTeaList() error {
 
 // editCmd represents the edit command
 var editCmd = &cobra.Command{
-	Use:   "edit [config]",
+	Use:   "edit",
 	Short: "Edit Saltbox configuration files",
-	Long: `Edit Saltbox configuration files using your default editor.
-
-Available configurations:
-  - accounts: Edit accounts.yml
-  - adv_settings: Edit advanced settings (adv_settings.yml)
-  - backup_config: Edit backup configuration (backup_config.yml)
-  - hetzner_vlan: Edit Hetzner VLAN configuration (hetzner_vlan.yml)
-  - inventory: Edit inventory configuration (localhost.yml)
-  - settings: Edit general settings (settings.yml)
-
-If no configuration is specified, an interactive menu will be shown.`,
+	Long:  `Edit Saltbox configuration files using your default editor.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			if err := runBubbleTeaList(); err != nil {
