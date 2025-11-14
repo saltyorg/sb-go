@@ -579,8 +579,10 @@ func GetCpuInfo(ctx context.Context, verbose bool) string {
 	lines := strings.Split(cpuInfo, "\n")
 
 	modelName := ""
-	cpuCores := 0
+	logicalProcessors := 0
 	physicalIds := make(map[string]bool)
+	coreIds := make(map[string]map[string]bool) // map[physicalId]map[coreId]bool
+	cpuCoresPerSocket := 0
 
 	for _, line := range lines {
 		// Extract CPU model name
@@ -591,84 +593,115 @@ func GetCpuInfo(ctx context.Context, verbose bool) string {
 			}
 		}
 
-		// Count physical cores by looking at "processor" entries
+		// Count logical processors (threads)
 		if strings.HasPrefix(line, "processor") {
-			cpuCores++
+			logicalProcessors++
 		}
 
-		// Track physical IDs to count actual CPUs
+		// Track physical IDs to count actual CPU sockets
 		if strings.HasPrefix(line, "physical id") {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) >= 2 {
 				physicalId := strings.TrimSpace(parts[1])
 				physicalIds[physicalId] = true
+				if coreIds[physicalId] == nil {
+					coreIds[physicalId] = make(map[string]bool)
+				}
+			}
+		}
+
+		// Track core IDs to count physical cores per socket
+		if strings.HasPrefix(line, "core id") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) >= 2 {
+				coreId := strings.TrimSpace(parts[1])
+				// Find the last physical ID we saw
+				for physId := range physicalIds {
+					if coreIds[physId] != nil {
+						coreIds[physId][coreId] = true
+					}
+				}
+			}
+		}
+
+		// Try to get cpu cores from the cpu cores field (cores per socket)
+		if strings.HasPrefix(line, "cpu cores") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) >= 2 {
+				if cores, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
+					cpuCoresPerSocket = cores
+				}
 			}
 		}
 	}
 
-	// Calculate the number of physical CPUs
-	numPhysicalCPUs := len(physicalIds)
-	if numPhysicalCPUs == 0 {
-		numPhysicalCPUs = 1 // Default to 1 if we can't determine
+	// Calculate the number of physical CPU sockets
+	numSockets := len(physicalIds)
+	if numSockets == 0 {
+		numSockets = 1 // Default to 1 socket if we can't determine
 	}
 
-	// Calculate threads per core (logical cores / physical cores)
-	threadsPerCore := cpuCores
-	if numPhysicalCPUs > 0 && cpuCores > 0 {
-		threadsPerCore = cpuCores / numPhysicalCPUs
+	// Calculate total physical cores
+	totalPhysicalCores := 0
+	if cpuCoresPerSocket > 0 {
+		// If we have the "cpu cores" field, use it
+		totalPhysicalCores = cpuCoresPerSocket * numSockets
+	} else {
+		// Otherwise, count unique core IDs across all sockets
+		for _, cores := range coreIds {
+			totalPhysicalCores += len(cores)
+		}
+		// If we still don't have a count, assume logical processors == physical cores
+		if totalPhysicalCores == 0 {
+			totalPhysicalCores = logicalProcessors
+		}
 	}
 
 	// Format the result
 	if modelName != "" {
-		// Use colored values for the numbers
-		cpuCoresStr := ValueStyle.Render(fmt.Sprintf("%d", cpuCores))
-		if numPhysicalCPUs > 1 || threadsPerCore > 1 {
-			// Show more detailed info if we have multiple physical CPUs or threads
-			return fmt.Sprintf("%s (%s cores, %s CPUs)",
+		// Remove any core count information from the model name if present
+		// (e.g., "AMD Ryzen 5 3600 6-Core Processor" -> "AMD Ryzen 5 3600")
+		modelName = regexp.MustCompile(`\s+\d+-Core.*`).ReplaceAllString(modelName, "")
+		modelName = strings.TrimSpace(modelName)
+
+		// If we have multiple sockets, format each on its own line
+		if numSockets > 1 {
+			var output strings.Builder
+			coresPerSocket := totalPhysicalCores / numSockets
+			threadsPerSocket := logicalProcessors / numSockets
+
+			for i := 0; i < numSockets; i++ {
+				if i > 0 {
+					output.WriteString("\n")
+				}
+				if threadsPerSocket > coresPerSocket {
+					// We have hyperthreading/SMT
+					output.WriteString(fmt.Sprintf("%s (%s cores, %s threads)",
+						DefaultStyle.Render(modelName),
+						ValueStyle.Render(fmt.Sprintf("%d", coresPerSocket)),
+						ValueStyle.Render(fmt.Sprintf("%d", threadsPerSocket))))
+				} else {
+					// No hyperthreading
+					output.WriteString(fmt.Sprintf("%s (%s cores)",
+						DefaultStyle.Render(modelName),
+						ValueStyle.Render(fmt.Sprintf("%d", coresPerSocket))))
+				}
+			}
+			return output.String()
+		}
+
+		// Single socket - use original format
+		if logicalProcessors > totalPhysicalCores {
+			// We have hyperthreading/SMT
+			return fmt.Sprintf("%s (%s cores, %s threads)",
 				DefaultStyle.Render(modelName),
-				cpuCoresStr,
-				ValueStyle.Render(fmt.Sprintf("%d", numPhysicalCPUs)))
+				ValueStyle.Render(fmt.Sprintf("%d", totalPhysicalCores)),
+				ValueStyle.Render(fmt.Sprintf("%d", logicalProcessors)))
 		} else {
-			// Simple output for a single CPU
+			// No hyperthreading
 			return fmt.Sprintf("%s (%s cores)",
 				DefaultStyle.Render(modelName),
-				cpuCoresStr)
-		}
-	}
-
-	// Fallback if we couldn't parse model name but have core count
-	if cpuCores > 0 {
-		return fmt.Sprintf("%s cores", ValueStyle.Render(fmt.Sprintf("%d", cpuCores)))
-	}
-
-	// Fallback to lscpu if we couldn't parse /proc/cpuinfo
-	lscpuOutput := ExecCommand(ctx, "lscpu")
-	if lscpuOutput != "Not available" {
-		lines := strings.Split(lscpuOutput, "\n")
-		modelLine := ""
-		coresLine := ""
-
-		for _, line := range lines {
-			if strings.HasPrefix(line, "Model name:") {
-				modelLine = line
-			}
-			if strings.HasPrefix(line, "CPU(s):") {
-				coresLine = line
-			}
-		}
-
-		if modelLine != "" && coresLine != "" {
-			modelParts := strings.SplitN(modelLine, ":", 2)
-			coresParts := strings.SplitN(coresLine, ":", 2)
-
-			if len(modelParts) >= 2 && len(coresParts) >= 2 {
-				model := strings.TrimSpace(modelParts[1])
-				cores := strings.TrimSpace(coresParts[1])
-
-				return fmt.Sprintf("%s (%s cores)",
-					DefaultStyle.Render(model),
-					ValueStyle.Render(cores))
-			}
+				ValueStyle.Render(fmt.Sprintf("%d", totalPhysicalCores)))
 		}
 	}
 
