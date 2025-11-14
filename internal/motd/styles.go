@@ -42,9 +42,9 @@ var (
 	KeyStyle     = createColorStyle(defaultKey)
 	ValueStyle   = createColorStyle(defaultValue)
 	WarningStyle = createColorStyle(defaultWarning)
-	SuccessStyle = createSuccessStyle(defaultSuccess)
-	ErrorStyle   = createErrorStyle(defaultError)
-	AppNameStyle = createAppNameStyle(defaultAppName)
+	SuccessStyle = createColorStyle(defaultSuccess)
+	ErrorStyle   = createColorStyle(defaultError)
+	AppNameStyle = createColorStyle(defaultAppName)
 
 	// Progress bar colors
 	// These are initialized with defaults and can be overridden by config
@@ -56,21 +56,6 @@ var (
 // createColorStyle creates a simple colored style
 func createColorStyle(color string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
-}
-
-// createSuccessStyle creates a success style (bold)
-func createSuccessStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true)
-}
-
-// createErrorStyle creates an error style (bold)
-func createErrorStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true)
-}
-
-// createAppNameStyle creates an app name style (bold)
-func createAppNameStyle(color string) lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true)
 }
 
 // InitializeColors loads custom colors from the MOTD config if available
@@ -137,9 +122,9 @@ func InitializeColors() {
 	KeyStyle = createColorStyle(key)
 	ValueStyle = createColorStyle(value)
 	WarningStyle = createColorStyle(warning)
-	SuccessStyle = createSuccessStyle(success)
-	ErrorStyle = createErrorStyle(errorColor)
-	AppNameStyle = createAppNameStyle(appName)
+	SuccessStyle = createColorStyle(success)
+	ErrorStyle = createColorStyle(errorColor)
+	AppNameStyle = createColorStyle(appName)
 
 	// Update progress bar colors
 	ProgressBarLow = progressBarLow
