@@ -9,7 +9,7 @@ import "fmt"
 //
 //	logging.Debug(verbosity, "Cache found for %s", repoPath)
 //	logging.Debug(verbosity, "No suggestions needed, continuing")
-func Debug(verbosity int, format string, args ...interface{}) {
+func Debug(verbosity int, format string, args ...any) {
 	if verbosity > 0 {
 		message := fmt.Sprintf(format, args...)
 		fmt.Printf("DEBUG: %s\n", message)
@@ -23,7 +23,7 @@ func Debug(verbosity int, format string, args ...interface{}) {
 // Usage:
 //
 //	logging.DebugBool(verboseMode, "Processing field: %s", fieldName)
-func DebugBool(verbose bool, format string, args ...interface{}) {
+func DebugBool(verbose bool, format string, args ...any) {
 	if verbose {
 		message := fmt.Sprintf(format, args...)
 		fmt.Printf("DEBUG: %s\n", message)
@@ -38,7 +38,7 @@ func DebugBool(verbose bool, format string, args ...interface{}) {
 //
 //	logging.Trace(verbosity, "Raw output:\n%s", string(output))
 //	logging.Trace(verbosity, "Cache contents: %+v", cache)
-func Trace(verbosity int, format string, args ...interface{}) {
+func Trace(verbosity int, format string, args ...any) {
 	if verbosity > 1 {
 		message := fmt.Sprintf(format, args...)
 		fmt.Printf("TRACE: %s\n", message)
