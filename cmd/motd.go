@@ -38,6 +38,7 @@ type motdConfig struct {
 	showSessions         bool
 	showTraefik          bool
 	showUptime           bool
+	shareMode            bool
 	bannerFile           string
 	bannerFileToiletArgs string
 	bannerFont           string
@@ -86,6 +87,7 @@ last login, user sessions, process information, and system update status based o
 		config.bannerTitle, _ = cmd.Flags().GetString("title")
 		config.bannerType, _ = cmd.Flags().GetString("type")
 		config.verbosity, _ = cmd.Flags().GetCount("verbose")
+		config.shareMode, _ = cmd.Flags().GetBool("share")
 
 		return runMotdCommand(config)
 	},
@@ -93,6 +95,9 @@ last login, user sessions, process information, and system update status based o
 
 // runMotdCommand handles the main logic for the motd command
 func runMotdCommand(config *motdConfig) error {
+	// Initialize custom colors from config if available
+	motd.InitializeColors()
+
 	// If --all flag is used, enable everything
 	if config.showAll {
 		config.showAptStatus = true
@@ -174,6 +179,9 @@ func runMotdCommand(config *motdConfig) error {
 }
 
 func displayMotd(config *motdConfig, verbose bool) error {
+	// Set share mode if enabled
+	motd.SetShareMode(config.shareMode)
+
 	// Display a banner from a file if provided. This takes precedence.
 	if config.bannerFile != "" {
 		content, err := os.ReadFile(config.bannerFile)
@@ -339,6 +347,9 @@ func init() {
 
 	// Add verbosity flag
 	motdCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
+
+	// Add share mode flag
+	motdCmd.Flags().Bool("share", false, "Obscure sensitive information like IP addresses for sharing screenshots")
 
 	// Add banner options
 	motdCmd.Flags().String("title", "Saltbox", "Text to display in the banner")

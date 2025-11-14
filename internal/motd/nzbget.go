@@ -85,6 +85,12 @@ func GetNzbgetInfo(verbose bool) string {
 
 	// Process each NZBGet instance concurrently
 	for i, instance := range nzbgetInstances {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping NZBGet instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.User == "" || instance.Password == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping NZBGet instance %d due to missing URL, user, or password\n", i)
@@ -245,7 +251,7 @@ func formatNzbgetOutput(infos []NzbgetInfo) string {
 		}
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := GreenStyle.Render(paddedName)
+		appNameColored := SuccessStyle.Render(paddedName)
 
 		summary := formatNzbgetSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))

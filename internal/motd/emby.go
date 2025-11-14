@@ -71,6 +71,12 @@ func GetEmbyInfo(verbose bool) string {
 
 	// Process each Emby instance concurrently
 	for i, instance := range embyInstances {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping Emby instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.Token == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping Emby instance %d due to missing URL or token\n", i)
@@ -210,7 +216,7 @@ func formatEmbyOutput(infos []EmbyStreamInfo) string {
 		}
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := GreenStyle.Render(paddedName)
+		appNameColored := SuccessStyle.Render(paddedName)
 
 		if info.ActiveStreams == 0 {
 			output.WriteString(fmt.Sprintf("%sNo active streams", appNameColored))

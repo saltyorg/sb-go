@@ -11,8 +11,37 @@ import (
 	"strings"
 	timepkg "time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// shareMode controls whether to obscure sensitive information like IP addresses
+var shareMode bool
+
+// SetShareMode sets the share mode for obscuring sensitive information
+func SetShareMode(enabled bool) {
+	shareMode = enabled
+}
+
+// obscureIP returns an obscured version of an IP address for sharing
+func obscureIP(ip string) string {
+	if ip == "local" || ip == "" {
+		return ip
+	}
+
+	// Check if it's an IPv4 address
+	if strings.Contains(ip, ".") && !strings.Contains(ip, ":") {
+		return "xxx.xxx.xxx.xxx"
+	}
+
+	// Check if it's an IPv6 address
+	if strings.Contains(ip, ":") {
+		return "xxxx:xxxx:xxxx:xxxx"
+	}
+
+	// For any other format, return a generic obscured value
+	return "xxx.xxx.xxx.xxx"
+}
 
 // GetDistribution returns the Ubuntu distribution version with a codename
 func GetDistribution(ctx context.Context, verbose bool) string {
@@ -52,9 +81,9 @@ func GetCpuAverages(ctx context.Context, verbose bool) string {
 		fields := strings.Fields(string(content))
 		if len(fields) >= 3 {
 			return fmt.Sprintf("%s: %s | %s: %s | %s: %s",
-				DefaultStyle.Render("1 min"), GreenStyle.Render(fields[0]),
-				DefaultStyle.Render("5 min"), GreenStyle.Render(fields[1]),
-				DefaultStyle.Render("15 min"), GreenStyle.Render(fields[2]),
+				DefaultStyle.Render("1 min"), ValueStyle.Render(fields[0]),
+				DefaultStyle.Render("5 min"), ValueStyle.Render(fields[1]),
+				DefaultStyle.Render("15 min"), ValueStyle.Render(fields[2]),
 			)
 		}
 	}
@@ -69,9 +98,9 @@ func GetCpuAverages(ctx context.Context, verbose bool) string {
 			loads := strings.Split(loadPart, ", ")
 			if len(loads) >= 3 {
 				return fmt.Sprintf("%s: %s | %s: %s | %s: %s",
-					DefaultStyle.Render("1 min"), GreenStyle.Render(strings.TrimSpace(loads[0])),
-					DefaultStyle.Render("5 min"), GreenStyle.Render(strings.TrimSpace(loads[1])),
-					DefaultStyle.Render("15 min"), GreenStyle.Render(strings.TrimSpace(loads[2])),
+					DefaultStyle.Render("1 min"), ValueStyle.Render(strings.TrimSpace(loads[0])),
+					DefaultStyle.Render("5 min"), ValueStyle.Render(strings.TrimSpace(loads[1])),
+					DefaultStyle.Render("15 min"), ValueStyle.Render(strings.TrimSpace(loads[2])),
 				)
 			}
 		}
@@ -107,6 +136,11 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 			if !strings.Contains(fromIP, ".") && !strings.Contains(fromIP, ":") {
 				timeIndex = 2
 				fromIP = "local"
+			}
+
+			// Obscure IP if share mode is enabled
+			if shareMode {
+				fromIP = obscureIP(fromIP)
 			}
 
 			// Color the IP address
@@ -182,6 +216,18 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 				coloredUser := ValueStyle.Render(user)
 
 				loginInfo := strings.Join(fields[3:], " ")
+
+				// Obscure IP addresses in loginInfo if share mode is enabled
+				if shareMode {
+					// Simple regex to find and replace IP addresses
+					// IPv4 pattern
+					ipv4Regex := regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)
+					loginInfo = ipv4Regex.ReplaceAllString(loginInfo, "xxx.xxx.xxx.xxx")
+					// IPv6 pattern (simplified)
+					ipv6Regex := regexp.MustCompile(`\b[0-9a-fA-F:]{3,}\b`)
+					loginInfo = ipv6Regex.ReplaceAllString(loginInfo, "xxxx:xxxx:xxxx:xxxx")
+				}
+
 				// Color the login info (date/time/IP)
 				coloredLoginInfo := ValueStyle.Render(loginInfo)
 
@@ -494,16 +540,16 @@ func GetRebootRequired(ctx context.Context, verbose bool) string {
 			if len(validPkgs) > 0 {
 				if len(validPkgs) == 1 {
 					// Use yellow for the entire message when reboot is required
-					return YellowStyle.Render(fmt.Sprintf("Reboot required (package: %s)", validPkgs[0]))
+					return WarningStyle.Render(fmt.Sprintf("Reboot required (package: %s)", validPkgs[0]))
 				} else {
 					// Use yellow for the entire message with package count
-					return YellowStyle.Render(fmt.Sprintf("Reboot required (%d packages)", len(validPkgs)))
+					return WarningStyle.Render(fmt.Sprintf("Reboot required (%d packages)", len(validPkgs)))
 				}
 			}
 		}
 
 		// If we couldn't get package details, just return that a reboot is required
-		return YellowStyle.Render("Reboot required")
+		return WarningStyle.Render("Reboot required")
 	}
 
 	// Method 2: Fallback to the update-motd script
@@ -511,7 +557,7 @@ func GetRebootRequired(ctx context.Context, verbose bool) string {
 	if output != "Not available" && output != "" && !strings.Contains(output, "No reboot") {
 		// If the output contains "reboot required", color it yellow
 		if strings.Contains(strings.ToLower(output), "reboot required") {
-			return YellowStyle.Render(strings.TrimSpace(output))
+			return WarningStyle.Render(strings.TrimSpace(output))
 		}
 		return strings.TrimSpace(output)
 	}
@@ -869,7 +915,7 @@ func GetDockerInfo(ctx context.Context, verbose bool) string {
 		// Only add problematic containers to the result
 		if isProblematic {
 			// Use DefaultStyle for the container name and the specific status style
-			formattedLine := fmt.Sprintf("%s: %s", DefaultStyle.Render(name), RedStyle.Render(status))
+			formattedLine := fmt.Sprintf("%s: %s", DefaultStyle.Render(name), ErrorStyle.Render(status))
 			problemContainers = append(problemContainers, formattedLine)
 		}
 	}
@@ -877,9 +923,9 @@ func GetDockerInfo(ctx context.Context, verbose bool) string {
 	// Create a simple summary line - always show total and running
 	if len(problemContainers) > 0 {
 		// Color the counts - yellow for totalCount when there are issues
-		coloredTotalCount := YellowStyle.Render(fmt.Sprintf("%d", totalCount))
+		coloredTotalCount := WarningStyle.Render(fmt.Sprintf("%d", totalCount))
 		coloredRunningCount := ValueStyle.Render(fmt.Sprintf("%d", runningCount))
-		coloredProblemCount := YellowStyle.Render(fmt.Sprintf("%d", len(problemContainers)))
+		coloredProblemCount := WarningStyle.Render(fmt.Sprintf("%d", len(problemContainers)))
 
 		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%s containers (%s running, %s need attention)",
 			coloredTotalCount, coloredRunningCount, coloredProblemCount)))
@@ -964,32 +1010,36 @@ func GetDiskInfo(ctx context.Context, verbose bool) string {
 		// Get size
 		size := fields[2]
 
-		// Calculate the bar
-		usedWidth := (usagePercent * barWidth) / 100
-		unusedWidth := barWidth - usedWidth
-
-		// Choose a color based on a usage threshold
-		var usedBarStyle lipgloss.Style
+		// Create progress bar with appropriate color for usage level
+		// Low (0-79%), High (80-89%), Critical (90-100%)
+		var prog progress.Model
 		var percentStyle lipgloss.Style
 
-		if usagePercent >= maxUsageThreshold {
-			usedBarStyle = RedStyle
-			percentStyle = RedStyle
-		} else {
-			usedBarStyle = GreenStyle
+		if usagePercent < 80 {
+			// 0-79%: Low usage (good)
+			prog = progress.New(
+				progress.WithSolidFill(ProgressBarLow),
+				progress.WithoutPercentage(),
+			)
 			percentStyle = ValueStyle
+		} else if usagePercent < 90 {
+			// 80-89%: High usage (warning)
+			prog = progress.New(
+				progress.WithSolidFill(ProgressBarHigh),
+				progress.WithoutPercentage(),
+			)
+			percentStyle = WarningStyle
+		} else {
+			// 90-100%: Critical usage (danger)
+			prog = progress.New(
+				progress.WithSolidFill(ProgressBarCritical),
+				progress.WithoutPercentage(),
+			)
+			percentStyle = ErrorStyle
 		}
 
-		// Create the usage bar
-		usedBar := strings.Repeat("=", usedWidth)
-		unusedBar := strings.Repeat("=", unusedWidth)
-
-		// Style the bars
-		styledUsedBar := usedBarStyle.Render(usedBar)
-		styledUnusedBar := DimStyle.Render(unusedBar)
-
-		// Create the complete bar
-		completeBar := fmt.Sprintf("[%s%s]", styledUsedBar, styledUnusedBar)
+		prog.Width = barWidth
+		completeBar := prog.ViewAs(float64(usagePercent) / 100.0)
 
 		// Add to partition slice
 		partitions = append(partitions, partitionInfo{
@@ -1083,11 +1133,11 @@ func GetTraefikInfo(ctx context.Context, verbose bool) string {
 		if len(router.Error) > 0 {
 			problemRouters = append(problemRouters, fmt.Sprintf("%s: %s",
 				DefaultStyle.Render(router.Name),
-				RedStyle.Render(router.Error[0])))
+				ErrorStyle.Render(router.Error[0])))
 		} else if router.Status == "disabled" {
 			problemRouters = append(problemRouters, fmt.Sprintf("%s: %s",
 				DefaultStyle.Render(router.Name),
-				RedStyle.Render("router is disabled")))
+				ErrorStyle.Render("router is disabled")))
 		} else {
 			healthyRouters++
 		}
@@ -1095,9 +1145,9 @@ func GetTraefikInfo(ctx context.Context, verbose bool) string {
 
 	// Create a summary line
 	if len(problemRouters) > 0 {
-		coloredTotalCount := YellowStyle.Render(fmt.Sprintf("%d", totalRouters))
+		coloredTotalCount := WarningStyle.Render(fmt.Sprintf("%d", totalRouters))
 		coloredHealthyCount := ValueStyle.Render(fmt.Sprintf("%d", healthyRouters))
-		coloredProblemCount := YellowStyle.Render(fmt.Sprintf("%d", len(problemRouters)))
+		coloredProblemCount := WarningStyle.Render(fmt.Sprintf("%d", len(problemRouters)))
 
 		output.WriteString(DefaultStyle.Render(fmt.Sprintf("%s routers (%s active, %s need attention)",
 			coloredTotalCount, coloredHealthyCount, coloredProblemCount)))

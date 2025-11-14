@@ -60,6 +60,12 @@ func GetQbittorrentInfo(verbose bool) string {
 
 	// Process each qBittorrent instance concurrently
 	for i, instance := range qbittorrentInstances {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping qBittorrent instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.User == "" || instance.Password == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping qBittorrent instance %d due to missing URL, user, or password\n", i)
@@ -188,7 +194,7 @@ func formatQbittorrentOutput(infos []qbittorrentInfo) string {
 		}
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := GreenStyle.Render(paddedName)
+		appNameColored := SuccessStyle.Render(paddedName)
 
 		summary := formatQbittorrentSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))
@@ -218,11 +224,11 @@ func formatQbittorrentSummary(info qbittorrentInfo) string {
 	parts = append(parts, fmt.Sprintf("%s Seeding", seeding))
 
 	if info.StoppedCount > 0 {
-		parts = append(parts, RedStyle.Render(fmt.Sprintf("%s Stopped", stopped)))
+		parts = append(parts, ErrorStyle.Render(fmt.Sprintf("%s Stopped", stopped)))
 	}
 
 	if info.ErrorCount > 0 {
-		parts = append(parts, RedStyle.Render(fmt.Sprintf("%s Error", errored)))
+		parts = append(parts, ErrorStyle.Render(fmt.Sprintf("%s Error", errored)))
 	}
 
 	return strings.Join(parts, " | ")

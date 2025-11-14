@@ -127,11 +127,6 @@ func runTaskWithSpinnerContext(ctx context.Context, opts SpinnerOptions, taskFun
 	// Get the task error from the channel
 	taskErr := <-errCh
 
-	// If there's an error, print the details on a separate line
-	if taskErr != nil {
-		fmt.Printf("  Error details: %v\n", taskErr)
-	}
-
 	return taskErr
 }
 

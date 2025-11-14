@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -170,9 +171,21 @@ func cronSpecialTimeValidator(fl validator.FieldLevel) bool {
 	}
 }
 
+// custom validator for hex color codes
+func hexColorValidator(fl validator.FieldLevel) bool {
+	value := fl.Field().String()
+	if value == "" {
+		return true // Allow empty values (omitempty will handle required)
+	}
+	// Match #RGB, #RRGGBB, or #RRGGBBAA formats
+	matched, _ := regexp.MatchString(`^#([A-Fa-f0-9]{3}|[A-Fa-f0-9]{6}|[A-Fa-f0-9]{8})$`, value)
+	return matched
+}
+
 // RegisterCustomValidators registers all the custom validators
 func RegisterCustomValidators(validate *validator.Validate) {
 	validate.RegisterValidation("ansiblebool", ansibleBoolValidator)
 	validate.RegisterValidation("timezone_or_auto", timezoneOrAutoValidator)
 	validate.RegisterValidation("cron_special_time", cronSpecialTimeValidator)
+	validate.RegisterValidation("hexcolor", hexColorValidator)
 }

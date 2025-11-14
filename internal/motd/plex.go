@@ -114,6 +114,12 @@ func GetPlexInfo(verbose bool) string {
 
 	// Process each Plex instance concurrently
 	for i, instance := range plexInstances {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping Plex instance %s because it is disabled\n", instance.Name)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.Token == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping Plex instance %s due to missing URL or token\n", instance.Name)
@@ -345,7 +351,7 @@ func formatPlexOutput(infos []PlexStreamInfo) string {
 
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := GreenStyle.Render(paddedName)
+		appNameColored := SuccessStyle.Render(paddedName)
 
 		summary := formatPlexStreamSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))

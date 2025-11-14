@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/fang"
 	"github.com/charmbracelet/lipgloss"
@@ -12,6 +14,40 @@ import (
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 	"github.com/saltyorg/sb-go/internal/utils"
 )
+
+// customErrorHandler handles error formatting with proper line break support.
+// Unlike the default handler, this respects \n characters in error messages
+// and renders each line separately for better readability.
+func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
+	// Print error header (already styled by Fang)
+	fmt.Fprintln(w, styles.ErrorHeader.String())
+
+	// Split error message by line breaks
+	errorText := err.Error()
+	lines := strings.Split(errorText, "\n")
+
+	// Print each line of the error message with proper styling
+	// ErrorText style includes margin, width constraints, and transforms
+	// We unset the width to prevent wrapping long lines (like JSON responses)
+	for i, line := range lines {
+		if line != "" {
+			// First line gets the full ErrorText styling (with titleFirstWord transform)
+			// Subsequent lines use the same style without the transform to preserve formatting
+			if i == 0 {
+				lineStyle := styles.ErrorText.UnsetWidth()
+				fmt.Fprintln(w, lineStyle.Render(line))
+			} else {
+				// Use ErrorText style but without the transform and width for subsequent lines
+				lineStyle := styles.ErrorText.UnsetTransform().UnsetWidth()
+				fmt.Fprintln(w, lineStyle.Render(line))
+			}
+		} else {
+			fmt.Fprintln(w) // Preserve blank lines
+		}
+	}
+
+	fmt.Fprintln(w)
+}
 
 func main() {
 	if os.Geteuid() != 0 {
@@ -63,7 +99,9 @@ func main() {
 
 	// Execute commands with fang for enhanced CLI UX
 	// Fang provides styled help, formatted errors, and improved presentation
-	if err := fang.Execute(ctx, cmd.GetRootCommand()); err != nil {
+	if err := fang.Execute(ctx, cmd.GetRootCommand(),
+		fang.WithErrorHandler(customErrorHandler),
+	); err != nil {
 		os.Exit(1)
 	}
 

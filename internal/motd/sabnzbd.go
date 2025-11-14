@@ -73,6 +73,12 @@ func GetSabnzbdInfo(verbose bool) string {
 
 	// Process each SABnzbd instance concurrently
 	for i, instance := range sabnzbdInstances {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping SABnzbd instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.APIKey == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping SABnzbd instance %d due to missing URL or API key\n", i)
@@ -194,7 +200,7 @@ func formatSabnzbdOutput(infos []SabnzbdInfo) string {
 		}
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := GreenStyle.Render(paddedName)
+		appNameColored := SuccessStyle.Render(paddedName)
 
 		summary := formatSabnzbdSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))

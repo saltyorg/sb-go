@@ -70,6 +70,12 @@ func GetQueueInfo(verbose bool) string {
 
 	// Fetch Sonarr queues concurrently
 	for i, instance := range cfg.Sonarr {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping Sonarr instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.APIKey == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping Sonarr instance %d due to missing URL or API key\n", i)
@@ -112,6 +118,12 @@ func GetQueueInfo(verbose bool) string {
 
 	// Fetch Radarr queues concurrently
 	for i, instance := range cfg.Radarr {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping Radarr instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.APIKey == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping Radarr instance %d due to missing URL or API key\n", i)
@@ -154,6 +166,12 @@ func GetQueueInfo(verbose bool) string {
 
 	// Fetch Lidarr queues concurrently
 	for i, instance := range cfg.Lidarr {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping Lidarr instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.APIKey == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping Lidarr instance %d due to missing URL or API key\n", i)
@@ -196,6 +214,12 @@ func GetQueueInfo(verbose bool) string {
 
 	// Fetch Readarr queues concurrently
 	for i, instance := range cfg.Readarr {
+		if !instance.IsEnabled() {
+			if verbose {
+				fmt.Printf("DEBUG: Skipping Readarr instance %d because it is disabled\n", i)
+			}
+			continue
+		}
 		if instance.URL == "" || instance.APIKey == "" {
 			if verbose {
 				fmt.Printf("DEBUG: Skipping Readarr instance %d due to missing URL or API key\n", i)
@@ -534,7 +558,7 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 		namePadding := maxNameLen - len(appName)
 		paddedName := fmt.Sprintf("%s:%s", appName, strings.Repeat(" ", namePadding+1))
 
-		appNameColored := GreenStyle.Render(paddedName)
+		appNameColored := SuccessStyle.Render(paddedName)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, queueSummary))
 	}
 

@@ -24,6 +24,34 @@ type MOTDConfig struct {
 	Nzbget      []UserPassAppInstance `yaml:"nzbget"`
 	Qbittorrent []UserPassAppInstance `yaml:"qbittorrent"`
 	Rtorrent    []UserPassAppInstance `yaml:"rtorrent"`
+	Colors      *MOTDColors           `yaml:"colors"`
+}
+
+// MOTDColors represents customizable color scheme for MOTD
+type MOTDColors struct {
+	Text        *TextColors        `yaml:"text"`
+	Status      *StatusColors      `yaml:"status"`
+	ProgressBar *ProgressBarColors `yaml:"progress_bar"`
+}
+
+// TextColors represents customizable colors for text elements
+type TextColors struct {
+	Label string `yaml:"label" validate:"omitempty,hexcolor"`
+	Value string `yaml:"value" validate:"omitempty,hexcolor"`
+}
+
+// StatusColors represents customizable colors for status messages
+type StatusColors struct {
+	Warning string `yaml:"warning" validate:"omitempty,hexcolor"`
+	Success string `yaml:"success" validate:"omitempty,hexcolor"`
+	Error   string `yaml:"error" validate:"omitempty,hexcolor"`
+}
+
+// ProgressBarColors represents customizable colors for progress bars
+type ProgressBarColors struct {
+	Low      string `yaml:"low" validate:"omitempty,hexcolor"`
+	High     string `yaml:"high" validate:"omitempty,hexcolor"`
+	Critical string `yaml:"critical" validate:"omitempty,hexcolor"`
 }
 
 // AppInstance represents an app instance in the MOTD configuration
@@ -32,6 +60,7 @@ type AppInstance struct {
 	URL     string `yaml:"url" validate:"omitempty,url"`
 	APIKey  string `yaml:"apikey" validate:"required_with=URL"`
 	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+	Enabled *bool  `yaml:"enabled,omitempty"`
 }
 
 // PlexInstance represents a Plex server instance in the MOTD configuration
@@ -40,6 +69,7 @@ type PlexInstance struct {
 	URL     string `yaml:"url" validate:"omitempty,url"`
 	Token   string `yaml:"token" validate:"required_with=URL"`
 	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+	Enabled *bool  `yaml:"enabled,omitempty"`
 }
 
 // JellyfinInstance represents a Jellyfin server instance in the MOTD configuration
@@ -48,6 +78,7 @@ type JellyfinInstance struct {
 	URL     string `yaml:"url" validate:"omitempty,url"`
 	Token   string `yaml:"token" validate:"required_with=URL"`
 	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+	Enabled *bool  `yaml:"enabled,omitempty"`
 }
 
 // EmbyInstance represents an Emby server instance in the MOTD configuration
@@ -56,6 +87,7 @@ type EmbyInstance struct {
 	URL     string `yaml:"url" validate:"omitempty,url"`
 	Token   string `yaml:"token" validate:"required_with=URL"`
 	Timeout int    `yaml:"timeout" validate:"omitempty,gt=0"`
+	Enabled *bool  `yaml:"enabled,omitempty"`
 }
 
 // UserPassAppInstance represents an app instance requiring user/pass auth in the MOTD configuration
@@ -65,6 +97,32 @@ type UserPassAppInstance struct {
 	User     string `yaml:"user" validate:"required_with=URL"`
 	Password string `yaml:"password" validate:"required_with=URL"`
 	Timeout  int    `yaml:"timeout" validate:"omitempty,gt=0"`
+	Enabled  *bool  `yaml:"enabled,omitempty"`
+}
+
+// IsEnabled returns true if the instance is enabled (defaults to true if not set)
+func (i AppInstance) IsEnabled() bool {
+	return i.Enabled == nil || *i.Enabled
+}
+
+// IsEnabled returns true if the instance is enabled (defaults to true if not set)
+func (i PlexInstance) IsEnabled() bool {
+	return i.Enabled == nil || *i.Enabled
+}
+
+// IsEnabled returns true if the instance is enabled (defaults to true if not set)
+func (i JellyfinInstance) IsEnabled() bool {
+	return i.Enabled == nil || *i.Enabled
+}
+
+// IsEnabled returns true if the instance is enabled (defaults to true if not set)
+func (i EmbyInstance) IsEnabled() bool {
+	return i.Enabled == nil || *i.Enabled
+}
+
+// IsEnabled returns true if the instance is enabled (defaults to true if not set)
+func (i UserPassAppInstance) IsEnabled() bool {
+	return i.Enabled == nil || *i.Enabled
 }
 
 // LoadConfig loads the MOTD configuration from the specified file path
@@ -160,6 +218,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Sonarr instances
 	for _, instance := range config.Sonarr {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Sonarr instance: %+v\n", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("sonarr instance '%s' has URL but no API key", instance.Name)
@@ -175,6 +236,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Radarr instances
 	for _, instance := range config.Radarr {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Radarr instance: %+v\n", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("radarr instance '%s' has URL but no API key", instance.Name)
@@ -190,6 +254,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Lidarr instances
 	for _, instance := range config.Lidarr {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Lidarr instance: %+v\n", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("lidarr instance '%s' has URL but no API key", instance.Name)
@@ -205,6 +272,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Readarr instances
 	for _, instance := range config.Readarr {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Readarr instance: %+v\n", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("readarr instance '%s' has URL but no API key", instance.Name)
@@ -220,6 +290,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Plex instances
 	for _, instance := range config.Plex {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Plex instance: %+v\n", instance)
 		if instance.URL != "" && instance.Token == "" {
 			err := fmt.Errorf("plex instance '%s' has URL but no token", instance.Name)
@@ -245,6 +318,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Jellyfin instances
 	for _, instance := range config.Jellyfin {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Jellyfin instance: %+v\n", instance)
 		if instance.URL != "" && instance.Token == "" {
 			err := fmt.Errorf("jellyfin instance '%s' has URL but no token", instance.Name)
@@ -268,6 +344,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Emby instances
 	for _, instance := range config.Emby {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Emby instance: %+v\n", instance)
 		if instance.URL != "" && instance.Token == "" {
 			err := fmt.Errorf("emby instance '%s' has URL but no token", instance.Name)
@@ -291,6 +370,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Sabnzbd instances
 	for _, instance := range config.Sabnzbd {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Sabnzbd instance: %+v\n", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("sabnzbd instance '%s' has URL but no API key", instance.Name)
@@ -306,6 +388,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Nzbget instances
 	for _, instance := range config.Nzbget {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Nzbget instance: %+v\n", instance)
 		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
 			err := fmt.Errorf("nzbget instance '%s' has URL but is missing user or password", instance.Name)
@@ -321,6 +406,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 
 	// Additional validation for Qbittorrent instances
 	for _, instance := range config.Qbittorrent {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Qbittorrent instance: %+v\n", instance)
 		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
 			err := fmt.Errorf("qbittorrent instance '%s' has URL but is missing user or password", instance.Name)
@@ -335,6 +423,9 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 	}
 
 	for _, instance := range config.Rtorrent {
+		if !instance.IsEnabled() {
+			continue // Skip validation for disabled instances
+		}
 		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating rTorrent instance: %+v\n", instance)
 		// It is valid to have a URL without user/pass for rTorrent,
 		// but not the other way around.
