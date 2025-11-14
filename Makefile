@@ -124,13 +124,13 @@ tidy: ## Tidy and verify dependencies
 
 update: ## Update direct dependencies to latest minor/patch versions (excludes indirect)
 	@echo "$(GREEN)Updating direct dependencies...$(NC)"
-	@go list -f '{{if not .Indirect}}{{.Path}}{{end}}' -m all | grep -v '^$(MODULE)$$' | xargs -r go get -u
+	@go list -f '{{if not .Indirect}}{{.Path}}{{end}}' -m all | grep -v '^$(MODULE)$$' | grep -v 'github.com/moby/moby' | grep -v 'github.com/docker/docker' | xargs -r go get -u
 	go mod tidy
 	@echo "$(GREEN)Direct dependencies updated$(NC)"
 
 update-patch: ## Update direct dependencies to latest patch versions only (excludes indirect)
 	@echo "$(GREEN)Updating direct dependencies (patch only)...$(NC)"
-	@go list -f '{{if not .Indirect}}{{.Path}}{{end}}' -m all | grep -v '^$(MODULE)$$' | xargs -r go get -u=patch
+	@go list -f '{{if not .Indirect}}{{.Path}}{{end}}' -m all | grep -v '^$(MODULE)$$' | grep -v 'github.com/moby/moby' | grep -v 'github.com/docker/docker' | xargs -r go get -u=patch
 	go mod tidy
 	@echo "$(GREEN)Direct dependencies updated (patch only)$(NC)"
 
