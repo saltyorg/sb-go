@@ -541,7 +541,7 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 
 		for _, status := range statuses {
 			count := statusCounts[status]
-			statusParts = append(statusParts, fmt.Sprintf("%d %s", count, strings.ToLower(status)))
+			statusParts = append(statusParts, fmt.Sprintf("%s %s", ValueStyle.Render(fmt.Sprintf("%d", count)), strings.ToLower(status)))
 		}
 
 		var queueSummary string
@@ -549,7 +549,7 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 		if totalItems == 1 {
 			itemOrItems = "item"
 		}
-		queueSummary = fmt.Sprintf("%d %s in queue", totalItems, itemOrItems)
+		queueSummary = fmt.Sprintf("%s %s in queue", ValueStyle.Render(fmt.Sprintf("%d", totalItems)), itemOrItems)
 		if len(statusParts) > 0 {
 			queueSummary += fmt.Sprintf(", %s", strings.Join(statusParts, ", "))
 		}
@@ -558,7 +558,7 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 		namePadding := maxNameLen - len(appName)
 		paddedName := fmt.Sprintf("%s:%s", appName, strings.Repeat(" ", namePadding+1))
 
-		appNameColored := SuccessStyle.Render(paddedName)
+		appNameColored := AppNameStyle.Render(paddedName)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, queueSummary))
 	}
 

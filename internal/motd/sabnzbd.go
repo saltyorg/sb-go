@@ -200,7 +200,7 @@ func formatSabnzbdOutput(infos []SabnzbdInfo) string {
 		}
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := SuccessStyle.Render(paddedName)
+		appNameColored := AppNameStyle.Render(paddedName)
 
 		summary := formatSabnzbdSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))

@@ -38,8 +38,9 @@ type MOTDColors struct {
 
 // TextColors represents customizable colors for text elements
 type TextColors struct {
-	Label string `yaml:"label" validate:"omitempty,hexcolor"`
-	Value string `yaml:"value" validate:"omitempty,hexcolor"`
+	Label   string `yaml:"label" validate:"omitempty,hexcolor"`
+	Value   string `yaml:"value" validate:"omitempty,hexcolor"`
+	AppName string `yaml:"app_name" validate:"omitempty,hexcolor"`
 }
 
 // StatusColors represents customizable colors for status messages

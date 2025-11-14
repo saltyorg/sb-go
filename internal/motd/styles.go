@@ -18,6 +18,7 @@ var (
 	defaultWarning = charmtone.Mustard.Hex()  // #F5EF34
 	defaultSuccess = charmtone.Guac.Hex()     // #12C78F
 	defaultError   = charmtone.Sriracha.Hex() // #EB4268
+	defaultAppName = charmtone.Cumin.Hex()    // #BF976F
 
 	// Default progress bar colors
 	defaultProgressBarLow      = "#A8CC8C" // 0-79% usage (low/good)
@@ -43,6 +44,7 @@ var (
 	WarningStyle = createColorStyle(defaultWarning)
 	SuccessStyle = createSuccessStyle(defaultSuccess)
 	ErrorStyle   = createErrorStyle(defaultError)
+	AppNameStyle = createAppNameStyle(defaultAppName)
 
 	// Progress bar colors
 	// These are initialized with defaults and can be overridden by config
@@ -63,6 +65,11 @@ func createSuccessStyle(color string) lipgloss.Style {
 
 // createErrorStyle creates an error style (bold)
 func createErrorStyle(color string) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true)
+}
+
+// createAppNameStyle creates an app name style (bold)
+func createAppNameStyle(color string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Bold(true)
 }
 
@@ -87,6 +94,7 @@ func InitializeColors() {
 	warning := defaultWarning
 	success := defaultSuccess
 	errorColor := defaultError
+	appName := defaultAppName
 	progressBarLow := defaultProgressBarLow
 	progressBarHigh := defaultProgressBarHigh
 	progressBarCritical := defaultProgressBarCritical
@@ -97,6 +105,9 @@ func InitializeColors() {
 		}
 		if cfg.Colors.Text.Value != "" {
 			value = cfg.Colors.Text.Value
+		}
+		if cfg.Colors.Text.AppName != "" {
+			appName = cfg.Colors.Text.AppName
 		}
 	}
 	if cfg.Colors.Status != nil {
@@ -128,6 +139,7 @@ func InitializeColors() {
 	WarningStyle = createColorStyle(warning)
 	SuccessStyle = createSuccessStyle(success)
 	ErrorStyle = createErrorStyle(errorColor)
+	AppNameStyle = createAppNameStyle(appName)
 
 	// Update progress bar colors
 	ProgressBarLow = progressBarLow

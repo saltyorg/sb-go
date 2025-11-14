@@ -351,7 +351,7 @@ func formatPlexOutput(infos []PlexStreamInfo) string {
 
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := SuccessStyle.Render(paddedName)
+		appNameColored := AppNameStyle.Render(paddedName)
 
 		summary := formatPlexStreamSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))

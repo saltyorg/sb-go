@@ -216,7 +216,7 @@ func formatEmbyOutput(infos []EmbyStreamInfo) string {
 		}
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := SuccessStyle.Render(paddedName)
+		appNameColored := AppNameStyle.Render(paddedName)
 
 		if info.ActiveStreams == 0 {
 			output.WriteString(fmt.Sprintf("%sNo active streams", appNameColored))

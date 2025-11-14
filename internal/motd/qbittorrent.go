@@ -194,7 +194,7 @@ func formatQbittorrentOutput(infos []qbittorrentInfo) string {
 		}
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
-		appNameColored := SuccessStyle.Render(paddedName)
+		appNameColored := AppNameStyle.Render(paddedName)
 
 		summary := formatQbittorrentSummary(info)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))
