@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/logging"
+
 	"github.com/go-playground/validator/v10"
 )
 
@@ -72,39 +74,39 @@ type AnsibleBool string
 
 // UnmarshalYAML implements custom unmarshalling for AnsibleBool.
 func (a *AnsibleBool) UnmarshalYAML(unmarshal func(any) error) error {
-	debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML called\n")
+	logging.DebugBool(verboseMode, "AnsibleBool.UnmarshalYAML called")
 	var s string
 	if err := unmarshal(&s); err != nil {
-		debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - error unmarshaling to string: %v\n", err)
+		logging.DebugBool(verboseMode, "AnsibleBool.UnmarshalYAML - error unmarshaling to string: %v", err)
 		return err // If it's not unmarshalled as string, it's an error
 	}
 	normalizedVal := strings.ToLower(s)
-	debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - normalized value: '%s'\n", normalizedVal)
+	logging.DebugBool(verboseMode, "AnsibleBool.UnmarshalYAML - normalized value: '%s'", normalizedVal)
 	switch normalizedVal {
 	case "yes", "true", "on", "1", "no", "false", "off", "0":
 		*a = AnsibleBool(normalizedVal)
-		debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - valid value, set to: '%s'\n", *a)
+		logging.DebugBool(verboseMode, "AnsibleBool.UnmarshalYAML - valid value, set to: '%s'", *a)
 		return nil // Valid value
 	default:
 		err := fmt.Errorf("invalid Ansible boolean value: %s", s) // Return error
-		debugPrintf("DEBUG: AnsibleBool.UnmarshalYAML - %v\n", err)
+		logging.DebugBool(verboseMode, "AnsibleBool.UnmarshalYAML - %v", err)
 		return err
 	}
 }
 
 // ValidateAdvSettingsConfig validates the AdvSettingsConfig struct.
 func ValidateAdvSettingsConfig(config *AdvSettingsConfig, inputMap map[string]any) error {
-	debugPrintf("\nDEBUG: ValidateAdvSettingsConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
+	logging.DebugBool(verboseMode, "\nDEBUG: ValidateAdvSettingsConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
 
 	// Register custom validators (from generic.go).
-	debugPrintf("DEBUG: ValidateAdvSettingsConfig - registering custom validators\n")
+	logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - registering custom validators")
 	RegisterCustomValidators(validate)
 
 	// Validate the overall structure.
-	debugPrintf("DEBUG: ValidateAdvSettingsConfig - validating struct: %+v\n", config)
+	logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - validating struct: %+v", config)
 	if err := validate.Struct(config); err != nil {
-		debugPrintf("DEBUG: ValidateAdvSettingsConfig - struct validation error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - struct validation error: %v", err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
@@ -115,24 +117,24 @@ func ValidateAdvSettingsConfig(config *AdvSettingsConfig, inputMap map[string]an
 				// Convert to lowercase for consistency
 				fieldPath = strings.ToLower(fieldPath)
 
-				debugPrintf("DEBUG: ValidateAdvSettingsConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", fieldPath, e.Tag(), e.Value(), e.Param())
+				logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - validation error on field '%s', tag '%s', value '%v', param '%s'", fieldPath, e.Tag(), e.Value(), e.Param())
 
 				switch e.Tag() {
 				case "required":
 					err := fmt.Errorf("field '%s' is required", fieldPath)
-					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - %v", err)
 					return err
 				case "ansiblebool":
 					err := fmt.Errorf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s", fieldPath, e.Value())
-					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - %v", err)
 					return err
 				case "timezone_or_auto":
 					err := fmt.Errorf("field '%s' must be a valid timezone or 'auto', got: %s", fieldPath, e.Value())
-					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - %v", err)
 					return err
 				default:
 					err := fmt.Errorf("field '%s' is invalid: %s", fieldPath, e.Error())
-					debugPrintf("DEBUG: ValidateAdvSettingsConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - %v", err)
 					return err
 				}
 			}
@@ -141,12 +143,12 @@ func ValidateAdvSettingsConfig(config *AdvSettingsConfig, inputMap map[string]an
 	}
 
 	// Check for extra fields.
-	debugPrintf("DEBUG: ValidateAdvSettingsConfig - checking for extra fields\n")
+	logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - checking for extra fields")
 	if err := checkExtraFields(inputMap, config); err != nil {
-		debugPrintf("DEBUG: ValidateAdvSettingsConfig - checkExtraFields returned error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - checkExtraFields returned error: %v", err)
 		return err
 	}
 
-	debugPrintf("DEBUG: ValidateAdvSettingsConfig - validation successful\n")
+	logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - validation successful")
 	return nil
 }

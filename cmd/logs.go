@@ -202,7 +202,7 @@ type model struct {
 	viewportInitialized bool
 	loading             bool
 	err                 error
-	viewportYPosition   int  // Store viewport scroll position
+	viewportYPosition   int // Store viewport scroll position
 	quitting            bool
 	showTimestampHost   bool // Toggle for showing timestamp and hostname columns
 	followMode          bool // Follow mode enabled

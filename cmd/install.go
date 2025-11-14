@@ -11,6 +11,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/git"
+	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/agnivade/levenshtein"
@@ -129,15 +130,13 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 			needsCacheUpdate = true
 		}
 
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: needsCacheUpdate: %t\n", needsCacheUpdate)
-		}
+		logging.Debug(verbosity, "needsCacheUpdate: %t", needsCacheUpdate)
 
 		if needsCacheUpdate {
 			fmt.Println("INFO: Cache missing or incomplete, updating the cache")
 		}
-	} else if verbosity > 0 {
-		fmt.Println("DEBUG: Cache validation skipped due to --no-cache flag")
+	} else {
+		logging.Debug(verbosity, "Cache validation skipped due to --no-cache flag")
 	}
 
 	if !noCache {
@@ -162,9 +161,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 		}
 	}
 
-	if verbosity > 0 {
-		fmt.Println("DEBUG: No suggestions needed, continuing")
-	}
+	logging.Debug(verbosity, "No suggestions needed, continuing")
 
 	ansibleBinaryPath := constants.AnsiblePlaybookBinaryPath
 
@@ -221,18 +218,14 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 	// Ensure the cache exists and is populated.
 	validTags := getValidTags(ctx, repoPath, cacheInstance, verbosity)
 
-	if verbosity > 0 {
-		fmt.Printf("DEBUG: Valid tags for %s (after getValidTags): %v\n", repoPath, validTags)
-	}
+	logging.Debug(verbosity, "Valid tags for %s (after getValidTags): %v", repoPath, validTags)
 
 	otherRepoPath := constants.SandboxRepoPath
 	if repoPath == constants.SandboxRepoPath {
 		otherRepoPath = constants.SaltboxRepoPath
 	}
 	otherValidTags := getValidTags(ctx, otherRepoPath, cacheInstance, verbosity)
-	if verbosity > 0 {
-		fmt.Printf("DEBUG: Valid tags for other repo %s (after getValidTags): %v\n", otherRepoPath, otherValidTags)
-	}
+	logging.Debug(verbosity, "Valid tags for other repo %s (after getValidTags): %v", otherRepoPath, otherValidTags)
 
 	repoName := "Saltbox"
 	otherRepoName := "Sandbox"
@@ -242,23 +235,17 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 	}
 
 	for _, providedTag := range providedTags {
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Checking tag: %s%s\n", currentPrefix, providedTag)
-		}
+		logging.Debug(verbosity, "Checking tag: %s%s", currentPrefix, providedTag)
 		found := slices.Contains(validTags, providedTag)
 		if found {
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Exact match found for %s%s\n", currentPrefix, providedTag)
-			}
+			logging.Debug(verbosity, "Exact match found for %s%s", currentPrefix, providedTag)
 			continue // Tag is valid, no suggestion needed
 		}
 
 		// 2. Check for an exact match in the *other* repository (the strongest suggestion)
 		if slices.Contains(otherValidTags, providedTag) {
 			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s, but '%s%s' exists in %s. Use that instead.", currentPrefix, providedTag, repoName, otherPrefix, providedTag, otherRepoName))
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Exact match found in other repo for %s%s, suggesting %s%s\n", currentPrefix, providedTag, otherPrefix, providedTag)
-			}
+			logging.Debug(verbosity, "Exact match found in other repo for %s%s, suggesting %s%s", currentPrefix, providedTag, otherPrefix, providedTag)
 			found = true
 		}
 		if found {
@@ -271,9 +258,7 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 
 		for _, validTag := range validTags {
 			distance := levenshtein.ComputeDistance(providedTag, validTag)
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Distance between '%s' and '%s': %d\n", providedTag, validTag, distance)
-			}
+			logging.Debug(verbosity, "Distance between '%s' and '%s': %d", providedTag, validTag, distance)
 			if distance < bestDistance && distance <= 2 { // Threshold of 2
 				bestDistance = distance
 				bestMatch = validTag
@@ -282,9 +267,7 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 
 		if bestMatch != "" {
 			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s. Did you mean '%s%s'?", currentPrefix, providedTag, repoName, currentPrefix, bestMatch))
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Suggesting '%s%s' for '%s%s'\n", currentPrefix, bestMatch, currentPrefix, providedTag)
-			}
+			logging.Debug(verbosity, "Suggesting '%s%s' for '%s%s'", currentPrefix, bestMatch, currentPrefix, providedTag)
 			continue
 		}
 
@@ -293,9 +276,7 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 		bestDistanceOther := 9999
 		for _, otherValidTag := range otherValidTags {
 			distance := levenshtein.ComputeDistance(providedTag, otherValidTag)
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Distance between '%s' and '%s' in other repo: %d\n", providedTag, otherValidTag, distance)
-			}
+			logging.Debug(verbosity, "Distance between '%s' and '%s' in other repo: %d", providedTag, otherValidTag, distance)
 			if distance < bestDistanceOther && distance <= 2 {
 				bestDistanceOther = distance
 				bestMatchOther = otherValidTag
@@ -303,17 +284,13 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 		}
 		if bestMatchOther != "" {
 			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s. Did you mean '%s%s' (from %s)?", currentPrefix, providedTag, repoName, otherPrefix, bestMatchOther, otherRepoName))
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Suggesting '%s%s' for '%s%s' from other repo\n", otherPrefix, bestMatchOther, currentPrefix, providedTag)
-			}
+			logging.Debug(verbosity, "Suggesting '%s%s' for '%s%s' from other repo", otherPrefix, bestMatchOther, currentPrefix, providedTag)
 			continue
 		}
 
 		// 5. No close match found, provide the generic error message.
 		suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in Saltbox nor Sandbox. Use '--no-cache' if developing your own role.", currentPrefix, providedTag))
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: No match found for '%s%s'\n", currentPrefix, providedTag)
-		}
+		logging.Debug(verbosity, "No match found for '%s%s'", currentPrefix, providedTag)
 	}
 
 	sort.Strings(suggestions) // Sort suggestions alphabetically
@@ -336,9 +313,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 	// Also verify that the commit hash matches the current repository state.
 	repoCache, ok := cacheInstance.GetRepoCache(repoPath)
 	if ok {
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Cache found for %s\n", repoPath)
-		}
+		logging.Debug(verbosity, "Cache found for %s", repoPath)
 		// Check if commit hash matches
 		if cachedCommit, commitOK := repoCache["commit"].(string); commitOK {
 			currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
@@ -346,14 +321,10 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 				// Commit matches, check if tags exist
 				cachedTagsInterface, ok := repoCache["tags"]
 				if ok {
-					if verbosity > 0 {
-						fmt.Printf("DEBUG: 'tags' key found in cache for %s with matching commit\n", repoPath)
-					}
+					logging.Debug(verbosity, "'tags' key found in cache for %s with matching commit", repoPath)
 					cachedTags, ok := cachedTagsInterface.([]any)
 					if ok {
-						if verbosity > 0 {
-							fmt.Printf("DEBUG: Cache is valid type for: %s\n", repoPath)
-						}
+						logging.Debug(verbosity, "Cache is valid type for: %s", repoPath)
 						cachedTagsStrings := make([]string, 0, len(cachedTags))
 						for _, tag := range cachedTags {
 							if strTag, ok := tag.(string); ok {
@@ -361,40 +332,34 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 							}
 						}
 						// If we got here, the cache is valid. Return
-						if verbosity > 0 {
-							fmt.Printf("DEBUG: Cache valid. Returning %v\n", cachedTagsStrings)
-						}
+						logging.Debug(verbosity, "Cache valid. Returning %v", cachedTagsStrings)
 						return cachedTagsStrings
-					} else if verbosity > 0 {
-						fmt.Printf("DEBUG: Cache is invalid type for %s\n", repoPath)
+					} else {
+						logging.Debug(verbosity, "Cache is invalid type for %s", repoPath)
 					}
-				} else if verbosity > 0 {
-					fmt.Printf("DEBUG: 'tags' key NOT found in cache for %s\n", repoPath)
-				}
-			} else if verbosity > 0 {
-				if err != nil {
-					fmt.Printf("DEBUG: Error getting current commit for %s: %v\n", repoPath, err)
 				} else {
-					fmt.Printf("DEBUG: Commit mismatch for %s (cached: %s, current: %s)\n", repoPath, cachedCommit, currentCommit)
+					logging.Debug(verbosity, "'tags' key NOT found in cache for %s", repoPath)
+				}
+			} else {
+				if err != nil {
+					logging.Debug(verbosity, "Error getting current commit for %s: %v", repoPath, err)
+				} else {
+					logging.Debug(verbosity, "Commit mismatch for %s (cached: %s, current: %s)", repoPath, cachedCommit, currentCommit)
 				}
 			}
-		} else if verbosity > 0 {
-			fmt.Printf("DEBUG: No valid commit hash in cache for %s\n", repoPath)
+		} else {
+			logging.Debug(verbosity, "No valid commit hash in cache for %s", repoPath)
 		}
-	} else if verbosity > 0 {
-		fmt.Printf("DEBUG: Cache NOT found for %s\n", repoPath)
+	} else {
+		logging.Debug(verbosity, "Cache NOT found for %s", repoPath)
 	}
 
 	// Attempt to update/populate the cache if not valid.
-	if verbosity > 0 {
-		fmt.Printf("DEBUG: Attempting to update/populate cache for %s\n", repoPath)
-	}
+	logging.Debug(verbosity, "Attempting to update/populate cache for %s", repoPath)
 	_, err := ansible.RunAndCacheAnsibleTags(ctx, repoPath, playbookPath, "", cacheInstance, verbosity) // Use empty string for extraSkipTags
 	if err != nil {
 		handleInterruptError(err)
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Error updating cache for %s: %v\n", repoPath, err)
-		}
+		logging.Debug(verbosity, "Error updating cache for %s: %v", repoPath, err)
 	}
 
 	// Retrieve again
@@ -402,31 +367,23 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 
 	// If *still* not ok, then return empty.
 	if !ok {
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Cache still not ok after update for %s\n", repoPath)
-		}
+		logging.Debug(verbosity, "Cache still not ok after update for %s", repoPath)
 		return []string{}
 	}
 	cachedTagsInterface, ok := repoCache["tags"]
 	if !ok {
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: 'tags' key missing after update for %s\n", repoPath)
-		}
+		logging.Debug(verbosity, "'tags' key missing after update for %s", repoPath)
 		return []string{}
 	}
 	cachedTags, ok := cachedTagsInterface.([]string) // Cast to []string directly
 	if !ok {
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Cache is invalid type after update for %s.  Expected []string, got %T\n", repoPath, cachedTagsInterface)
-		}
+		logging.Debug(verbosity, "Cache is invalid type after update for %s.  Expected []string, got %T", repoPath, cachedTagsInterface)
 		return []string{}
 	}
 
 	cachedTagsStrings := make([]string, 0, len(cachedTags)) // Pre-allocate for efficiency
 	cachedTagsStrings = append(cachedTagsStrings, cachedTags...)
-	if verbosity > 0 {
-		fmt.Printf("DEBUG: Returning tags after update: %v\n", cachedTagsStrings)
-	}
+	logging.Debug(verbosity, "Returning tags after update: %v", cachedTagsStrings)
 	return cachedTagsStrings
 }
 
@@ -434,45 +391,31 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosity int) bool {
 	repoCache, ok := cacheInstance.GetRepoCache(repoPath)
 	if !ok {
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: cacheExistsAndIsValid: Cache not found for %s\n", repoPath)
-		}
+		logging.Debug(verbosity, "cacheExistsAndIsValid: Cache not found for %s", repoPath)
 		return false
 	}
-	if verbosity > 0 {
-		fmt.Printf("DEBUG: cacheExistsAndIsValid: Cache found for %s\n", repoPath)
-	}
+	logging.Debug(verbosity, "cacheExistsAndIsValid: Cache found for %s", repoPath)
 
 	cachedTagsInterface, ok := repoCache["tags"]
 	if !ok {
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' key not found for %s\n", repoPath)
-		}
+		logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' key not found for %s", repoPath)
 		return false
 	}
-	if verbosity > 0 {
-		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' key found for %s\n", repoPath)
-	}
+	logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' key found for %s", repoPath)
 
 	// Check if cachedTagsInterface is a slice of interfaces (which is how JSON arrays are typically unmarshalled)
 	cachedTagsSlice, ok := cachedTagsInterface.([]any)
 	if ok {
 		if len(cachedTagsSlice) == 0 {
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' array is empty for %s\n", repoPath)
-			}
+			logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' array is empty for %s", repoPath)
 			return false
 		}
 
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is a non-empty list for %s\n", repoPath)
-		}
+		logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' is a non-empty list for %s", repoPath)
 		return true
 	}
 
-	if verbosity > 0 {
-		fmt.Printf("DEBUG: cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)\n", repoPath, cachedTagsInterface)
-	}
+	logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)", repoPath, cachedTagsInterface)
 	return false
 }
 

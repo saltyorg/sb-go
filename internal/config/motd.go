@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/logging"
+
 	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v3"
 )
@@ -144,17 +146,17 @@ func LoadConfig(configPath string) (*MOTDConfig, error) {
 
 // ValidateMOTDConfig validates the MOTD configuration
 func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]any) error {
-	debugPrintf("\nDEBUG: ValidateMOTDConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
+	logging.DebugBool(verboseMode, "\nDEBUG: ValidateMOTDConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
 
 	// Register custom validators
-	debugPrintf("DEBUG: ValidateMOTDConfig - registering custom validators\n")
+	logging.DebugBool(verboseMode, "ValidateMOTDConfig - registering custom validators")
 	RegisterCustomValidators(validate)
 
 	// Validate the overall structure
-	debugPrintf("DEBUG: ValidateMOTDConfig - validating struct: %+v\n", config)
+	logging.DebugBool(verboseMode, "ValidateMOTDConfig - validating struct: %+v", config)
 	if err := validate.Struct(config); err != nil {
-		debugPrintf("DEBUG: ValidateMOTDConfig - struct validation error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateMOTDConfig - struct validation error: %v", err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
@@ -165,28 +167,28 @@ func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]any) error {
 				// Convert to lowercase for consistency
 				fieldPath = strings.ToLower(fieldPath)
 
-				debugPrintf("DEBUG: ValidateMOTDConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", fieldPath, e.Tag(), e.Value(), e.Param())
+				logging.DebugBool(verboseMode, "ValidateMOTDConfig - validation error on field '%s', tag '%s', value '%v', param '%s'", fieldPath, e.Tag(), e.Value(), e.Param())
 
 				switch e.Tag() {
 				case "required":
 					err := fmt.Errorf("field '%s' is required", fieldPath)
-					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateMOTDConfig - %v", err)
 					return err
 				case "url":
 					err := fmt.Errorf("field '%s' must be a valid URL", fieldPath)
-					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateMOTDConfig - %v", err)
 					return err
 				case "required_with":
 					err := fmt.Errorf("field '%s' is required when %s is provided", fieldPath, e.Param())
-					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateMOTDConfig - %v", err)
 					return err
 				case "gt":
 					err := fmt.Errorf("field '%s' must be greater than %s", fieldPath, e.Param())
-					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateMOTDConfig - %v", err)
 					return err
 				default:
 					err := fmt.Errorf("field '%s' is invalid: %s", fieldPath, e.Error())
-					debugPrintf("DEBUG: ValidateMOTDConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateMOTDConfig - %v", err)
 					return err
 				}
 			}
@@ -195,41 +197,41 @@ func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]any) error {
 	}
 
 	// Additional validation for nested objects
-	debugPrintf("DEBUG: ValidateMOTDConfig - validating nested configurations\n")
+	logging.DebugBool(verboseMode, "ValidateMOTDConfig - validating nested configurations")
 	if err := validateMOTDNestedConfigs(config); err != nil {
-		debugPrintf("DEBUG: ValidateMOTDConfig - validateMOTDNestedConfigs returned error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateMOTDConfig - validateMOTDNestedConfigs returned error: %v", err)
 		return err
 	}
 
 	// Check for extra fields
-	debugPrintf("DEBUG: ValidateMOTDConfig - checking for extra fields\n")
+	logging.DebugBool(verboseMode, "ValidateMOTDConfig - checking for extra fields")
 	if err := checkExtraFields(inputMap, config); err != nil {
-		debugPrintf("DEBUG: ValidateMOTDConfig - checkExtraFields returned error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateMOTDConfig - checkExtraFields returned error: %v", err)
 		return err
 	}
 
-	debugPrintf("DEBUG: ValidateMOTDConfig - validation successful\n")
+	logging.DebugBool(verboseMode, "ValidateMOTDConfig - validation successful")
 	return nil
 }
 
 // validateMOTDNestedConfigs performs additional validation on nested configurations
 func validateMOTDNestedConfigs(config *MOTDConfig) error {
-	debugPrintf("DEBUG: validateMOTDNestedConfigs called with config: %+v\n", config)
+	logging.DebugBool(verboseMode, "validateMOTDNestedConfigs called with config: %+v", config)
 
 	// Additional validation for Sonarr instances
 	for _, instance := range config.Sonarr {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Sonarr instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Sonarr instance: %+v", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("sonarr instance '%s' has URL but no API key", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.APIKey != "" && instance.URL == "" {
 			err := fmt.Errorf("sonarr instance '%s' has API key but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
@@ -239,15 +241,15 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Radarr instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Radarr instance: %+v", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("radarr instance '%s' has URL but no API key", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.APIKey != "" && instance.URL == "" {
 			err := fmt.Errorf("radarr instance '%s' has API key but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
@@ -257,15 +259,15 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Lidarr instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Lidarr instance: %+v", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("lidarr instance '%s' has URL but no API key", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.APIKey != "" && instance.URL == "" {
 			err := fmt.Errorf("lidarr instance '%s' has API key but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
@@ -275,15 +277,15 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Readarr instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Readarr instance: %+v", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("readarr instance '%s' has URL but no API key", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.APIKey != "" && instance.URL == "" {
 			err := fmt.Errorf("readarr instance '%s' has API key but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
@@ -293,15 +295,15 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Plex instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Plex instance: %+v", instance)
 		if instance.URL != "" && instance.Token == "" {
 			err := fmt.Errorf("plex instance '%s' has URL but no token", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.Token != "" && instance.URL == "" {
 			err := fmt.Errorf("plex instance '%s' has token but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 
@@ -310,7 +312,7 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 			_, err := url.Parse(instance.URL)
 			if err != nil {
 				err := fmt.Errorf("invalid URL for Plex instance '%s': %v", instance.Name, err)
-				debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 				return err
 			}
 		}
@@ -321,22 +323,22 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Jellyfin instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Jellyfin instance: %+v", instance)
 		if instance.URL != "" && instance.Token == "" {
 			err := fmt.Errorf("jellyfin instance '%s' has URL but no token", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.Token != "" && instance.URL == "" {
 			err := fmt.Errorf("jellyfin instance '%s' has token but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.URL != "" {
 			_, err := url.Parse(instance.URL)
 			if err != nil {
 				err := fmt.Errorf("invalid URL for Jellyfin instance '%s': %v", instance.Name, err)
-				debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 				return err
 			}
 		}
@@ -347,22 +349,22 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Emby instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Emby instance: %+v", instance)
 		if instance.URL != "" && instance.Token == "" {
 			err := fmt.Errorf("emby instance '%s' has URL but no token", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.Token != "" && instance.URL == "" {
 			err := fmt.Errorf("emby instance '%s' has token but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.URL != "" {
 			_, err := url.Parse(instance.URL)
 			if err != nil {
 				err := fmt.Errorf("invalid URL for Emby instance '%s': %v", instance.Name, err)
-				debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 				return err
 			}
 		}
@@ -373,15 +375,15 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Sabnzbd instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Sabnzbd instance: %+v", instance)
 		if instance.URL != "" && instance.APIKey == "" {
 			err := fmt.Errorf("sabnzbd instance '%s' has URL but no API key", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.APIKey != "" && instance.URL == "" {
 			err := fmt.Errorf("sabnzbd instance '%s' has API key but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
@@ -391,15 +393,15 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Nzbget instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Nzbget instance: %+v", instance)
 		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
 			err := fmt.Errorf("nzbget instance '%s' has URL but is missing user or password", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
 			err := fmt.Errorf("nzbget instance '%s' has user/password but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
@@ -409,15 +411,15 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating Qbittorrent instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Qbittorrent instance: %+v", instance)
 		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
 			err := fmt.Errorf("qbittorrent instance '%s' has URL but is missing user or password", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
 			err := fmt.Errorf("qbittorrent instance '%s' has user/password but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
@@ -426,16 +428,16 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 		if !instance.IsEnabled() {
 			continue // Skip validation for disabled instances
 		}
-		debugPrintf("DEBUG: validateMOTDNestedConfigs - validating rTorrent instance: %+v\n", instance)
+		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating rTorrent instance: %+v", instance)
 		// It is valid to have a URL without user/pass for rTorrent,
 		// but not the other way around.
 		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
 			err := fmt.Errorf("rtorrent instance '%s' has user/password but no URL", instance.Name)
-			debugPrintf("DEBUG: validateMOTDNestedConfigs - %v\n", err)
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 			return err
 		}
 	}
 
-	debugPrintf("DEBUG: validateMOTDNestedConfigs - nested validation successful\n")
+	logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - nested validation successful")
 	return nil
 }

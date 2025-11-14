@@ -17,11 +17,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/logging"
+	"github.com/saltyorg/sb-go/internal/utils"
+
 	"github.com/cloudflare/cloudflare-go/v6"
 	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/cloudflare/cloudflare-go/v6/zones"
-	"github.com/saltyorg/sb-go/internal/executor"
-	"github.com/saltyorg/sb-go/internal/utils"
 	"golang.org/x/net/publicsuffix"
 	"golang.org/x/sync/errgroup"
 )
@@ -116,17 +118,17 @@ func validateSSHKeyOrURL(value any, _ map[string]any) error {
 		return nil // Optional field
 	}
 
-	debugPrintf("DEBUG: validateSSHKeyOrURL called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateSSHKeyOrURL called with value: '%s'", str)
 
 	// Check if it's a valid URL
 	if isValidURL(str) {
-		debugPrintf("DEBUG: validateSSHKeyOrURL - value is a valid URL\n")
+		logging.DebugBool(verboseMode, "validateSSHKeyOrURL - value is a valid URL")
 		return nil
 	}
 
 	// Check if it's an SSH key
 	if isValidSSHKey(str) {
-		debugPrintf("DEBUG: validateSSHKeyOrURL - value is a valid SSH key\n")
+		logging.DebugBool(verboseMode, "validateSSHKeyOrURL - value is a valid SSH key")
 		return nil
 	}
 
@@ -140,7 +142,7 @@ func validatePasswordStrength(value any, _ map[string]any) error {
 		return fmt.Errorf("password must be a string")
 	}
 
-	debugPrintf("DEBUG: validatePasswordStrength called with password length: %d\n", len(str))
+	logging.DebugBool(verboseMode, "validatePasswordStrength called with password length: %d", len(str))
 
 	if len(str) == 0 {
 		return fmt.Errorf("password cannot be empty")
@@ -148,7 +150,7 @@ func validatePasswordStrength(value any, _ map[string]any) error {
 
 	// Non-fatal warning for short passwords
 	if len(str) < 12 {
-		fmt.Printf("WARNING: Password is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).\n", len(str))
+		fmt.Printf("WARNING: Password is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).", len(str))
 	}
 
 	return nil
@@ -161,13 +163,13 @@ func validateCloudflareConfigSync(value any, config map[string]any) error {
 		return fmt.Errorf("cloudflare config must be an object")
 	}
 
-	debugPrintf("DEBUG: validateCloudflareConfigSync called with config: %+v\n", cfConfig)
+	logging.DebugBool(verboseMode, "validateCloudflareConfigSync called with config: %+v", cfConfig)
 
 	_, hasAPI := cfConfig["api"].(string)
 	_, hasEmail := cfConfig["email"].(string)
 
 	if !hasAPI && !hasEmail {
-		debugPrintf("DEBUG: validateCloudflareConfigSync - both API and email missing, skipping validation\n")
+		logging.DebugBool(verboseMode, "validateCloudflareConfigSync - both API and email missing, skipping validation")
 		return nil // Both missing is OK
 	}
 
@@ -187,14 +189,14 @@ func validateCloudflareConfigSync(value any, config map[string]any) error {
 	}
 
 	// Structure validation passed - API validation will be done async
-	debugPrintf("DEBUG: validateCloudflareConfigSync - structure validation passed\n")
+	logging.DebugBool(verboseMode, "validateCloudflareConfigSync - structure validation passed")
 	return nil
 }
 
 // validateCloudflareConfigAsync performs actual Cloudflare API validation
 func validateCloudflareConfigAsync(value any, config map[string]any) error {
 	startTime := time.Now()
-	debugPrintf("DEBUG: validateCloudflareConfigAsync starting at %v\n", startTime)
+	logging.DebugBool(verboseMode, "validateCloudflareConfigAsync starting at %v", startTime)
 
 	cfConfig, ok := value.(map[string]any)
 	if !ok {
@@ -205,37 +207,37 @@ func validateCloudflareConfigAsync(value any, config map[string]any) error {
 	email, hasEmail := cfConfig["email"].(string)
 
 	if !hasAPI && !hasEmail {
-		debugPrintf("DEBUG: validateCloudflareConfigAsync completed in %v (skipped - no credentials)\n", time.Since(startTime))
+		logging.DebugBool(verboseMode, "validateCloudflareConfigAsync completed in %v (skipped - no credentials)", time.Since(startTime))
 		return nil // Both missing is OK
 	}
 
 	if !hasAPI || !hasEmail {
-		debugPrintf("DEBUG: validateCloudflareConfigAsync completed in %v (error - incomplete credentials)\n", time.Since(startTime))
+		logging.DebugBool(verboseMode, "validateCloudflareConfigAsync completed in %v (error - incomplete credentials)", time.Since(startTime))
 		return fmt.Errorf("both 'api' and 'email' must be provided together")
 	}
 
 	// Get domain from user config for validation
 	userConfig, ok := config["user"].(map[string]any)
 	if !ok {
-		debugPrintf("DEBUG: validateCloudflareConfigAsync completed in %v (error - no user config)\n", time.Since(startTime))
+		logging.DebugBool(verboseMode, "validateCloudflareConfigAsync completed in %v (error - no user config)", time.Since(startTime))
 		return fmt.Errorf("user config is required for Cloudflare validation")
 	}
 
 	domain, ok := userConfig["domain"].(string)
 	if !ok {
-		debugPrintf("DEBUG: validateCloudflareConfigAsync completed in %v (error - no domain)\n", time.Since(startTime))
+		logging.DebugBool(verboseMode, "validateCloudflareConfigAsync completed in %v (error - no domain)", time.Since(startTime))
 		return fmt.Errorf("user domain is required for Cloudflare validation")
 	}
 
 	// Perform actual Cloudflare API validation
-	debugPrintf("DEBUG: validateCloudflareConfigAsync starting API calls for domain: %s\n", domain)
+	logging.DebugBool(verboseMode, "validateCloudflareConfigAsync starting API calls for domain: %s", domain)
 	err := validateCloudflareCredentials(api, email, domain)
 	duration := time.Since(startTime)
 
 	if err != nil {
-		debugPrintf("DEBUG: validateCloudflareConfigAsync completed in %v (API validation failed: %v)\n", duration, err)
+		logging.DebugBool(verboseMode, "validateCloudflareConfigAsync completed in %v (API validation failed: %v)", duration, err)
 	} else {
-		debugPrintf("DEBUG: validateCloudflareConfigAsync completed in %v (API validation successful)\n", duration)
+		logging.DebugBool(verboseMode, "validateCloudflareConfigAsync completed in %v (API validation successful)", duration)
 	}
 
 	return err
@@ -248,13 +250,13 @@ func validateDockerhubConfigSync(value any, _ map[string]any) error {
 		return fmt.Errorf("dockerhub config must be an object")
 	}
 
-	debugPrintf("DEBUG: validateDockerhubConfigSync called with config: %+v\n", dhConfig)
+	logging.DebugBool(verboseMode, "validateDockerhubConfigSync called with config: %+v", dhConfig)
 
 	_, hasUser := dhConfig["user"].(string)
 	_, hasToken := dhConfig["token"].(string)
 
 	if !hasUser && !hasToken {
-		debugPrintf("DEBUG: validateDockerhubConfigSync - both user and token missing, skipping validation\n")
+		logging.DebugBool(verboseMode, "validateDockerhubConfigSync - both user and token missing, skipping validation")
 		return nil // Both missing is OK
 	}
 
@@ -263,14 +265,14 @@ func validateDockerhubConfigSync(value any, _ map[string]any) error {
 	}
 
 	// Structure validation passed - API validation will be done async
-	debugPrintf("DEBUG: validateDockerhubConfigSync - structure validation passed\n")
+	logging.DebugBool(verboseMode, "validateDockerhubConfigSync - structure validation passed")
 	return nil
 }
 
 // validateDockerhubConfigAsync performs actual Docker Hub authentication test
 func validateDockerhubConfigAsync(value any, _ map[string]any) error {
 	startTime := time.Now()
-	debugPrintf("DEBUG: validateDockerhubConfigAsync starting at %v\n", startTime)
+	logging.DebugBool(verboseMode, "validateDockerhubConfigAsync starting at %v", startTime)
 
 	dhConfig, ok := value.(map[string]any)
 	if !ok {
@@ -281,24 +283,24 @@ func validateDockerhubConfigAsync(value any, _ map[string]any) error {
 	token, hasToken := dhConfig["token"].(string)
 
 	if !hasUser && !hasToken {
-		debugPrintf("DEBUG: validateDockerhubConfigAsync completed in %v (skipped - no credentials)\n", time.Since(startTime))
+		logging.DebugBool(verboseMode, "validateDockerhubConfigAsync completed in %v (skipped - no credentials)", time.Since(startTime))
 		return nil // Both missing is OK
 	}
 
 	if !hasUser || !hasToken {
-		debugPrintf("DEBUG: validateDockerhubConfigAsync completed in %v (error - incomplete credentials)\n", time.Since(startTime))
+		logging.DebugBool(verboseMode, "validateDockerhubConfigAsync completed in %v (error - incomplete credentials)", time.Since(startTime))
 		return fmt.Errorf("both 'user' and 'token' must be provided together")
 	}
 
 	// Perform actual Docker Hub authentication test
-	debugPrintf("DEBUG: validateDockerhubConfigAsync starting API call for user: %s\n", username)
+	logging.DebugBool(verboseMode, "validateDockerhubConfigAsync starting API call for user: %s", username)
 	err := validateDockerhubCredentials(username, token)
 	duration := time.Since(startTime)
 
 	if err != nil {
-		debugPrintf("DEBUG: validateDockerhubConfigAsync completed in %v (API validation failed: %v)\n", duration, err)
+		logging.DebugBool(verboseMode, "validateDockerhubConfigAsync completed in %v (API validation failed: %v)", duration, err)
 	} else {
-		debugPrintf("DEBUG: validateDockerhubConfigAsync completed in %v (API validation successful)\n", duration)
+		logging.DebugBool(verboseMode, "validateDockerhubConfigAsync completed in %v (API validation successful)", duration)
 	}
 
 	return err
@@ -306,7 +308,7 @@ func validateDockerhubConfigAsync(value any, _ map[string]any) error {
 
 // validateAnsibleBool validates Ansible boolean values
 func validateAnsibleBool(value any, _ map[string]any) error {
-	debugPrintf("DEBUG: validateAnsibleBool called with value: %v (type: %T)\n", value, value)
+	logging.DebugBool(verboseMode, "validateAnsibleBool called with value: %v (type: %T)", value, value)
 
 	return validateAnsibleBoolValue(value)
 }
@@ -344,7 +346,7 @@ func validateTimezone(value any, _ map[string]any) error {
 		return fmt.Errorf("timezone must be a string")
 	}
 
-	debugPrintf("DEBUG: validateTimezone called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateTimezone called with value: '%s'", str)
 
 	if strings.ToLower(str) == "auto" {
 		return nil
@@ -365,7 +367,7 @@ func validateCronTime(value any, _ map[string]any) error {
 		return fmt.Errorf("cron time must be a string")
 	}
 
-	debugPrintf("DEBUG: validateCronTime called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateCronTime called with value: '%s'", str)
 
 	normalizedValue := strings.ToLower(str)
 	switch normalizedValue {
@@ -383,7 +385,7 @@ func validateDirectoryPath(value any, _ map[string]any) error {
 		return fmt.Errorf("directory path must be a string")
 	}
 
-	debugPrintf("DEBUG: validateDirectoryPath called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateDirectoryPath called with value: '%s'", str)
 
 	// Make path absolute if relative
 	dirPath := str
@@ -410,7 +412,7 @@ func validateRcloneTemplate(value any, _ map[string]any) error {
 		return fmt.Errorf("rclone template must be a string")
 	}
 
-	debugPrintf("DEBUG: validateRcloneTemplate called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateRcloneTemplate called with value: '%s'", str)
 
 	// Check for predefined values
 	switch strings.ToLower(str) {
@@ -436,7 +438,7 @@ func validateRcloneRemote(value any, _ map[string]any) error {
 		return fmt.Errorf("rclone remote must be a string")
 	}
 
-	debugPrintf("DEBUG: validateRcloneRemote called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateRcloneRemote called with value: '%s'", str)
 
 	// Extract remote name from "remote:path" format
 	parts := strings.SplitN(str, ":", 2)
@@ -445,31 +447,31 @@ func validateRcloneRemote(value any, _ map[string]any) error {
 		remoteName = parts[0]
 	}
 
-	debugPrintf("DEBUG: validateRcloneRemote - checking remote name: '%s'\n", remoteName)
+	logging.DebugBool(verboseMode, "validateRcloneRemote - checking remote name: '%s'", remoteName)
 
 	// Check if rclone is installed
 	if _, err := exec.LookPath("rclone"); err != nil {
-		fmt.Printf("Warning: rclone remote validation skipped: rclone is not installed\n")
+		fmt.Printf("Warning: rclone remote validation skipped: rclone is not installed")
 		return nil
 	}
 
 	// Get the Saltbox user
 	rcloneUser, err := utils.GetSaltboxUser()
 	if err != nil {
-		fmt.Printf("Warning: rclone remote validation skipped: could not retrieve saltbox user: %v\n", err)
+		fmt.Printf("Warning: rclone remote validation skipped: could not retrieve saltbox user: %v", err)
 		return nil
 	}
 
 	// Check if the user exists on the system
 	if _, err := user.Lookup(rcloneUser); err != nil {
-		fmt.Printf("Warning: rclone remote validation skipped: user '%s' does not exist\n", rcloneUser)
+		fmt.Printf("Warning: rclone remote validation skipped: user '%s' does not exist", rcloneUser)
 		return nil
 	}
 
 	// Check if the rclone config file exists
 	rcloneConfigPath := fmt.Sprintf("/home/%s/.config/rclone/rclone.conf", rcloneUser)
 	if _, err := os.Stat(rcloneConfigPath); os.IsNotExist(err) {
-		fmt.Printf("Warning: rclone remote validation skipped: config file not found at %s\n", rcloneConfigPath)
+		fmt.Printf("Warning: rclone remote validation skipped: config file not found at %s", rcloneConfigPath)
 		return nil
 	}
 
@@ -514,7 +516,7 @@ func isValidSSHKey(key string) bool {
 
 // validateCloudflareCredentials performs actual Cloudflare API validation
 func validateCloudflareCredentials(apiKey, email, domain string) error {
-	debugPrintf("DEBUG: validateCloudflareCredentials called for domain: %s\n", domain)
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials called for domain: %s", domain)
 
 	// Create Cloudflare API client with timeout
 	api := cloudflare.NewClient(
@@ -526,12 +528,12 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 	)
 
 	// Verify API key
-	debugPrintf("DEBUG: validateCloudflareCredentials - verifying API key\n")
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials - verifying API key")
 	_, err := api.User.Get(context.Background())
 	if err != nil {
 		return fmt.Errorf("cloudflare API key verification failed: %w", err)
 	}
-	debugPrintf("DEBUG: validateCloudflareCredentials - API key verified\n")
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials - API key verified")
 
 	// Get root domain for zone lookup
 	rootDomain, err := getRootDomain(domain)
@@ -540,7 +542,7 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 	}
 
 	// Verify domain ownership
-	debugPrintf("DEBUG: validateCloudflareCredentials - checking domain ownership for %s\n", rootDomain)
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials - checking domain ownership for %s", rootDomain)
 	domainStart := time.Now()
 	zonesList, err := api.Zones.List(context.Background(), zones.ZoneListParams{
 		Name: cloudflare.F(rootDomain),
@@ -556,11 +558,11 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 
 	zone := zonesList.Result[0]
 	zoneID := zone.ID
-	debugPrintf("DEBUG: validateCloudflareCredentials - domain ownership verified in %v\n", time.Since(domainStart))
-	debugPrintf("DEBUG: validateCloudflareCredentials - zone info: ID=%s, Name=%s, Status=%s\n", zone.ID, zone.Name, zone.Status)
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials - domain ownership verified in %v", time.Since(domainStart))
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials - zone info: ID=%s, Name=%s, Status=%s", zone.ID, zone.Name, zone.Status)
 
 	// Check SSL settings directly (most efficient approach)
-	debugPrintf("DEBUG: validateCloudflareCredentials - checking SSL settings\n")
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials - checking SSL settings")
 	sslStart := time.Now()
 	ctx := context.Background()
 	sslSettings, err := api.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{
@@ -575,25 +577,25 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 		if sslValue, ok := sslSettings.Value.(zones.SettingGetResponseZonesSchemasSSLValue); ok {
 			if sslValue == zones.SettingGetResponseZonesSchemasSSLValueFlexible ||
 				sslValue == zones.SettingGetResponseZonesSchemasSSLValueOff {
-				return fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
-					"  This SSL/TLS mode is not compatible with Saltbox.\n"+
-					"  Please update your Cloudflare settings:\n"+
-					"  1. Log in to your Cloudflare dashboard\n"+
-					"  2. Go to the SSL/TLS section for domain '%s'\n"+
-					"  3. Change the encryption mode to 'Full' or 'Full (strict)'\n"+
-					"  4. Save your changes\n",
+				return fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n"+
+					"  This SSL/TLS mode is not compatible with Saltbox."+
+					"  Please update your Cloudflare settings:"+
+					"  1. Log in to your Cloudflare dashboard"+
+					"  2. Go to the SSL/TLS section for domain '%s'"+
+					"  3. Change the encryption mode to 'Full' or 'Full (strict)'"+
+					"  4. Save your changes",
 					string(sslValue), rootDomain)
 			}
 		}
 	}
-	debugPrintf("DEBUG: validateCloudflareCredentials - SSL settings verified in %v\n", time.Since(sslStart))
+	logging.DebugBool(verboseMode, "validateCloudflareCredentials - SSL settings verified in %v", time.Since(sslStart))
 
 	return nil
 }
 
 // validateDockerhubCredentials performs actual Docker Hub authentication
 func validateDockerhubCredentials(username, token string) error {
-	debugPrintf("DEBUG: validateDockerhubCredentials called for username: %s\n", username)
+	logging.DebugBool(verboseMode, "validateDockerhubCredentials called for username: %s", username)
 
 	dockerhubLoginUrl := "https://hub.docker.com/v2/users/login/"
 	payload := strings.NewReader(fmt.Sprintf(`{"username": "%s", "password": "%s"}`, username, token))
@@ -751,7 +753,7 @@ func validateSubdomain(value any, _ map[string]any) error {
 		return fmt.Errorf("subdomain must be a string")
 	}
 
-	debugPrintf("DEBUG: validateSubdomain called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateSubdomain called with value: '%s'", str)
 
 	if err := validateSubdomainCharacters(str); err != nil {
 		return err
@@ -767,7 +769,7 @@ func validateHostnameStrict(value any, _ map[string]any) error {
 		return fmt.Errorf("hostname must be a string")
 	}
 
-	debugPrintf("DEBUG: validateHostnameStrict called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateHostnameStrict called with value: '%s'", str)
 
 	// Basic format check first
 	if !isValidHostname(str) {
@@ -787,7 +789,7 @@ func validateHostnameStrict(value any, _ map[string]any) error {
 
 // validateWholeNumber validates that a value is a whole number (integer)
 func validateWholeNumber(value any, _ map[string]any) error {
-	debugPrintf("DEBUG: validateWholeNumber called with value: %v (type: %T)\n", value, value)
+	logging.DebugBool(verboseMode, "validateWholeNumber called with value: %v (type: %T)", value, value)
 
 	switch v := value.(type) {
 	case string:
@@ -821,7 +823,7 @@ func validateURL(value any, _ map[string]any) error {
 		return nil // Optional field
 	}
 
-	debugPrintf("DEBUG: validateURL called with value: '%s'\n", str)
+	logging.DebugBool(verboseMode, "validateURL called with value: '%s'", str)
 
 	// Check basic URL format
 	if !isValidURL(str) {
@@ -838,7 +840,7 @@ func validateURL(value any, _ map[string]any) error {
 
 // validatePositiveNumber validates that a number is positive
 func validatePositiveNumber(value any, _ map[string]any) error {
-	debugPrintf("DEBUG: validatePositiveNumber called with value: %v (type: %T)\n", value, value)
+	logging.DebugBool(verboseMode, "validatePositiveNumber called with value: %v (type: %T)", value, value)
 
 	switch v := value.(type) {
 	case int:

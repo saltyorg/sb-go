@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"regexp"
 
+	"github.com/saltyorg/sb-go/internal/logging"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,16 +37,9 @@ func SetVerbose(v bool) {
 	verboseMode = v
 }
 
-// debugPrintf prints debug messages in verbose mode
-func debugPrintf(format string, a ...any) {
-	if verboseMode {
-		fmt.Printf(format, a...)
-	}
-}
-
 // LoadSchema loads a YAML schema file
 func LoadSchema(schemaPath string) (*Schema, error) {
-	debugPrintf("DEBUG: LoadSchema called with path: %s\n", schemaPath)
+	logging.DebugBool(verboseMode, "LoadSchema called with path: %s", schemaPath)
 
 	data, err := os.ReadFile(schemaPath)
 	if err != nil {
@@ -56,31 +51,31 @@ func LoadSchema(schemaPath string) (*Schema, error) {
 		return nil, fmt.Errorf("failed to parse schema file %s: %w", schemaPath, err)
 	}
 
-	debugPrintf("DEBUG: LoadSchema loaded %d top-level rules\n", len(rules))
+	logging.DebugBool(verboseMode, "LoadSchema loaded %d top-level rules", len(rules))
 	return &Schema{Rules: rules}, nil
 }
 
 // Validate validates a configuration against the schema
 func (s *Schema) Validate(config map[string]any) error {
-	debugPrintf("DEBUG: Schema.Validate called with config keys: %v\n", getKeys(config))
+	logging.DebugBool(verboseMode, "Schema.Validate called with config keys: %v", getKeys(config))
 	return s.validateObject(config, s.Rules, "")
 }
 
 // ValidateStructure performs lightweight structure validation (checks for unknown fields, required fields, but skips type checking)
 func (s *Schema) ValidateStructure(config map[string]any) error {
-	debugPrintf("DEBUG: Schema.ValidateStructure called with config keys: %v\n", getKeys(config))
+	logging.DebugBool(verboseMode, "Schema.ValidateStructure called with config keys: %v", getKeys(config))
 	return s.validateObjectStructure(config, s.Rules, "")
 }
 
 // ValidateWithTypeFlexibility performs full validation including custom validators but ignores type mismatches
 func (s *Schema) ValidateWithTypeFlexibility(config map[string]any) error {
-	debugPrintf("DEBUG: Schema.ValidateWithTypeFlexibility called with config keys: %v\n", getKeys(config))
+	logging.DebugBool(verboseMode, "Schema.ValidateWithTypeFlexibility called with config keys: %v", getKeys(config))
 	return s.validateObjectWithTypeFlexibility(config, s.Rules, "", nil)
 }
 
 // ValidateWithTypeFlexibilityAsync performs validation with async API checks
 func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]any) (error, *AsyncValidationContext) {
-	debugPrintf("DEBUG: Schema.ValidateWithTypeFlexibilityAsync called with config keys: %v\n", getKeys(config))
+	logging.DebugBool(verboseMode, "Schema.ValidateWithTypeFlexibilityAsync called with config keys: %v", getKeys(config))
 	asyncCtx := NewAsyncValidationContext()
 	err := s.validateObjectWithTypeFlexibility(config, s.Rules, "", asyncCtx)
 	return err, asyncCtx
@@ -88,14 +83,14 @@ func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]any) (error,
 
 // validateObject validates an object against schema rules
 func (s *Schema) validateObject(obj map[string]any, rules map[string]*SchemaRule, path string) error {
-	debugPrintf("DEBUG: validateObject called with path: '%s', rules: %v\n", path, getKeys(rules))
+	logging.DebugBool(verboseMode, "validateObject called with path: '%s', rules: %v", path, getKeys(rules))
 
 	// Check required fields
 	for fieldName, rule := range rules {
 		fieldPath := appendPath(path, fieldName)
 		value, exists := obj[fieldName]
 
-		debugPrintf("DEBUG: Checking field '%s', exists: %t, required: %t\n", fieldPath, exists, rule.Required)
+		logging.DebugBool(verboseMode, "Checking field '%s', exists: %t, required: %t", fieldPath, exists, rule.Required)
 
 		if rule.Required && !exists {
 			return fmt.Errorf("field '%s' is required", fieldPath)
@@ -122,7 +117,7 @@ func (s *Schema) validateObject(obj map[string]any, rules map[string]*SchemaRule
 
 // validateObjectStructure validates object structure without strict type checking
 func (s *Schema) validateObjectStructure(obj map[string]any, rules map[string]*SchemaRule, path string) error {
-	debugPrintf("DEBUG: validateObjectStructure called with path: '%s', rules: %v\n", path, getKeys(rules))
+	logging.DebugBool(verboseMode, "validateObjectStructure called with path: '%s', rules: %v", path, getKeys(rules))
 
 	// Check for unknown fields
 	for fieldName := range obj {
@@ -154,14 +149,14 @@ func (s *Schema) validateObjectStructure(obj map[string]any, rules map[string]*S
 
 // validateObjectWithTypeFlexibility validates an object but skips type checking while running custom validators
 func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]any, rules map[string]*SchemaRule, path string, asyncCtx *AsyncValidationContext) error {
-	debugPrintf("DEBUG: validateObjectWithTypeFlexibility called with path: '%s', rules: %v\n", path, getKeys(rules))
+	logging.DebugBool(verboseMode, "validateObjectWithTypeFlexibility called with path: '%s', rules: %v", path, getKeys(rules))
 
 	// Check required fields
 	for fieldName, rule := range rules {
 		fieldPath := appendPath(path, fieldName)
 		value, exists := obj[fieldName]
 
-		debugPrintf("DEBUG: Checking field '%s', exists: %t, required: %t\n", fieldPath, exists, rule.Required)
+		logging.DebugBool(verboseMode, "Checking field '%s', exists: %t, required: %t", fieldPath, exists, rule.Required)
 
 		if rule.Required && !exists {
 			return fmt.Errorf("field '%s' is required", fieldPath)
@@ -188,7 +183,7 @@ func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]any, rules map
 
 // validateFieldWithTypeFlexibility validates a field but skips type checking
 func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, path string, parentConfig map[string]any, asyncCtx *AsyncValidationContext) error {
-	debugPrintf("DEBUG: validateFieldWithTypeFlexibility called for '%s' with value type: %T\n", path, value)
+	logging.DebugBool(verboseMode, "validateFieldWithTypeFlexibility called for '%s' with value type: %T", path, value)
 
 	// Not equals validation
 	if err := s.validateNotEquals(value, rule, path); err != nil {
@@ -215,7 +210,7 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 	}
 
 	if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
-		debugPrintf("DEBUG: Running built-in %s validator for field '%s'\n", rule.Type, path)
+		logging.DebugBool(verboseMode, "Running built-in %s validator for field '%s'", rule.Type, path)
 		if validator, exists := customValidators[validatorName]; exists {
 			if err := validator(value, parentConfig); err != nil {
 				return fmt.Errorf("field '%s': %w", path, err)
@@ -225,11 +220,11 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 
 	// Custom validator - check if it's an async API validator first
 	if rule.CustomValidator != "" {
-		debugPrintf("DEBUG: Running custom validator '%s' for field '%s'\n", rule.CustomValidator, path)
+		logging.DebugBool(verboseMode, "Running custom validator '%s' for field '%s'", rule.CustomValidator, path)
 
 		// Check if this is an async API validator
 		if asyncValidator, isAsync := asyncAPIValidators[rule.CustomValidator]; isAsync && asyncCtx != nil {
-			debugPrintf("DEBUG: Adding async API validator '%s' for field '%s'\n", rule.CustomValidator, path)
+			logging.DebugBool(verboseMode, "Adding async API validator '%s' for field '%s'", rule.CustomValidator, path)
 			asyncCtx.AddAPIValidation(path, asyncValidator, value, parentConfig)
 		} else if validator, exists := customValidators[rule.CustomValidator]; exists {
 			// Run synchronous validator
@@ -265,7 +260,7 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 
 // validateField validates a single field value
 func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentConfig map[string]any) error {
-	debugPrintf("DEBUG: validateField called for '%s' with value type: %T\n", path, value)
+	logging.DebugBool(verboseMode, "validateField called for '%s' with value type: %T", path, value)
 
 	// Basic type validation
 	if err := s.validateType(value, rule, path); err != nil {
@@ -296,18 +291,18 @@ func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentC
 	switch rule.Type {
 	case "ansible_bool":
 		if !rule.Required && isEmptyValue(value) {
-			debugPrintf("DEBUG: Skipping ansible_bool validator for non-required empty field '%s'\n", path)
+			logging.DebugBool(verboseMode, "Skipping ansible_bool validator for non-required empty field '%s'", path)
 		} else {
-			debugPrintf("DEBUG: Running built-in ansible_bool validator for field '%s'\n", path)
+			logging.DebugBool(verboseMode, "Running built-in ansible_bool validator for field '%s'", path)
 			if err := validateAnsibleBoolValue(value); err != nil {
 				return fmt.Errorf("field '%s': %w", path, err)
 			}
 		}
 	case "subdomain":
 		if !rule.Required && isEmptyValue(value) {
-			debugPrintf("DEBUG: Skipping subdomain validator for non-required empty field '%s'\n", path)
+			logging.DebugBool(verboseMode, "Skipping subdomain validator for non-required empty field '%s'", path)
 		} else {
-			debugPrintf("DEBUG: Running built-in subdomain validator for field '%s'\n", path)
+			logging.DebugBool(verboseMode, "Running built-in subdomain validator for field '%s'", path)
 			if validator, exists := customValidators["validate_subdomain"]; exists {
 				if err := validator(value, parentConfig); err != nil {
 					return fmt.Errorf("field '%s': %w", path, err)
@@ -316,9 +311,9 @@ func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentC
 		}
 	case "timezone":
 		if !rule.Required && isEmptyValue(value) {
-			debugPrintf("DEBUG: Skipping timezone validator for non-required empty field '%s'\n", path)
+			logging.DebugBool(verboseMode, "Skipping timezone validator for non-required empty field '%s'", path)
 		} else {
-			debugPrintf("DEBUG: Running built-in timezone validator for field '%s'\n", path)
+			logging.DebugBool(verboseMode, "Running built-in timezone validator for field '%s'", path)
 			if validator, exists := customValidators["validate_timezone"]; exists {
 				if err := validator(value, parentConfig); err != nil {
 					return fmt.Errorf("field '%s': %w", path, err)
@@ -339,9 +334,9 @@ func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentC
 
 		if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
 			if !rule.Required && isEmptyValue(value) {
-				debugPrintf("DEBUG: Skipping built-in %s validator for non-required empty field '%s'\n", rule.Type, path)
+				logging.DebugBool(verboseMode, "Skipping built-in %s validator for non-required empty field '%s'", rule.Type, path)
 			} else {
-				debugPrintf("DEBUG: Running built-in %s validator for field '%s'\n", rule.Type, path)
+				logging.DebugBool(verboseMode, "Running built-in %s validator for field '%s'", rule.Type, path)
 				if validator, exists := customValidators[validatorName]; exists {
 					if err := validator(value, parentConfig); err != nil {
 						return fmt.Errorf("field '%s': %w", path, err)
@@ -353,7 +348,7 @@ func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentC
 
 	// Custom validator
 	if rule.CustomValidator != "" {
-		debugPrintf("DEBUG: Running custom validator '%s' for field '%s'\n", rule.CustomValidator, path)
+		logging.DebugBool(verboseMode, "Running custom validator '%s' for field '%s'", rule.CustomValidator, path)
 		if validator, exists := customValidators[rule.CustomValidator]; exists {
 			if err := validator(value, parentConfig); err != nil {
 				return fmt.Errorf("field '%s': %w", path, err)
@@ -393,18 +388,18 @@ func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 
 	// Skip type validation if field is not required and value is empty
 	if !rule.Required && isEmptyValue(value) {
-		debugPrintf("DEBUG: validateType - skipping type check for non-required empty field '%s'\n", path)
+		logging.DebugBool(verboseMode, "validateType - skipping type check for non-required empty field '%s'", path)
 		return nil
 	}
 
 	valueType := getValueType(value)
-	debugPrintf("DEBUG: validateType for '%s': expected=%s, actual=%s, custom_validator=%s\n", path, rule.Type, valueType, rule.CustomValidator)
+	logging.DebugBool(verboseMode, "validateType for '%s': expected=%s, actual=%s, custom_validator=%s", path, rule.Type, valueType, rule.CustomValidator)
 
 	// Handle special types that have built-in validation
 	if rule.Type == "ansible_bool" {
 		// "ansible_bool" type accepts strings and booleans, validation happens automatically
 		if valueType == "string" || valueType == "boolean" {
-			debugPrintf("DEBUG: validateType - ansible_bool field accepts string/boolean, allowing %s\n", valueType)
+			logging.DebugBool(verboseMode, "validateType - ansible_bool field accepts string/boolean, allowing %s", valueType)
 			return nil
 		}
 	}
@@ -425,7 +420,7 @@ func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 	if builtInStringTypes[rule.Type] {
 		// Built-in validator types accept strings, validation happens automatically
 		if valueType == "string" {
-			debugPrintf("DEBUG: validateType - built-in type '%s' accepts string, allowing %s\n", rule.Type, valueType)
+			logging.DebugBool(verboseMode, "validateType - built-in type '%s' accepts string, allowing %s", rule.Type, valueType)
 			return nil
 		}
 	}
@@ -434,7 +429,7 @@ func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 	if rule.Type == "number" {
 		// "number" type accepts strings and integers, but NOT floats (for whole numbers with flexibility)
 		if valueType == "string" || valueType == "integer" {
-			debugPrintf("DEBUG: validateType - number field accepts string/integer, allowing %s\n", valueType)
+			logging.DebugBool(verboseMode, "validateType - number field accepts string/integer, allowing %s", valueType)
 			return nil
 		}
 	}
@@ -442,7 +437,7 @@ func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 	if rule.Type == "integer" {
 		// "integer" type only accepts actual integers (strict)
 		if valueType == "integer" {
-			debugPrintf("DEBUG: validateType - integer field accepts only integer, allowing %s\n", valueType)
+			logging.DebugBool(verboseMode, "validateType - integer field accepts only integer, allowing %s", valueType)
 			return nil
 		}
 	}
@@ -450,7 +445,7 @@ func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 	if rule.Type == "float" {
 		// "float" type accepts strings and actual floats, but not integers (to be explicit about decimals)
 		if valueType == "string" || valueType == "float" {
-			debugPrintf("DEBUG: validateType - float field accepts string/float, allowing %s\n", valueType)
+			logging.DebugBool(verboseMode, "validateType - float field accepts string/float, allowing %s", valueType)
 			return nil
 		}
 	}
@@ -473,7 +468,7 @@ func (s *Schema) validateFormat(value any, rule *SchemaRule, path string) error 
 		return nil // Format only applies to strings
 	}
 
-	debugPrintf("DEBUG: validateFormat for '%s': format=%s, value=%s\n", path, rule.Format, str)
+	logging.DebugBool(verboseMode, "validateFormat for '%s': format=%s, value=%s", path, rule.Format, str)
 
 	switch rule.Format {
 	case "email":
@@ -503,7 +498,7 @@ func (s *Schema) validateLength(value any, rule *SchemaRule, path string) error 
 	}
 
 	length := len(str)
-	debugPrintf("DEBUG: validateLength for '%s': length=%d, min=%d, max=%d\n", path, length, rule.MinLength, rule.MaxLength)
+	logging.DebugBool(verboseMode, "validateLength for '%s': length=%d, min=%d, max=%d", path, length, rule.MinLength, rule.MaxLength)
 
 	if rule.MinLength > 0 && length < rule.MinLength {
 		return fmt.Errorf("field '%s' must be at least %d characters long, got %d", path, rule.MinLength, length)
@@ -522,7 +517,7 @@ func (s *Schema) validateNotEquals(value any, rule *SchemaRule, path string) err
 		return nil
 	}
 
-	debugPrintf("DEBUG: validateNotEquals for '%s': value=%v, forbidden=%v\n", path, value, rule.NotEquals)
+	logging.DebugBool(verboseMode, "validateNotEquals for '%s': value=%v, forbidden=%v", path, value, rule.NotEquals)
 
 	if reflect.DeepEqual(value, rule.NotEquals) {
 		return fmt.Errorf("field '%s' must not equal the default value: %v", path, rule.NotEquals)
@@ -537,7 +532,7 @@ func (s *Schema) validateRequiredWith(value any, rule *SchemaRule, path string, 
 		return nil
 	}
 
-	debugPrintf("DEBUG: validateRequiredWith for '%s': required_with=%v\n", path, rule.RequiredWith)
+	logging.DebugBool(verboseMode, "validateRequiredWith for '%s': required_with=%v", path, rule.RequiredWith)
 
 	// Check if any of the required_with fields are present with meaningful values (not null/empty)
 	hasRequiredField := false

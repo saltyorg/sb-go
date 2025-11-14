@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/go-playground/validator/v10"
@@ -68,66 +69,66 @@ type VFSCacheConfig struct {
 // rcloneTemplateValidator is the custom validator for rclone templates.
 func rcloneTemplateValidator(fl validator.FieldLevel) bool {
 	value := fl.Field().String()
-	debugPrintf("DEBUG: rcloneTemplateValidator called with value: '%s'\n", value)
+	logging.DebugBool(verboseMode, "rcloneTemplateValidator called with value: '%s'", value)
 
 	// Check for predefined values.
 	switch strings.ToLower(value) {
 	case "dropbox", "google", "sftp", "nfs":
-		debugPrintf("DEBUG: rcloneTemplateValidator - value is a predefined type, returning true\n")
+		logging.DebugBool(verboseMode, "rcloneTemplateValidator - value is a predefined type, returning true")
 		return true
 	}
 
 	// Check for absolute path and file existence.
 	if strings.HasPrefix(value, "/") {
-		debugPrintf("DEBUG: rcloneTemplateValidator - value is an absolute path, checking file existence\n")
+		logging.DebugBool(verboseMode, "rcloneTemplateValidator - value is an absolute path, checking file existence")
 		_, err := os.Stat(value)
 		isValid := err == nil // Valid if the file exists
-		debugPrintf("DEBUG: rcloneTemplateValidator - file exists: %t, returning %t\n", isValid, isValid)
+		logging.DebugBool(verboseMode, "rcloneTemplateValidator - file exists: %t, returning %t", isValid, isValid)
 		return isValid
 	}
 
-	debugPrintf("DEBUG: rcloneTemplateValidator - value is not a predefined type or absolute path, returning false\n")
+	logging.DebugBool(verboseMode, "rcloneTemplateValidator - value is not a predefined type or absolute path, returning false")
 	return false
 }
 
 // ValidateSettingsConfig validates the SettingsConfig struct.
 func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]any) error {
-	debugPrintf("\nDEBUG: ValidateSettingsConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
+	logging.DebugBool(verboseMode, "\nDEBUG: ValidateSettingsConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
-	debugPrintf("DEBUG: ValidateSettingsConfig - registering custom validators\n")
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - registering custom validators")
 	RegisterCustomValidators(validate) //From generic.go
 
-	debugPrintf("DEBUG: ValidateSettingsConfig - registering dirpath validator\n")
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - registering dirpath validator")
 	err := validate.RegisterValidation("dirpath", dirPathValidator) // Register the dirpath validator
 	if err != nil {
 		err := fmt.Errorf("failed to register dirpath validator: %w", err)
-		debugPrintf("DEBUG: ValidateSettingsConfig - %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateSettingsConfig - %v", err)
 		return err
 	}
-	debugPrintf("DEBUG: ValidateSettingsConfig - registering rclone_template validator\n")
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - registering rclone_template validator")
 	err = validate.RegisterValidation("rclone_template", rcloneTemplateValidator)
 	if err != nil {
 		err := fmt.Errorf("failed to register rclone template validator: %w", err)
-		debugPrintf("DEBUG: ValidateSettingsConfig - %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateSettingsConfig - %v", err)
 		return err
 	}
 	// Validate the struct.
-	debugPrintf("DEBUG: ValidateSettingsConfig - validating struct: %+v\n", config)
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - validating struct: %+v", config)
 	if err := validate.Struct(config); err != nil {
-		debugPrintf("DEBUG: ValidateSettingsConfig - struct validation error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateSettingsConfig - struct validation error: %v", err)
 		return formatValidationError(err, config) // Pass the config to help with remote identification
 	}
 
 	// Check for extra fields
-	debugPrintf("DEBUG: ValidateSettingsConfig - checking for extra fields\n")
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - checking for extra fields")
 	if err := checkExtraFields(inputMap, config); err != nil {
-		debugPrintf("DEBUG: ValidateSettingsConfig - checkExtraFields returned error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateSettingsConfig - checkExtraFields returned error: %v", err)
 		return err
 	}
 
 	// Check if rclone is enabled by converting AnsibleBool to lowercase string
 	rcloneEnabledValue := strings.ToLower(string(config.Rclone.Enabled))
-	debugPrintf("DEBUG: ValidateSettingsConfig - rclone.enabled = '%s'\n", rcloneEnabledValue)
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - rclone.enabled = '%s'", rcloneEnabledValue)
 
 	// Determine if rclone is enabled based on the value
 	rcloneEnabled := false
@@ -137,21 +138,21 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]any) err
 	}
 
 	// Now, validate nested structs explicitly.
-	debugPrintf("DEBUG: ValidateSettingsConfig - validating nested structs\n")
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - validating nested structs")
 	for i, remote := range config.Rclone.Remotes {
-		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote: %+v\n", remote)
+		logging.DebugBool(verboseMode, "ValidateSettingsConfig - validating remote: %+v", remote)
 		if err := validate.Struct(remote); err != nil {
-			debugPrintf("DEBUG: ValidateSettingsConfig - remote validation error: %v\n", err)
+			logging.DebugBool(verboseMode, "ValidateSettingsConfig - remote validation error: %v", err)
 			return formatRemoteValidationError(err, remote.Remote, i)
 		}
-		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote.Settings: %+v\n", remote.Settings)
+		logging.DebugBool(verboseMode, "ValidateSettingsConfig - validating remote.Settings: %+v", remote.Settings)
 		if err := validate.Struct(remote.Settings); err != nil {
-			debugPrintf("DEBUG: ValidateSettingsConfig - remote.Settings validation error: %v\n", err)
+			logging.DebugBool(verboseMode, "ValidateSettingsConfig - remote.Settings validation error: %v", err)
 			return formatRemoteValidationError(err, remote.Remote, i)
 		}
-		debugPrintf("DEBUG: ValidateSettingsConfig - validating remote.Settings.VFSCache: %+v\n", remote.Settings.VFSCache)
+		logging.DebugBool(verboseMode, "ValidateSettingsConfig - validating remote.Settings.VFSCache: %+v", remote.Settings.VFSCache)
 		if err := validate.Struct(remote.Settings.VFSCache); err != nil {
-			debugPrintf("DEBUG: ValidateSettingsConfig - remote.Settings.VFSCache validation error: %v\n", err)
+			logging.DebugBool(verboseMode, "ValidateSettingsConfig - remote.Settings.VFSCache validation error: %v", err)
 			return formatRemoteValidationError(err, remote.Remote, i)
 		}
 
@@ -159,44 +160,44 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]any) err
 		if rcloneEnabled {
 			// Additional validation for rclone remote existence (except for NFS).
 			if strings.ToLower(remote.Settings.Template) != "nfs" {
-				debugPrintf("DEBUG: ValidateSettingsConfig - template is not NFS, validating rclone remote existence\n")
+				logging.DebugBool(verboseMode, "ValidateSettingsConfig - template is not NFS, validating rclone remote existence")
 				// Split the remote string into name and path.
 				parts := strings.SplitN(remote.Remote, ":", 2)
 				remoteName := remote.Remote
 				if len(parts) == 2 {
 					remoteName = parts[0]
-					debugPrintf("DEBUG: ValidateSettingsConfig - remote is in 'remote:path' format, remoteName: '%s'\n", remoteName)
+					logging.DebugBool(verboseMode, "ValidateSettingsConfig - remote is in 'remote:path' format, remoteName: '%s'", remoteName)
 				} else {
-					debugPrintf("DEBUG: ValidateSettingsConfig - remote is a bare name: '%s'\n", remote.Remote)
+					logging.DebugBool(verboseMode, "ValidateSettingsConfig - remote is a bare name: '%s'", remote.Remote)
 				}
-				debugPrintf("DEBUG: ValidateSettingsConfig - remoteName: '%s'\n", remoteName)
+				logging.DebugBool(verboseMode, "ValidateSettingsConfig - remoteName: '%s'", remoteName)
 
 				if err := validateRcloneRemote(remoteName); err != nil {
-					debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote returned error: %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateSettingsConfig - validateRcloneRemote returned error: %v", err)
 					//Only return if rclone and the user and the config all exist
 					if errors.Is(err, ErrRcloneNotInstalled) || errors.Is(err, ErrSystemUserNotFound) || errors.Is(err, ErrRcloneConfigNotFound) {
-						fmt.Printf("Warning: rclone remote validation skipped: %v\n", err)
+						fmt.Printf("Warning: rclone remote validation skipped: %v", err)
 					} else {
 						return err
 					}
 				} else {
-					debugPrintf("DEBUG: ValidateSettingsConfig - validateRcloneRemote successful\n")
+					logging.DebugBool(verboseMode, "ValidateSettingsConfig - validateRcloneRemote successful")
 				}
 			} else {
-				debugPrintf("DEBUG: ValidateSettingsConfig - template is NFS, skipping rclone remote existence validation\n")
+				logging.DebugBool(verboseMode, "ValidateSettingsConfig - template is NFS, skipping rclone remote existence validation")
 			}
 		} else {
-			debugPrintf("DEBUG: ValidateSettingsConfig - rclone is disabled, skipping remote existence validation\n")
+			logging.DebugBool(verboseMode, "ValidateSettingsConfig - rclone is disabled, skipping remote existence validation")
 		}
 	}
 
-	debugPrintf("DEBUG: ValidateSettingsConfig - validation successful\n")
+	logging.DebugBool(verboseMode, "ValidateSettingsConfig - validation successful")
 	return nil
 }
 
 // formatValidationError formats validation errors for better readability.
 func formatValidationError(err error, config *SettingsConfig) error {
-	debugPrintf("DEBUG: formatValidationError called with error: %v\n", err)
+	logging.DebugBool(verboseMode, "formatValidationError called with error: %v", err)
 	var validationErrors validator.ValidationErrors
 	if errors.As(err, &validationErrors) {
 		var sb strings.Builder
@@ -209,7 +210,7 @@ func formatValidationError(err error, config *SettingsConfig) error {
 			// Get the full path to the field based on the namespace
 			fieldPath := e.Namespace()
 
-			debugPrintf("DEBUG: formatValidationError - validation error on field '%s', tag '%s', value '%v', param '%s'\n",
+			logging.DebugBool(verboseMode, "formatValidationError - validation error on field '%s', tag '%s', value '%v', param '%s'",
 				fieldPath, e.Tag(), e.Value(), e.Param())
 
 			// Check if this is a remote-related error
@@ -257,43 +258,43 @@ func formatValidationError(err error, config *SettingsConfig) error {
 
 		// Write general errors first
 		for _, errMsg := range generalErrors {
-			sb.WriteString(errMsg + "\n")
+			sb.WriteString(errMsg + "")
 		}
 
 		// Write remote-specific errors grouped by remote
 		if len(remoteErrors) > 0 {
 			for remoteIdentifier, singleRemoteErrors := range remoteErrors {
-				sb.WriteString(fmt.Sprintf("\nErrors for %s:\n", remoteIdentifier))
+				sb.WriteString(fmt.Sprintf("\nErrors for %s:", remoteIdentifier))
 
 				for _, errMsg := range singleRemoteErrors {
-					sb.WriteString("  - " + errMsg + "\n")
+					sb.WriteString("  - " + errMsg + "")
 				}
 			}
 		}
 
 		// Fixed: Use %s format specifier to prevent format string vulnerability
 		formattedError := fmt.Errorf("%s", sb.String())
-		debugPrintf("DEBUG: formatValidationError - formatted error: %v\n", formattedError)
+		logging.DebugBool(verboseMode, "formatValidationError - formatted error: %v", formattedError)
 		return formattedError
 	}
-	debugPrintf("DEBUG: formatValidationError - error is not a validation error, returning original error\n")
+	logging.DebugBool(verboseMode, "formatValidationError - error is not a validation error, returning original error")
 	return err // Return the original error if it's not a validator.ValidationErrors
 }
 
 // formatRemoteValidationError formats validation errors specifically for remote validation
 func formatRemoteValidationError(err error, remoteName string, remoteIndex int) error {
-	debugPrintf("DEBUG: formatRemoteValidationError called with error: %v, remoteName: %s, remoteIndex: %d\n",
+	logging.DebugBool(verboseMode, "formatRemoteValidationError called with error: %v, remoteName: %s, remoteIndex: %d",
 		err, remoteName, remoteIndex)
 
 	var validationErrors validator.ValidationErrors
 	if errors.As(err, &validationErrors) {
 		var sb strings.Builder
 
-		sb.WriteString(fmt.Sprintf("Errors for remote '%s':\n", remoteName))
+		sb.WriteString(fmt.Sprintf("Errors for remote '%s':", remoteName))
 
 		for _, e := range validationErrors {
 			fieldPath := e.Namespace()
-			debugPrintf("DEBUG: formatRemoteValidationError - validation error on field '%s', tag '%s', value '%v'\n",
+			logging.DebugBool(verboseMode, "formatRemoteValidationError - validation error on field '%s', tag '%s', value '%v'",
 				fieldPath, e.Tag(), e.Value())
 
 			// Convert the struct field path to a meaningful YAML path
@@ -316,12 +317,12 @@ func formatRemoteValidationError(err error, remoteName string, remoteIndex int) 
 				errorMsg = fmt.Sprintf("field '%s' is invalid: %s", yamlFieldPath, e.Error())
 			}
 
-			sb.WriteString("  - " + errorMsg + "\n")
+			sb.WriteString("  - " + errorMsg + "")
 		}
 
 		// Fixed: Use %s format specifier to prevent format string vulnerability
 		formattedError := fmt.Errorf("%s", sb.String())
-		debugPrintf("DEBUG: formatRemoteValidationError - formatted error: %v\n", formattedError)
+		logging.DebugBool(verboseMode, "formatRemoteValidationError - formatted error: %v", formattedError)
 		return formattedError
 	}
 
@@ -356,26 +357,26 @@ func convertToYAMLFieldPath(fieldPath string) string {
 // custom validator for directory paths
 func dirPathValidator(fl validator.FieldLevel) bool {
 	dirPath := fl.Field().String()
-	debugPrintf("DEBUG: dirPathValidator called with dirPath: '%s'\n", dirPath)
+	logging.DebugBool(verboseMode, "dirPathValidator called with dirPath: '%s'", dirPath)
 
 	// Check if the path is absolute or relative
 	if !filepath.IsAbs(dirPath) {
-		debugPrintf("DEBUG: dirPathValidator - path is relative, making it absolute\n")
+		logging.DebugBool(verboseMode, "dirPathValidator - path is relative, making it absolute")
 		// If relative, make it absolute based on the current working directory
 		wd, err := os.Getwd()
 		if err != nil {
-			debugPrintf("DEBUG: dirPathValidator - error getting working directory: %v, returning false\n", err)
+			logging.DebugBool(verboseMode, "dirPathValidator - error getting working directory: %v, returning false", err)
 			return false // If we can't determine the working dir, consider it invalid
 		}
 		dirPath = filepath.Join(wd, dirPath)
-		debugPrintf("DEBUG: dirPathValidator - absolute path: '%s'\n", dirPath)
+		logging.DebugBool(verboseMode, "dirPathValidator - absolute path: '%s'", dirPath)
 	}
 	// We don't check if the dir exists, only that the path is valid
 
 	// Regular expression to check if it's a valid path (allows any characters)
 	// Simplified regex, no need to check for starting slash separately.
 	match, _ := regexp.MatchString(`(?:[^/]*/)*[^/]*$`, dirPath)
-	debugPrintf("DEBUG: dirPathValidator - path match regex: %t, returning %t\n", match, match)
+	logging.DebugBool(verboseMode, "dirPathValidator - path match regex: %t, returning %t", match, match)
 	return match
 }
 
@@ -388,53 +389,53 @@ var (
 
 // validateRcloneRemote checks if the given rclone remote exists.
 func validateRcloneRemote(remoteName string) error {
-	debugPrintf("DEBUG: validateRcloneRemote called with remoteName: '%s'\n", remoteName)
+	logging.DebugBool(verboseMode, "validateRcloneRemote called with remoteName: '%s'", remoteName)
 	// Check if rclone is installed.
 	_, err := exec.LookPath("rclone")
 	if err != nil {
 		err := fmt.Errorf("%w: %v", ErrRcloneNotInstalled, err)
-		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		logging.DebugBool(verboseMode, "validateRcloneRemote - %v", err)
 		return err
 	}
-	debugPrintf("DEBUG: validateRcloneRemote - rclone is installed\n")
+	logging.DebugBool(verboseMode, "validateRcloneRemote - rclone is installed")
 	// Get the Saltbox user.
 	rcloneUser, err := utils.GetSaltboxUser()
 	if err != nil {
-		fmt.Printf("Warning: rclone remote validation skipped: could not retrieve saltbox user: %v\n", err)
-		debugPrintf("DEBUG: validateRcloneRemote - error getting Saltbox user: %v\n", err)
+		fmt.Printf("Warning: rclone remote validation skipped: could not retrieve saltbox user: %v", err)
+		logging.DebugBool(verboseMode, "validateRcloneRemote - error getting Saltbox user: %v", err)
 		return ErrSystemUserNotFound
 	}
-	debugPrintf("DEBUG: validateRcloneRemote - Saltbox user: '%s'\n", rcloneUser)
+	logging.DebugBool(verboseMode, "validateRcloneRemote - Saltbox user: '%s'", rcloneUser)
 
 	// Check if the user exists on the system.
 	_, err = user.Lookup(rcloneUser)
 	if err != nil {
-		debugPrintf("DEBUG: validateRcloneRemote - error looking up user\n")
+		logging.DebugBool(verboseMode, "validateRcloneRemote - error looking up user")
 		var unknownUserError user.UnknownUserError
 		if errors.As(err, &unknownUserError) {
 			err := fmt.Errorf("%w: user '%s' does not exist", ErrSystemUserNotFound, rcloneUser)
-			debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+			logging.DebugBool(verboseMode, "validateRcloneRemote - %v", err)
 			return err
 		}
 		// Some other error occurred during user lookup.
 		err := fmt.Errorf("error looking up user '%s': %w", rcloneUser, err)
-		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		logging.DebugBool(verboseMode, "validateRcloneRemote - %v", err)
 		return err
 	}
-	debugPrintf("DEBUG: validateRcloneRemote - user exists\n")
+	logging.DebugBool(verboseMode, "validateRcloneRemote - user exists")
 
 	// Define the rclone config path (standard location).
 	rcloneConfigPath := fmt.Sprintf("/home/%s/.config/rclone/rclone.conf", rcloneUser)
-	debugPrintf("DEBUG: validateRcloneRemote - rcloneConfigPath: '%s'\n", rcloneConfigPath)
+	logging.DebugBool(verboseMode, "validateRcloneRemote - rcloneConfigPath: '%s'", rcloneConfigPath)
 
 	// Check if the rclone config file exists
 	_, err = os.Stat(rcloneConfigPath)
 	if os.IsNotExist(err) {
 		err := fmt.Errorf("%w: %v", ErrRcloneConfigNotFound, err)
-		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		logging.DebugBool(verboseMode, "validateRcloneRemote - %v", err)
 		return err
 	}
-	debugPrintf("DEBUG: validateRcloneRemote - rclone config file exists\n")
+	logging.DebugBool(verboseMode, "validateRcloneRemote - rclone config file exists")
 
 	// Use context with timeout for external command execution
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -447,28 +448,28 @@ func validateRcloneRemote(remoteName string) error {
 	)
 	if err != nil {
 		err := fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, result.Combined)
-		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		logging.DebugBool(verboseMode, "validateRcloneRemote - %v", err)
 		return err
 	}
 	output := result.Combined
-	debugPrintf("DEBUG: validateRcloneRemote - rclone config show output: '%s'\n", string(output))
+	logging.DebugBool(verboseMode, "validateRcloneRemote - rclone config show output: '%s'", string(output))
 
 	// Use a regular expression to search for the remote within the rclone config show output.
 	remoteRegex := fmt.Sprintf(`(?m)^\[%s\]$`, regexp.QuoteMeta(remoteName))
 	re, err := regexp.Compile(remoteRegex)
 	if err != nil {
 		err := fmt.Errorf("failed to compile regex for remote name: %w", err)
-		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		logging.DebugBool(verboseMode, "validateRcloneRemote - %v", err)
 		return err
 	}
-	debugPrintf("DEBUG: validateRcloneRemote - remoteRegex: '%s'\n", remoteRegex)
+	logging.DebugBool(verboseMode, "validateRcloneRemote - remoteRegex: '%s'", remoteRegex)
 
 	if !re.MatchString(string(output)) {
 		err := fmt.Errorf("rclone remote '%s' not found in configuration", remoteName)
-		debugPrintf("DEBUG: validateRcloneRemote - %v\n", err)
+		logging.DebugBool(verboseMode, "validateRcloneRemote - %v", err)
 		return err
 	}
 
-	debugPrintf("DEBUG: validateRcloneRemote - rclone remote exists\n")
+	logging.DebugBool(verboseMode, "validateRcloneRemote - rclone remote exists")
 	return nil
 }

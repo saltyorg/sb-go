@@ -7,21 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/saltyorg/sb-go/internal/logging"
+
 	"github.com/go-playground/validator/v10"
 )
 
-var verboseMode bool // Add a package-level variable to store verbosity
+var verboseMode bool // Package-level variable to store verbosity
 
 // SetVerbose sets the verbose mode for debugging.
 func SetVerbose(v bool) {
 	verboseMode = v
-}
-
-// debugPrintf prints a debug message if verbose mode is enabled.
-func debugPrintf(format string, a ...any) {
-	if verboseMode {
-		fmt.Printf(format, a...)
-	}
 }
 
 // checkExtraFields recursively checks for extra fields in nested maps AND slices.
@@ -31,22 +26,22 @@ func checkExtraFields(inputMap map[string]any, config any) error {
 
 // checkExtraFieldsInternal is a helper function that tracks the context information.
 func checkExtraFieldsInternal(inputMap map[string]any, config any, context string) error {
-	debugPrintf("\nDEBUG: checkExtraFields called with inputMap: %+v, config type: %T\n", inputMap, config)
+	logging.DebugBool(verboseMode, "\ncheckExtraFields called with inputMap: %+v, config type: %T", inputMap, config)
 
 	configValue := reflect.ValueOf(config).Elem()
 	configType := configValue.Type()
 
-	debugPrintf("DEBUG: configType: %v\n", configType)
+	logging.DebugBool(verboseMode, "configType: %v", configType)
 
 	for i := 0; i < configType.NumField(); i++ {
 		field := configType.Field(i)
 		yamlTag := field.Tag.Get("yaml")
 		yamlKey := strings.Split(yamlTag, ",")[0]
 
-		debugPrintf("DEBUG: Checking field: %s (YAML key: %s)\n", field.Name, yamlKey)
+		logging.DebugBool(verboseMode, "Checking field: %s (YAML key: %s)", field.Name, yamlKey)
 
 		if value, ok := inputMap[yamlKey]; ok {
-			debugPrintf("DEBUG: Found YAML key '%s' in inputMap\n", yamlKey)
+			logging.DebugBool(verboseMode, "Found YAML key '%s' in inputMap", yamlKey)
 
 			// Context for nested structures
 			currentContext := yamlKey
@@ -56,24 +51,24 @@ func checkExtraFieldsInternal(inputMap map[string]any, config any, context strin
 
 			switch v := value.(type) {
 			case map[string]any:
-				debugPrintf("DEBUG: Field '%s' is a map, recursing...\n", yamlKey)
+				logging.DebugBool(verboseMode, "Field '%s' is a map, recursing...", yamlKey)
 				nestedFieldValue := configValue.Field(i)
 				if nestedFieldValue.Kind() == reflect.Struct {
 					if err := checkExtraFieldsInternal(v, nestedFieldValue.Addr().Interface(), currentContext); err != nil {
 						return err
 					}
 				} else {
-					debugPrintf("DEBUG: Field '%s' is a map, but struct field is not a struct. Skipping recursion.\n", yamlKey)
+					logging.DebugBool(verboseMode, "Field '%s' is a map, but struct field is not a struct. Skipping recursion.", yamlKey)
 				}
 			case []any:
-				debugPrintf("DEBUG: Field '%s' is a slice\n", yamlKey)
+				logging.DebugBool(verboseMode, "Field '%s' is a slice", yamlKey)
 				nestedFieldValue := configValue.Field(i)
 				if nestedFieldValue.Kind() == reflect.Slice {
 					elementType := nestedFieldValue.Type().Elem()
-					debugPrintf("DEBUG: Slice element type: %v\n", elementType)
+					logging.DebugBool(verboseMode, "Slice element type: %v", elementType)
 					if elementType.Kind() == reflect.Struct {
 						for j, sliceElement := range v {
-							debugPrintf("DEBUG: Checking slice element %d\n", j)
+							logging.DebugBool(verboseMode, "Checking slice element %d", j)
 
 							// For array elements, include the index in the context
 							elementContext := fmt.Sprintf("%s[%d]", currentContext, j)
@@ -95,25 +90,25 @@ func checkExtraFieldsInternal(inputMap map[string]any, config any, context strin
 							}
 						}
 					} else {
-						debugPrintf("DEBUG: Field '%s' is a slice of a basic type. Skipping recursion.\n", yamlKey)
+						logging.DebugBool(verboseMode, "Field '%s' is a slice of a basic type. Skipping recursion.", yamlKey)
 					}
 				} else {
-					debugPrintf("DEBUG: Field '%s' is NOT slice. Skipping recursion.\n", yamlKey)
+					logging.DebugBool(verboseMode, "Field '%s' is NOT slice. Skipping recursion.", yamlKey)
 				}
 			default:
-				debugPrintf("DEBUG: Field '%s' value: %+v (Type: %T)\n", yamlKey, value, value)
+				logging.DebugBool(verboseMode, "Field '%s' value: %+v (Type: %T)", yamlKey, value, value)
 				if _, ok := value.(string); !ok && field.Type.Kind() != reflect.String {
 					fieldType := configValue.Field(i).Type().String()
 					return fmt.Errorf("field '%s' must be of type '%s', got: %T", yamlKey, fieldType, value)
 				}
 			}
 		} else {
-			debugPrintf("DEBUG: YAML key '%s' NOT found in inputMap\n", yamlKey)
+			logging.DebugBool(verboseMode, "YAML key '%s' NOT found in inputMap", yamlKey)
 		}
 	}
 
 	for key := range inputMap {
-		debugPrintf("DEBUG: Checking for extra field: %s\n", key)
+		logging.DebugBool(verboseMode, "Checking for extra field: %s", key)
 		found := false
 		for i := 0; i < configType.NumField(); i++ {
 			field := configType.Field(i)

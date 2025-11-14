@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/logging"
+
 	"github.com/go-playground/validator/v10"
 )
 
@@ -26,30 +28,30 @@ type StringOrInt string
 
 // UnmarshalYAML implements custom unmarshalling for StringOrInt.
 func (soi *StringOrInt) UnmarshalYAML(unmarshal func(any) error) error {
-	debugPrintf("DEBUG: StringOrInt.UnmarshalYAML called\n")
+	logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML called")
 	var s string
 	var i int
 
 	// Try unmarshalling as a string first
-	debugPrintf("DEBUG: StringOrInt.UnmarshalYAML - trying to unmarshal as string\n")
+	logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML - trying to unmarshal as string")
 	if err := unmarshal(&s); err == nil {
 		*soi = StringOrInt(s)
-		debugPrintf("DEBUG: StringOrInt.UnmarshalYAML - unmarshaled as string: '%s'\n", *soi)
+		logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML - unmarshaled as string: '%s'", *soi)
 		return nil
 	}
-	debugPrintf("DEBUG: StringOrInt.UnmarshalYAML - failed to unmarshal as string\n")
+	logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML - failed to unmarshal as string")
 
 	// If that fails, try unmarshalling as an int
-	debugPrintf("DEBUG: StringOrInt.UnmarshalYAML - trying to unmarshal as int\n")
+	logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML - trying to unmarshal as int")
 	if err := unmarshal(&i); err == nil {
 		*soi = StringOrInt(fmt.Sprintf("%d", i)) // Convert int to string
-		debugPrintf("DEBUG: StringOrInt.UnmarshalYAML - unmarshaled as int: %d, converted to string: '%s'\n", i, *soi)
+		logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML - unmarshaled as int: %d, converted to string: '%s'", i, *soi)
 		return nil
 	}
-	debugPrintf("DEBUG: StringOrInt.UnmarshalYAML - failed to unmarshal as int\n")
+	logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML - failed to unmarshal as int")
 
 	err := fmt.Errorf("invalid value for StringOrInt: must be a string or an integer")
-	debugPrintf("DEBUG: StringOrInt.UnmarshalYAML - %v\n", err)
+	logging.DebugBool(verboseMode, "StringOrInt.UnmarshalYAML - %v", err)
 	return err
 
 }
@@ -57,32 +59,32 @@ func (soi *StringOrInt) UnmarshalYAML(unmarshal func(any) error) error {
 // wholeNumberValidator is a custom validator to ensure the value is a whole number (int or string).
 func wholeNumberValidator(fl validator.FieldLevel) bool {
 	value := fl.Field().String()
-	debugPrintf("DEBUG: wholeNumberValidator called with value: '%s'\n", value)
+	logging.DebugBool(verboseMode, "wholeNumberValidator called with value: '%s'", value)
 
 	_, err := strconv.Atoi(value) // Try converting to int
 	isValid := err == nil         // If no error, it's a whole number
-	debugPrintf("DEBUG: wholeNumberValidator - strconv.Atoi returned error: %v, is valid: %t\n", err, isValid)
+	logging.DebugBool(verboseMode, "wholeNumberValidator - strconv.Atoi returned error: %v, is valid: %t", err, isValid)
 	return isValid
 }
 
 // ValidateHetznerVLANConfig validates the HetznerVLANConfig struct.
 func ValidateHetznerVLANConfig(config *HetznerVLANConfig, inputMap map[string]any) error {
-	debugPrintf("\nDEBUG: ValidateHetznerVLANConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
+	logging.DebugBool(verboseMode, "\nDEBUG: ValidateHetznerVLANConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
-	debugPrintf("DEBUG: ValidateHetznerVLANConfig - registering custom validators\n")
+	logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - registering custom validators")
 	RegisterCustomValidators(validate)
-	debugPrintf("DEBUG: ValidateHetznerVLANConfig - registering whole_number validator\n")
+	logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - registering whole_number validator")
 	err := validate.RegisterValidation("whole_number", wholeNumberValidator)
 	if err != nil {
 		err := fmt.Errorf("failed to register whole_number validator: %w", err)
-		debugPrintf("DEBUG: ValidateHetznerVLANConfig - %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - %v", err)
 		return err
 	}
 
 	// Validate the overall structure.
-	debugPrintf("DEBUG: ValidateHetznerVLANConfig - validating struct: %+v\n", config)
+	logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - validating struct: %+v", config)
 	if err := validate.Struct(config); err != nil {
-		debugPrintf("DEBUG: ValidateHetznerVLANConfig - struct validation error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - struct validation error: %v", err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
@@ -93,20 +95,20 @@ func ValidateHetznerVLANConfig(config *HetznerVLANConfig, inputMap map[string]an
 				// Convert to lowercase for consistency
 				fieldPath = strings.ToLower(fieldPath)
 
-				debugPrintf("DEBUG: ValidateHetznerVLANConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", fieldPath, e.Tag(), e.Value(), e.Param())
+				logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - validation error on field '%s', tag '%s', value '%v', param '%s'", fieldPath, e.Tag(), e.Value(), e.Param())
 
 				switch e.Tag() {
 				case "required":
 					err := fmt.Errorf("field '%s' is required", fieldPath)
-					debugPrintf("DEBUG: ValidateHetznerVLANConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - %v", err)
 					return err
 				case "whole_number":
 					err := fmt.Errorf("field '%s' must be a whole number (integer or string representation of an integer), got: %s", fieldPath, e.Value())
-					debugPrintf("DEBUG: ValidateHetznerVLANConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - %v", err)
 					return err
 				default:
 					err := fmt.Errorf("field '%s' is invalid: %s", fieldPath, e.Error())
-					debugPrintf("DEBUG: ValidateHetznerVLANConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - %v", err)
 					return err
 				}
 			}
@@ -115,12 +117,12 @@ func ValidateHetznerVLANConfig(config *HetznerVLANConfig, inputMap map[string]an
 	}
 
 	// Check for extra fields.
-	debugPrintf("DEBUG: ValidateHetznerVLANConfig - checking for extra fields\n")
+	logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - checking for extra fields")
 	if err := checkExtraFields(inputMap, config); err != nil {
-		debugPrintf("DEBUG: ValidateHetznerVLANConfig - checkExtraFields returned error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - checkExtraFields returned error: %v", err)
 		return err
 	}
 
-	debugPrintf("DEBUG: ValidateHetznerVLANConfig - validation successful\n")
+	logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - validation successful")
 	return nil
 }

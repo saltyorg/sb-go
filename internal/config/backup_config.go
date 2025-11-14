@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/logging"
+
 	"github.com/go-playground/validator/v10"
 )
 
@@ -61,17 +63,17 @@ type RsyncConfig struct {
 
 // ValidateBackupConfig validates the BackupConfig struct.
 func ValidateBackupConfig(config *BackupConfig, inputMap map[string]any) error {
-	debugPrintf("\nDEBUG: ValidateBackupConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
+	logging.DebugBool(verboseMode, "\nDEBUG: ValidateBackupConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
 
 	// Register custom validators (from generic.go).
-	debugPrintf("DEBUG: ValidateBackupConfig - registering custom validators\n")
+	logging.DebugBool(verboseMode, "ValidateBackupConfig - registering custom validators")
 	RegisterCustomValidators(validate)
 
 	// Validate the overall structure.
-	debugPrintf("DEBUG: ValidateBackupConfig - validating struct: %+v\n", config)
+	logging.DebugBool(verboseMode, "ValidateBackupConfig - validating struct: %+v", config)
 	if err := validate.Struct(config); err != nil {
-		debugPrintf("DEBUG: ValidateBackupConfig - struct validation error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateBackupConfig - struct validation error: %v", err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
@@ -82,24 +84,24 @@ func ValidateBackupConfig(config *BackupConfig, inputMap map[string]any) error {
 				// Convert to lowercase for consistency
 				fieldPath = strings.ToLower(fieldPath)
 
-				debugPrintf("DEBUG: ValidateBackupConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n", fieldPath, e.Tag(), e.Value(), e.Param())
+				logging.DebugBool(verboseMode, "ValidateBackupConfig - validation error on field '%s', tag '%s', value '%v', param '%s'", fieldPath, e.Tag(), e.Value(), e.Param())
 
 				switch e.Tag() {
 				case "required":
 					err := fmt.Errorf("field '%s' is required", fieldPath)
-					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateBackupConfig - %v", err)
 					return err
 				case "ansiblebool":
 					err := fmt.Errorf("field '%s' must be a valid Ansible boolean (yes/no, true/false, on/off, 1/0), got: %s", fieldPath, e.Value())
-					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateBackupConfig - %v", err)
 					return err
 				case "cron_special_time":
 					err := fmt.Errorf("field '%s' must be a valid Ansible cron special time (annually, daily, hourly, monthly, reboot, weekly, yearly), got: %s", fieldPath, e.Value())
-					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateBackupConfig - %v", err)
 					return err
 				default:
 					err := fmt.Errorf("field '%s' is invalid: %s", fieldPath, e.Error())
-					debugPrintf("DEBUG: ValidateBackupConfig - %v\n", err)
+					logging.DebugBool(verboseMode, "ValidateBackupConfig - %v", err)
 					return err
 				}
 			}
@@ -108,12 +110,12 @@ func ValidateBackupConfig(config *BackupConfig, inputMap map[string]any) error {
 	}
 
 	// Check for extra fields.
-	debugPrintf("DEBUG: ValidateBackupConfig - checking for extra fields\n")
+	logging.DebugBool(verboseMode, "ValidateBackupConfig - checking for extra fields")
 	if err := checkExtraFields(inputMap, config); err != nil {
-		debugPrintf("DEBUG: ValidateBackupConfig - checkExtraFields returned error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateBackupConfig - checkExtraFields returned error: %v", err)
 		return err
 	}
 
-	debugPrintf("DEBUG: ValidateBackupConfig - validation successful\n")
+	logging.DebugBool(verboseMode, "ValidateBackupConfig - validation successful")
 	return nil
 }

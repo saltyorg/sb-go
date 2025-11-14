@@ -3,11 +3,12 @@ package motd
 import (
 	"os"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/saltyorg/sb-go/internal/config"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/styles"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/exp/charmtone"
 )
 
 // Default Fang colors

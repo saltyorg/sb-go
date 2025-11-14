@@ -7,13 +7,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/agnivade/levenshtein"
-	aquatable "github.com/aquasecurity/table"
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/table"
 
+	"github.com/agnivade/levenshtein"
+	aquatable "github.com/aquasecurity/table"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -67,9 +68,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 		return fmt.Errorf("error creating cache: %w", err)
 	}
 
-	if verbosity > 0 {
-		fmt.Println("DEBUG: Cache instance created successfully")
-	}
+	logging.Debug(verbosity, "Cache instance created successfully")
 
 	repoInfo := []struct {
 		RepoPath      string
@@ -108,47 +107,35 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 		var tags []string // Declare tags here
 		cacheStatus := "" // Default to empty string
 
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Processing repository: %s\n", info.RepoPath)
-			fmt.Printf("DEBUG: Playbook path: %s\n", info.PlaybookPath)
-			fmt.Printf("DEBUG: Extra skip tags: %s\n", info.ExtraSkipTags)
-		}
+		logging.Debug(verbosity, "Processing repository: %s", info.RepoPath)
+		logging.Debug(verbosity, "Playbook path: %s", info.PlaybookPath)
+		logging.Debug(verbosity, "Extra skip tags: %s", info.ExtraSkipTags)
 
 		if info.RepoPath == constants.SaltboxModRepoPath {
 			// Always run ansible list tags for saltbox_mod
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Running ansible list tags for saltbox_mod (no cache)\n")
-			}
+			logging.Debug(verbosity, "Running ansible list tags for saltbox_mod (no cache)")
 			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
 				handleInterruptError(err)
 				fmt.Printf("Error running ansible list tags for %s: %v\n", info.RepoPath, err)
 				continue
 			}
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Retrieved %d tags from ansible\n", len(tags))
-			}
+			logging.Debug(verbosity, "Retrieved %d tags from ansible", len(tags))
 		} else {
 			// Use cache for other repositories
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Attempting to use cache for %s\n", info.RepoPath)
-			}
+			logging.Debug(verbosity, "Attempting to use cache for %s", info.RepoPath)
 			cacheRebuilt, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
 				handleInterruptError(err)
 				fmt.Printf("Error running and caching ansible tags for %s: %v\n", info.RepoPath, err)
 				continue
 			}
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Cache rebuilt: %t\n", cacheRebuilt)
-			}
+			logging.Debug(verbosity, "Cache rebuilt: %t", cacheRebuilt)
 
 			repoCache, cacheFound := cacheInstance.GetRepoCache(info.RepoPath)
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Cache found for %s: %t\n", info.RepoPath, cacheFound)
-				if cacheFound {
-					fmt.Printf("DEBUG: Cache contents: %+v\n", repoCache)
-				}
+			logging.Debug(verbosity, "Cache found for %s: %t", info.RepoPath, cacheFound)
+			if cacheFound {
+				logging.Debug(verbosity, "Cache contents: %+v", repoCache)
 			}
 
 			tagsInterface, ok := repoCache["tags"]
@@ -157,16 +144,12 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 				continue
 			}
 
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Tags interface type: %T\n", tagsInterface)
-			}
+			logging.Debug(verbosity, "Tags interface type: %T", tagsInterface)
 
 			tags = make([]string, 0)
 			switch v := tagsInterface.(type) {
 			case []any:
-				if verbosity > 0 {
-					fmt.Printf("DEBUG: Processing []any with %d elements\n", len(v))
-				}
+				logging.Debug(verbosity, "Processing []any with %d elements", len(v))
 				for i, tag := range v {
 					if strTag, ok := tag.(string); ok {
 						tags = append(tags, strTag)
@@ -176,30 +159,22 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 					}
 				}
 			case []string:
-				if verbosity > 0 {
-					fmt.Printf("DEBUG: Processing []string with %d elements\n", len(v))
-				}
+				logging.Debug(verbosity, "Processing []string with %d elements", len(v))
 				tags = v
 			default:
 				fmt.Printf("Error: Unexpected type for tags in cache for %s. Type: %T\n", info.RepoPath, tagsInterface)
 				continue
 			}
 
-			if verbosity > 0 {
-				fmt.Printf("DEBUG: Successfully extracted %d tags from cache\n", len(tags))
-			}
+			logging.Debug(verbosity, "Successfully extracted %d tags from cache", len(tags))
 
 			if !cacheRebuilt && repoCache != nil {
 				cacheStatus = " (cached)"
-				if verbosity > 0 {
-					fmt.Printf("DEBUG: Using cached tags (not rebuilt)\n")
-				}
+				logging.Debug(verbosity, "Using cached tags (not rebuilt)")
 			}
 		}
 
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Final tag count for %s: %d\n", info.RepoPath, len(tags))
-		}
+		logging.Debug(verbosity, "Final tag count for %s: %d", info.RepoPath, len(tags))
 
 		fmt.Printf("%s%s\n\n", info.BaseTitle, cacheStatus)
 		printInColumns(tags, 2)
@@ -258,9 +233,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 	for _, info := range repoInfo {
 		var tags []string
 
-		if verbosity > 0 {
-			fmt.Printf("DEBUG: Processing repository: %s\n", info.RepoPath)
-		}
+		logging.Debug(verbosity, "Processing repository: %s", info.RepoPath)
 
 		if info.RepoPath == constants.SaltboxModRepoPath {
 			// Always run ansible list tags for saltbox_mod

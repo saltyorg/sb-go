@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/saltyorg/sb-go/internal/errors"
+
 	"github.com/spf13/cobra"
 )
 

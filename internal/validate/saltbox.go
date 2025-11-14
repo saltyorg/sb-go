@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"gopkg.in/yaml.v3"
@@ -82,7 +83,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 	if _, err := os.Stat(job.configPath); err != nil {
 		if job.optional {
 			if verbose {
-				fmt.Printf("%s not found, skipping validation\n", job.name)
+				fmt.Printf("%s not found, skipping validation", job.name)
 			}
 			return nil
 		}
@@ -101,7 +102,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 
 	var validationError error
 	if verbose {
-		fmt.Printf("Validating %s...\n", job.name)
+		fmt.Printf("Validating %s...", job.name)
 		validationError = validateConfigWithSchema(job.configPath, schemaPath)
 		if validationError == nil {
 			fmt.Println(successMessage)
@@ -129,7 +130,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 // validateConfigWithSchema validates a config file against its YAML schema
 func validateConfigWithSchema(configPath, schemaPath string) error {
 	startTime := time.Now()
-	debugPrintf("DEBUG: validateConfigWithSchema called with config=%s, schema=%s at %v\n", configPath, schemaPath, startTime)
+	logging.DebugBool(verboseMode, "validateConfigWithSchema called with config=%s, schema=%s at %v", configPath, schemaPath, startTime)
 
 	// Load the config file
 	configFile, err := os.ReadFile(configPath)
@@ -156,12 +157,12 @@ func validateConfigWithSchema(configPath, schemaPath string) error {
 	}
 
 	syncDuration := time.Since(startTime)
-	debugPrintf("DEBUG: Synchronous schema validation completed successfully in %v\n", syncDuration)
+	logging.DebugBool(verboseMode, "Synchronous schema validation completed successfully in %v", syncDuration)
 
 	// Wait for async API validations to complete
 	if asyncCtx != nil {
 		asyncStartTime := time.Now()
-		debugPrintf("DEBUG: Waiting for async API validations to complete\n")
+		logging.DebugBool(verboseMode, "Waiting for async API validations to complete")
 
 		// TODO: In the future, we could show progress here like:
 		// - "Validating Cloudflare API credentials..."
@@ -180,10 +181,10 @@ func validateConfigWithSchema(configPath, schemaPath string) error {
 			return fmt.Errorf("%s", errorMsg.String())
 		}
 		asyncDuration := time.Since(asyncStartTime)
-		debugPrintf("DEBUG: Async API validations completed successfully in %v\n", asyncDuration)
+		logging.DebugBool(verboseMode, "Async API validations completed successfully in %v", asyncDuration)
 	}
 
 	duration := time.Since(startTime)
-	debugPrintf("DEBUG: validateConfigWithSchema completed for %s in %v\n", configPath, duration)
+	logging.DebugBool(verboseMode, "validateConfigWithSchema completed for %s in %v", configPath, duration)
 	return nil
 }

@@ -6,13 +6,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/fang"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"github.com/saltyorg/sb-go/cmd"
 	"github.com/saltyorg/sb-go/internal/signals"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 	"github.com/saltyorg/sb-go/internal/utils"
+
+	"github.com/charmbracelet/fang"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 // customErrorHandler handles error formatting with proper line break support.

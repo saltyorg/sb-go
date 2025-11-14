@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/saltyorg/sb-go/internal/logging"
+
 	"github.com/cloudflare/cloudflare-go/v6"
 	"github.com/cloudflare/cloudflare-go/v6/option"
 	"github.com/cloudflare/cloudflare-go/v6/zones"
@@ -31,11 +33,11 @@ type AppriseConfig string
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
 func (a *AppriseConfig) UnmarshalYAML(value *yaml.Node) error {
-	debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML called with value: %+v\n", value)
+	logging.DebugBool(verboseMode, "AppriseConfig.UnmarshalYAML called with value: %+v", value)
 
 	// Handle nil or empty values explicitly
 	if value == nil || value.Kind == yaml.ScalarNode && value.Value == "" {
-		debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML - nil or empty value detected, setting to empty string\n")
+		logging.DebugBool(verboseMode, "AppriseConfig.UnmarshalYAML - nil or empty value detected, setting to empty string")
 		*a = ""
 		return nil
 	}
@@ -43,11 +45,11 @@ func (a *AppriseConfig) UnmarshalYAML(value *yaml.Node) error {
 	// Handle properly formatted string values
 	var s string
 	if err := value.Decode(&s); err != nil {
-		debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML - error decoding: %v\n", err)
+		logging.DebugBool(verboseMode, "AppriseConfig.UnmarshalYAML - error decoding: %v", err)
 		return err
 	}
 	*a = AppriseConfig(s)
-	debugPrintf("DEBUG: AppriseConfig.UnmarshalYAML - set value to: %s\n", *a)
+	logging.DebugBool(verboseMode, "AppriseConfig.UnmarshalYAML - set value to: %s", *a)
 	return nil
 }
 
@@ -75,42 +77,42 @@ type UserConfig struct {
 // customSSHKeyOrURLValidator is a custom validator function for SSH keys or URLs.
 func customSSHKeyOrURLValidator(fl validator.FieldLevel) bool {
 	sshKeyOrURL := fl.Field().String()
-	debugPrintf("DEBUG: customSSHKeyOrURLValidator called with value: '%s'\n", sshKeyOrURL)
+	logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator called with value: '%s'", sshKeyOrURL)
 
 	if sshKeyOrURL == "" {
-		debugPrintf("DEBUG: customSSHKeyOrURLValidator - value is empty, returning true (omitempty)\n")
+		logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - value is empty, returning true (omitempty)")
 		return true // Valid if empty (omitempty)
 	}
 
 	// Check if it's a valid URL.
 	_, err := url.ParseRequestURI(sshKeyOrURL)
 	if err == nil {
-		debugPrintf("DEBUG: customSSHKeyOrURLValidator - '%s' is a valid URL, returning true\n", sshKeyOrURL)
+		logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is a valid URL, returning true", sshKeyOrURL)
 		return true // It's a valid URL
 	}
-	debugPrintf("DEBUG: customSSHKeyOrURLValidator - '%s' is not a valid URL: %v\n", sshKeyOrURL, err)
+	logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is not a valid URL: %v", sshKeyOrURL, err)
 
 	// If not a URL, check if it looks like an SSH key (simplified check).
 	validKeyTypes := []string{"ssh-rsa", "ssh-dss", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-ed25519"}
 	keyParts := strings.Fields(sshKeyOrURL)
 	if len(keyParts) < 2 {
-		debugPrintf("DEBUG: customSSHKeyOrURLValidator - '%s' has less than 2 parts, not a likely SSH key, returning false\n", sshKeyOrURL)
+		logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' has less than 2 parts, not a likely SSH key, returning false", sshKeyOrURL)
 		return false
 	}
 	for _, keyType := range validKeyTypes {
 		if keyParts[0] == keyType {
-			debugPrintf("DEBUG: customSSHKeyOrURLValidator - '%s' starts with valid key type '%s', returning true\n", sshKeyOrURL, keyType)
+			logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' starts with valid key type '%s', returning true", sshKeyOrURL, keyType)
 			return true
 		}
 	}
 
-	debugPrintf("DEBUG: customSSHKeyOrURLValidator - '%s' is neither a URL nor a recognizable SSH key, returning false\n", sshKeyOrURL)
+	logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is neither a URL nor a recognizable SSH key, returning false", sshKeyOrURL)
 	return false // Neither a URL nor a recognizable SSH key
 }
 
 // ValidateConfig validates the Config struct.
 func ValidateConfig(config *Config, inputMap map[string]any) error {
-	debugPrintf("\nDEBUG: ValidateConfig called with config: %+v, inputMap: %+v\n", config, inputMap)
+	logging.DebugBool(verboseMode, "\nDEBUG: ValidateConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
 
 	// Register the custom SSH key/URL validator.
@@ -122,9 +124,9 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 	}
 
 	// --- 1. Validate the overall structure and User fields ---
-	debugPrintf("DEBUG: ValidateConfig - validating struct: %+v\n", config)
+	logging.DebugBool(verboseMode, "ValidateConfig - validating struct: %+v", config)
 	if err := validate.Struct(config); err != nil {
-		debugPrintf("DEBUG: ValidateConfig - struct validation error: %v\n", err)
+		logging.DebugBool(verboseMode, "ValidateConfig - struct validation error: %v", err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			for _, e := range validationErrors {
@@ -135,7 +137,7 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 				// Convert to lowercase for consistency
 				fieldPath = strings.ToLower(fieldPath)
 
-				debugPrintf("DEBUG: ValidateConfig - validation error on field '%s', tag '%s', value '%v', param '%s'\n",
+				logging.DebugBool(verboseMode, "ValidateConfig - validation error on field '%s', tag '%s', value '%v', param '%s'",
 					fieldPath, e.Tag(), e.Value(), e.Param())
 
 				switch e.Tag() {
@@ -165,22 +167,22 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 
 	// --- Password strength warning (non-fatal) ---
 	if len(config.User.Pass) > 0 && len(config.User.Pass) < 12 {
-		fmt.Printf("WARNING: field 'user.pass' is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).\n", len(config.User.Pass))
+		fmt.Printf("WARNING: field 'user.pass' is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).", len(config.User.Pass))
 	}
 
 	// --- Check for extra fields at the TOP LEVEL ---
-	debugPrintf("DEBUG: ValidateConfig - checking for extra top-level fields in inputMap: %+v\n", inputMap)
+	logging.DebugBool(verboseMode, "ValidateConfig - checking for extra top-level fields in inputMap: %+v", inputMap)
 	configType := reflect.TypeOf(Config{})
 	for key := range inputMap {
-		debugPrintf("DEBUG: ValidateConfig - checking key '%s'\n", key)
+		logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s'", key)
 		found := false
 		for i := 0; i < configType.NumField(); i++ {
 			field := configType.Field(i)
 			yamlTag := field.Tag.Get("yaml")
-			debugPrintf("DEBUG: ValidateConfig - comparing key '%s' with field '%s' (YAML tag: '%s')\n", key, field.Name, yamlTag)
+			logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 			// Handle inline YAML tags
 			if yamlTag == key || (strings.Contains(yamlTag, ",") && strings.Split(yamlTag, ",")[0] == key) {
-				debugPrintf("DEBUG: ValidateConfig - found matching YAML tag for key '%s'\n", key)
+				logging.DebugBool(verboseMode, "ValidateConfig - found matching YAML tag for key '%s'", key)
 				found = true
 				break
 			}
@@ -192,17 +194,17 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 
 	// --- 2. Check for extra fields in the "user" section ---
 	if userMap, ok := inputMap["user"].(map[string]any); ok {
-		debugPrintf("DEBUG: ValidateConfig - found 'user' section in inputMap: %+v\n", userMap)
+		logging.DebugBool(verboseMode, "ValidateConfig - found 'user' section in inputMap: %+v", userMap)
 		userType := reflect.TypeOf(UserConfig{})
 		for key := range userMap {
-			debugPrintf("DEBUG: ValidateConfig - checking key '%s' in 'user' section\n", key)
+			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'user' section", key)
 			found := false
 			for i := 0; i < userType.NumField(); i++ {
 				field := userType.Field(i)
 				yamlTag := field.Tag.Get("yaml")
-				debugPrintf("DEBUG: ValidateConfig - comparing key '%s' with user field '%s' (YAML tag: '%s')\n", key, field.Name, yamlTag)
+				logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with user field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 				if yamlTag == key || (strings.Contains(yamlTag, ",") && strings.Split(yamlTag, ",")[0] == key) {
-					debugPrintf("DEBUG: ValidateConfig - found matching YAML tag for key '%s' in 'user' section\n", key)
+					logging.DebugBool(verboseMode, "ValidateConfig - found matching YAML tag for key '%s' in 'user' section", key)
 					found = true
 					break
 				}
@@ -217,7 +219,7 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 
 	// --- 3. Check for extra fields in other sections ---
 	if appriseVal, ok := inputMap["apprise"]; ok {
-		debugPrintf("DEBUG: ValidateConfig - found 'apprise' section in inputMap: %+v\n", appriseVal)
+		logging.DebugBool(verboseMode, "ValidateConfig - found 'apprise' section in inputMap: %+v", appriseVal)
 		// Allow empty string or nil for apprise
 		if appriseVal != nil && appriseVal != "" {
 			if _, isString := appriseVal.(string); !isString {
@@ -228,17 +230,17 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 	}
 
 	if cfMap, ok := inputMap["cloudflare"].(map[string]any); ok {
-		debugPrintf("DEBUG: ValidateConfig - found 'cloudflare' section in inputMap: %+v\n", cfMap)
+		logging.DebugBool(verboseMode, "ValidateConfig - found 'cloudflare' section in inputMap: %+v", cfMap)
 		cfType := reflect.TypeOf(CloudflareConfig{})
 		for key := range cfMap {
-			debugPrintf("DEBUG: ValidateConfig - checking key '%s' in 'cloudflare' section\n", key)
+			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'cloudflare' section", key)
 			found := false
 			for i := 0; i < cfType.NumField(); i++ {
 				field := cfType.Field(i)
 				yamlTag := field.Tag.Get("yaml")
-				debugPrintf("DEBUG: ValidateConfig - comparing key '%s' with cloudflare field '%s' (YAML tag: '%s')\n", key, field.Name, yamlTag)
+				logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with cloudflare field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 				if yamlTag == key || (strings.Contains(yamlTag, ",") && strings.Split(yamlTag, ",")[0] == key) {
-					debugPrintf("DEBUG: ValidateConfig - found matching YAML tag for key '%s' in 'cloudflare' section\n", key)
+					logging.DebugBool(verboseMode, "ValidateConfig - found matching YAML tag for key '%s' in 'cloudflare' section", key)
 					found = true
 					break
 				}
@@ -250,17 +252,17 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 	}
 
 	if dhMap, ok := inputMap["dockerhub"].(map[string]any); ok {
-		debugPrintf("DEBUG: ValidateConfig - found 'dockerhub' section in inputMap: %+v\n", dhMap)
+		logging.DebugBool(verboseMode, "ValidateConfig - found 'dockerhub' section in inputMap: %+v", dhMap)
 		dhType := reflect.TypeOf(DockerhubConfig{})
 		for key := range dhMap {
-			debugPrintf("DEBUG: ValidateConfig - checking key '%s' in 'dockerhub' section\n", key)
+			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'dockerhub' section", key)
 			found := false
 			for i := 0; i < dhType.NumField(); i++ {
 				field := dhType.Field(i)
 				yamlTag := field.Tag.Get("yaml")
-				debugPrintf("DEBUG: ValidateConfig - comparing key '%s' with dockerhub field '%s' (YAML tag: '%s')\n", key, field.Name, yamlTag)
+				logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with dockerhub field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 				if yamlTag == key || (strings.Contains(yamlTag, ",") && strings.Split(yamlTag, ",")[0] == key) {
-					debugPrintf("DEBUG: ValidateConfig - found matching YAML tag for key '%s' in 'dockerhub' section\n", key)
+					logging.DebugBool(verboseMode, "ValidateConfig - found matching YAML tag for key '%s' in 'dockerhub' section", key)
 					found = true
 					break
 				}
@@ -273,36 +275,36 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 
 	// --- 4. Validate Cloudflare credentials, domain, and SSL/TLS settings ---
 	if config.Cloudflare.API != "" && config.Cloudflare.Email != "" {
-		debugPrintf("DEBUG: ValidateConfig - validating Cloudflare credentials, domain, and SSL/TLS settings\n")
+		logging.DebugBool(verboseMode, "ValidateConfig - validating Cloudflare credentials, domain, and SSL/TLS settings")
 		if err := validateCloudflare(config.Cloudflare.API, config.Cloudflare.Email, config.User.Domain); err != nil {
 			return fmt.Errorf("cloudflare validation failed: %w", err)
 		}
 	} else {
-		debugPrintf("DEBUG: ValidateConfig - skipping Cloudflare validation (API or Email not provided)\n")
+		logging.DebugBool(verboseMode, "ValidateConfig - skipping Cloudflare validation (API or Email not provided)")
 	}
 
 	// --- 5. Validate Docker Hub credentials ---
 	if config.Dockerhub.User != "" && config.Dockerhub.Token != "" {
-		debugPrintf("DEBUG: ValidateConfig - validating Docker Hub credentials\n")
+		logging.DebugBool(verboseMode, "ValidateConfig - validating Docker Hub credentials")
 		if err := validateDockerHub(config.Dockerhub.User, config.Dockerhub.Token); err != nil {
 			return fmt.Errorf("dockerhub validation failed: %w", err)
 		}
 	} else {
-		debugPrintf("DEBUG: ValidateConfig - skipping Docker Hub validation (User or Token not provided)\n")
+		logging.DebugBool(verboseMode, "ValidateConfig - skipping Docker Hub validation (User or Token not provided)")
 	}
 
-	debugPrintf("DEBUG: ValidateConfig - validation successful\n")
+	logging.DebugBool(verboseMode, "ValidateConfig - validation successful")
 	return nil
 }
 
 // getRootDomain extracts the root domain from a potential FQDN that includes a subdomain.
 func getRootDomain(fqdn string) (string, error) {
-	debugPrintf("DEBUG: getRootDomain called with fqdn: '%s'\n", fqdn)
+	logging.DebugBool(verboseMode, "getRootDomain called with fqdn: '%s'", fqdn)
 
 	// Validate the domain format first
 	if fqdn == "" {
 		err := fmt.Errorf("empty domain name")
-		debugPrintf("DEBUG: getRootDomain - %v\n", err)
+		logging.DebugBool(verboseMode, "getRootDomain - %v", err)
 		return "", err
 	}
 
@@ -310,37 +312,37 @@ func getRootDomain(fqdn string) (string, error) {
 	domain, err := publicsuffix.EffectiveTLDPlusOne(fqdn)
 	if err != nil {
 		err = fmt.Errorf("invalid domain format: %s: %w", fqdn, err)
-		debugPrintf("DEBUG: getRootDomain - invalid domain format: %v\n", err)
+		logging.DebugBool(verboseMode, "getRootDomain - invalid domain format: %v", err)
 		return "", err
 	}
 
-	debugPrintf("DEBUG: getRootDomain - extracted root domain: '%s'\n", domain)
+	logging.DebugBool(verboseMode, "getRootDomain - extracted root domain: '%s'", domain)
 	return domain, nil
 }
 
 // validateCloudflare checks Cloudflare API credentials, domain ownership, and SSL/TLS settings.
 func validateCloudflare(apiKey, email, domain string) error {
-	debugPrintf("DEBUG: validateCloudflare called with apiKey: '%s', email: '%s', domain: '%s'\n", apiKey, email, domain)
+	logging.DebugBool(verboseMode, "validateCloudflare called with apiKey: '%s', email: '%s', domain: '%s'", apiKey, email, domain)
 	// Create a new Cloudflare API client.
 	api := cloudflare.NewClient(
 		option.WithAPIKey(apiKey),
 		option.WithAPIEmail(email),
 	)
-	debugPrintf("DEBUG: validateCloudflare - Cloudflare API client created successfully\n")
+	logging.DebugBool(verboseMode, "validateCloudflare - Cloudflare API client created successfully")
 
 	// --- Verify API Key ---
 	_, err := api.User.Get(context.Background())
 	if err != nil {
 		err = fmt.Errorf("cloudflare API key verification failed: %w", err)
-		debugPrintf("DEBUG: validateCloudflare - API key verification failed: %v\n", err)
+		logging.DebugBool(verboseMode, "validateCloudflare - API key verification failed: %v", err)
 		return err
 	}
-	debugPrintf("DEBUG: validateCloudflare - Cloudflare API key verified successfully\n")
+	logging.DebugBool(verboseMode, "validateCloudflare - Cloudflare API key verified successfully")
 
 	// --- Verify Domain Ownership ---
 	rootDomain, err := getRootDomain(domain) // Use utility function.
 	if err != nil {
-		debugPrintf("DEBUG: validateCloudflare - error getting root domain: %v\n", err)
+		logging.DebugBool(verboseMode, "validateCloudflare - error getting root domain: %v", err)
 		return err // Invalid domain format
 	}
 	zonesList, err := api.Zones.List(context.Background(), zones.ZoneListParams{
@@ -348,17 +350,17 @@ func validateCloudflare(apiKey, email, domain string) error {
 	})
 	if err != nil {
 		err = fmt.Errorf("domain verification failed (zone not found): %w", err)
-		debugPrintf("DEBUG: validateCloudflare - domain verification failed for '%s': %v\n", rootDomain, err)
+		logging.DebugBool(verboseMode, "validateCloudflare - domain verification failed for '%s': %v", rootDomain, err)
 		return err
 	}
 	// Check if zone exists (indicating ownership).
 	if len(zonesList.Result) == 0 {
 		err = fmt.Errorf("domain verification failed: %s not found in Cloudflare account", rootDomain)
-		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+		logging.DebugBool(verboseMode, "validateCloudflare - %v", err)
 		return err
 	}
 	zoneID := zonesList.Result[0].ID
-	debugPrintf("DEBUG: validateCloudflare - domain '%s' verified successfully (zone ID: '%s')\n", rootDomain, zoneID)
+	logging.DebugBool(verboseMode, "validateCloudflare - domain '%s' verified successfully (zone ID: '%s')", rootDomain, zoneID)
 
 	// --- Verify SSL/TLS Settings ---
 	// Get the current SSL/TLS settings for the zone
@@ -368,7 +370,7 @@ func validateCloudflare(apiKey, email, domain string) error {
 	})
 	if err != nil {
 		err = fmt.Errorf("failed to get zone SSL settings: %w", err)
-		debugPrintf("DEBUG: validateCloudflare - failed to get zone SSL settings: %v\n", err)
+		logging.DebugBool(verboseMode, "validateCloudflare - failed to get zone SSL settings: %v", err)
 		return err
 	}
 
@@ -376,56 +378,56 @@ func validateCloudflare(apiKey, email, domain string) error {
 	if sslSettings != nil && sslSettings.Value != nil {
 		// Type assert to the SSL value type
 		if sslValue, ok := sslSettings.Value.(zones.SettingGetResponseZonesSchemasSSLValue); ok {
-			debugPrintf("DEBUG: validateCloudflare - SSL mode for domain '%s': '%s'\n", rootDomain, string(sslValue))
+			logging.DebugBool(verboseMode, "validateCloudflare - SSL mode for domain '%s': '%s'", rootDomain, string(sslValue))
 
 			// Check for incompatible SSL modes using the typed constants
 			if sslValue == zones.SettingGetResponseZonesSchemasSSLValueFlexible ||
 				sslValue == zones.SettingGetResponseZonesSchemasSSLValueOff {
-				err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
-					"  This SSL/TLS mode is not compatible with Saltbox.\n"+
-					"  With '%s' mode, connections will fail or behave unexpectedly.\n\n"+
-					"  Please update your Cloudflare settings by:\n"+
-					"  1. Log in to your Cloudflare dashboard\n"+
-					"  2. Go to the SSL/TLS section for domain '%s'\n"+
-					"  3. Change the encryption mode to 'Full' or 'Full (strict)'\n"+
-					"  4. Save your changes\n",
+				err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n"+
+					"  This SSL/TLS mode is not compatible with Saltbox."+
+					"  With '%s' mode, connections will fail or behave unexpectedly.\n"+
+					"  Please update your Cloudflare settings by:"+
+					"  1. Log in to your Cloudflare dashboard"+
+					"  2. Go to the SSL/TLS section for domain '%s'"+
+					"  3. Change the encryption mode to 'Full' or 'Full (strict)'"+
+					"  4. Save your changes",
 					string(sslValue), string(sslValue), rootDomain)
-				debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+				logging.DebugBool(verboseMode, "validateCloudflare - %v", err)
 				return err
 			}
 
-			debugPrintf("DEBUG: validateCloudflare - SSL mode '%s' is secure\n", string(sslValue))
+			logging.DebugBool(verboseMode, "validateCloudflare - SSL mode '%s' is secure", string(sslValue))
 		} else {
 			// Fallback: try to get as string if type assertion fails
-			debugPrintf("DEBUG: validateCloudflare - SSL value type assertion failed, trying string conversion\n")
+			logging.DebugBool(verboseMode, "validateCloudflare - SSL value type assertion failed, trying string conversion")
 			sslModeStr := fmt.Sprintf("%v", sslSettings.Value)
-			debugPrintf("DEBUG: validateCloudflare - SSL mode for domain '%s': '%s'\n", rootDomain, sslModeStr)
+			logging.DebugBool(verboseMode, "validateCloudflare - SSL mode for domain '%s': '%s'", rootDomain, sslModeStr)
 
 			if sslModeStr == "flexible" || sslModeStr == "off" {
-				err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n\n"+
-					"  This SSL/TLS mode is not compatible with Saltbox.\n"+
-					"  With '%s' mode, connections will fail or behave unexpectedly.\n\n"+
-					"  Please update your Cloudflare settings by:\n"+
-					"  1. Log in to your Cloudflare dashboard\n"+
-					"  2. Go to the SSL/TLS section for domain '%s'\n"+
-					"  3. Change the encryption mode to 'Full' or 'Full (strict)'\n"+
-					"  4. Save your changes\n",
+				err = fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n"+
+					"  This SSL/TLS mode is not compatible with Saltbox."+
+					"  With '%s' mode, connections will fail or behave unexpectedly.\n"+
+					"  Please update your Cloudflare settings by:"+
+					"  1. Log in to your Cloudflare dashboard"+
+					"  2. Go to the SSL/TLS section for domain '%s'"+
+					"  3. Change the encryption mode to 'Full' or 'Full (strict)'"+
+					"  4. Save your changes",
 					sslModeStr, sslModeStr, rootDomain)
-				debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+				logging.DebugBool(verboseMode, "validateCloudflare - %v", err)
 				return err
 			}
 
-			debugPrintf("DEBUG: validateCloudflare - SSL mode '%s' is secure\n", sslModeStr)
+			logging.DebugBool(verboseMode, "validateCloudflare - SSL mode '%s' is secure", sslModeStr)
 		}
 	} else {
 		// If we can't get SSL settings, return an error
-		err = fmt.Errorf("failed to determine SSL/TLS mode for domain '%s'\n\n"+
-			"  Please verify your Cloudflare settings:\n"+
-			"  1. Log in to your Cloudflare dashboard\n"+
-			"  2. Navigate to the SSL/TLS section\n"+
-			"  3. Confirm encryption mode is set to 'Full' or 'Full (strict)'\n"+
+		err = fmt.Errorf("failed to determine SSL/TLS mode for domain '%s'\n"+
+			"  Please verify your Cloudflare settings:"+
+			"  1. Log in to your Cloudflare dashboard"+
+			"  2. Navigate to the SSL/TLS section"+
+			"  3. Confirm encryption mode is set to 'Full' or 'Full (strict)'"+
 			"  4. Flexible or Off modes are incompatible with Saltbox", rootDomain)
-		debugPrintf("DEBUG: validateCloudflare - %v\n", err)
+		logging.DebugBool(verboseMode, "validateCloudflare - %v", err)
 		return err
 	}
 
@@ -434,13 +436,13 @@ func validateCloudflare(apiKey, email, domain string) error {
 
 // validateDockerHub checks Docker Hub credentials using the /v2/users/login endpoint.
 func validateDockerHub(username, token string) error {
-	debugPrintf("DEBUG: validateDockerHub called with username: '%s', token: '********'\n", username)
+	logging.DebugBool(verboseMode, "validateDockerHub called with username: '%s', token: '********'", username)
 	dockerhubLoginUrl := "https://hub.docker.com/v2/users/login/"
 	payload := strings.NewReader(fmt.Sprintf(`{"username": "%s", "password": "%s"}`, username, token))
 	req, err := http.NewRequest("POST", dockerhubLoginUrl, payload)
 	if err != nil {
 		err = fmt.Errorf("failed to create request: %w", err)
-		debugPrintf("DEBUG: validateDockerHub - %v\n", err)
+		logging.DebugBool(verboseMode, "validateDockerHub - %v", err)
 		return err
 	}
 
@@ -449,35 +451,35 @@ func validateDockerHub(username, token string) error {
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		err = fmt.Errorf("failed to make request: %w", err)
-		debugPrintf("DEBUG: validateDockerHub - %v\n", err)
+		logging.DebugBool(verboseMode, "validateDockerHub - %v", err)
 		return err
 	}
 	defer res.Body.Close()
 
-	debugPrintf("DEBUG: validateDockerHub - received HTTP status: %d\n", res.StatusCode)
+	logging.DebugBool(verboseMode, "validateDockerHub - received HTTP status: %d", res.StatusCode)
 
 	if res.StatusCode != http.StatusOK {
 		// Attempt to decode the response body to give a better error message.
 		var respBody map[string]any
 		if json.NewDecoder(res.Body).Decode(&respBody) == nil { //Decode and check for errors
-			debugPrintf("DEBUG: validateDockerHub - decoded response body: %+v\n", respBody)
+			logging.DebugBool(verboseMode, "validateDockerHub - decoded response body: %+v", respBody)
 			if message, ok := respBody["message"].(string); ok { //Check if a message exists in the body
 				err = fmt.Errorf("docker hub authentication failed (HTTP %d): %s", res.StatusCode, message)
-				debugPrintf("DEBUG: validateDockerHub - %v\n", err)
+				logging.DebugBool(verboseMode, "validateDockerHub - %v", err)
 				return err
 			}
 			if details, ok := respBody["details"].(string); ok { //Check if details exist in the body
 				err = fmt.Errorf("docker hub authentication failed (HTTP %d): %s", res.StatusCode, details)
-				debugPrintf("DEBUG: validateDockerHub - %v\n", err)
+				logging.DebugBool(verboseMode, "validateDockerHub - %v", err)
 				return err
 			}
 		}
 		//Default error
 		err = fmt.Errorf("docker Hub authentication failed (HTTP %d)", res.StatusCode)
-		debugPrintf("DEBUG: validateDockerHub - %v\n", err)
+		logging.DebugBool(verboseMode, "validateDockerHub - %v", err)
 		return err
 	}
 
-	debugPrintf("DEBUG: validateDockerHub - authentication successful\n")
+	logging.DebugBool(verboseMode, "validateDockerHub - authentication successful")
 	return nil
 }
