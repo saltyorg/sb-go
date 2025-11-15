@@ -45,11 +45,16 @@ const (
 
 // dockerCmd is the primary command for managing Docker containers in Saltbox.
 var dockerCmd = &cobra.Command{
-	Use:   "docker",
-	Short: "Manage Docker containers managed by Saltbox",
-	Long:  `Manage Docker containers managed by Saltbox`,
+	Use:                "docker",
+	Short:              "Manage Docker containers managed by Saltbox",
+	Long:               `Manage Docker containers managed by Saltbox`,
+	DisableFlagParsing: false,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Show help if no subcommand is provided.
+		// If args are provided, it means an unknown subcommand was used
+		if len(args) > 0 {
+			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+		}
+		// No args - show help
 		return cmd.Help()
 	},
 }
