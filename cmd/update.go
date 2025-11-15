@@ -215,14 +215,18 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 		return fmt.Errorf("error getting new commit hash: %w", err)
 	}
 
-	// Update tags cache if commit hash changed
-	if oldCommitHash != newCommitHash {
-		if err := spinners.RunInfoSpinner("Saltbox Commit Hash changed, updating tags cache."); err != nil {
+	// Update tags cache if commit hash changed or cache is missing
+	ansibleCache, err := cache.NewCache()
+	if err != nil {
+		return fmt.Errorf("error creating cache: %w", err)
+	}
+
+	saltboxCache, saltboxCacheExists := ansibleCache.GetRepoCache(constants.SaltboxRepoPath)
+	_, saltboxTagsExist := saltboxCache["tags"]
+
+	if oldCommitHash != newCommitHash || !saltboxCacheExists || !saltboxTagsExist {
+		if err := spinners.RunInfoSpinner("Updating Saltbox tags cache."); err != nil {
 			return err
-		}
-		ansibleCache, err := cache.NewCache()
-		if err != nil {
-			return fmt.Errorf("error creating cache: %w", err)
 		}
 		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache, 0); err != nil {
 			handleInterruptError(err)
@@ -264,14 +268,18 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 		return fmt.Errorf("error getting new commit hash: %w", err)
 	}
 
-	// Update tags cache if commit hash changed
-	if oldCommitHash != newCommitHash {
-		if err := spinners.RunInfoSpinner("Sandbox Commit Hash changed, updating tags cache."); err != nil {
+	// Update tags cache if commit hash changed or cache is missing
+	ansibleCache, err := cache.NewCache()
+	if err != nil {
+		return fmt.Errorf("error creating cache: %w", err)
+	}
+
+	sandboxCache, sandboxCacheExists := ansibleCache.GetRepoCache(constants.SandboxRepoPath)
+	_, sandboxTagsExist := sandboxCache["tags"]
+
+	if oldCommitHash != newCommitHash || !sandboxCacheExists || !sandboxTagsExist {
+		if err := spinners.RunInfoSpinner("Updating Sandbox tags cache."); err != nil {
 			return err
-		}
-		ansibleCache, err := cache.NewCache()
-		if err != nil {
-			return fmt.Errorf("error creating cache: %w", err)
 		}
 		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache, 0); err != nil {
 			handleInterruptError(err)
