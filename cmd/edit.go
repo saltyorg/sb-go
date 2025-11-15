@@ -203,8 +203,12 @@ var editCmd = &cobra.Command{
 		case "settings":
 			openEditor(constants.SaltboxSettingsConfigPath)
 		default:
-			fmt.Printf("Unknown configuration: %s\n", args[0])
-			fmt.Println("Run 'sb edit' to see all available configurations")
+			// Use lipgloss to prevent customErrorHandler from transforming the message
+			normalStyle := lipgloss.NewStyle()
+			msg := fmt.Sprintf("%s\n%s",
+				normalStyle.Render(fmt.Sprintf("Unknown configuration: %s", args[0])),
+				normalStyle.Render("Run 'sb edit' to see all available configurations"))
+			return fmt.Errorf("%s", msg)
 		}
 		return nil
 	},
