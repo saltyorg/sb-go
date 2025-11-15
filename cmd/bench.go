@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/saltyorg/sb-go/internal/errors"
 	"github.com/saltyorg/sb-go/internal/executor"
 
 	"github.com/spf13/cobra"
@@ -22,7 +22,7 @@ var benchCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		if err := runBenchmark(ctx); err != nil {
-			return fmt.Errorf("error executing benchmark: %w", err)
+			return err
 		}
 		return nil
 	},
@@ -36,7 +36,7 @@ func runBenchmark(ctx context.Context) error {
 	cleanup := func() {
 		if tempFileName != "" {
 			if err := os.Remove(tempFileName); err != nil {
-				fmt.Printf("Failed to remove temporary file %s: %v\n", tempFileName, err)
+				fmt.Fprintf(os.Stderr, "Warning: Failed to remove temporary file %s: %v\n", tempFileName, err)
 			}
 		}
 	}
@@ -99,20 +99,16 @@ func runBenchmark(ctx context.Context) error {
 	}
 
 	// Run the command using unified executor
-	result, err := executor.Run(ctx, "bash",
+	_, err = executor.Run(ctx, "bash",
 		executor.WithArgs(tempFileName),
 		executor.WithOutputMode(executor.OutputModeStream),
 	)
 
-	// Check if context was canceled (user interrupted)
-	if errors.Is(ctx.Err(), context.Canceled) {
-		// Clear the line (removes ^C) and add a blank line before the message
-		fmt.Fprintf(os.Stderr, "\r\033[K\nCommand was interrupted by the user.\n")
-		return nil
-	}
-
 	if err != nil {
-		return result.FormatError("executing bench.sh")
+		if errors.HandleInterruptError(err) {
+			return fmt.Errorf("benchmark execution interrupted by user")
+		}
+		return err
 	}
 
 	return nil

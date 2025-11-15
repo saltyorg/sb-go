@@ -25,7 +25,6 @@ func IsInterruptError(err error) bool {
 // Returns true if it was an interrupt error and shutdown was initiated.
 func HandleInterruptError(err error) bool {
 	if IsInterruptError(err) {
-		fmt.Fprintf(os.Stderr, "\r\033[K\nCommand interrupted by user\n")
 		sigManager := signals.GetGlobalManager()
 		sigManager.Shutdown(130) // Standard exit code for SIGINT (128 + 2)
 		return true

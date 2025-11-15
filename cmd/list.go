@@ -103,6 +103,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 	}
 
 	// Normal list mode - display by repository
+	var errs []error
 	for _, info := range repoInfo {
 		var tags []string // Declare tags here
 		cacheStatus := "" // Default to empty string
@@ -117,7 +118,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
 				handleInterruptError(err)
-				fmt.Printf("Error running ansible list tags for %s: %v\n", info.RepoPath, err)
+				errs = append(errs, fmt.Errorf("error running ansible list tags for %s: %w", info.RepoPath, err))
 				continue
 			}
 			logging.Debug(verbosity, "Retrieved %d tags from ansible", len(tags))
@@ -127,7 +128,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 			cacheRebuilt, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
 				handleInterruptError(err)
-				fmt.Printf("Error running and caching ansible tags for %s: %v\n", info.RepoPath, err)
+				errs = append(errs, fmt.Errorf("error running and caching ansible tags for %s: %w", info.RepoPath, err))
 				continue
 			}
 			logging.Debug(verbosity, "Cache rebuilt: %t", cacheRebuilt)
@@ -179,6 +180,11 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 		fmt.Printf("%s%s\n\n", info.BaseTitle, cacheStatus)
 		printInColumns(tags, 2)
 	}
+
+	// Return accumulated errors if any repos failed
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred while listing tags: %v", errs)
+	}
 	return nil
 }
 
@@ -228,6 +234,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 }, cacheInstance *cache.Cache, verbosity int) error {
 	queryLower := strings.ToLower(query)
 	var allResults []tagResult
+	var errs []error
 
 	// Collect tags from all repositories
 	for _, info := range repoInfo {
@@ -241,7 +248,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
 				handleInterruptError(err)
-				fmt.Printf("Error running ansible list tags for %s: %v\n", info.RepoPath, err)
+				errs = append(errs, fmt.Errorf("error running ansible list tags for %s: %w", info.RepoPath, err))
 				continue
 			}
 		} else {
@@ -249,7 +256,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 			_, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
 				handleInterruptError(err)
-				fmt.Printf("Error running and caching ansible tags for %s: %v\n", info.RepoPath, err)
+				errs = append(errs, fmt.Errorf("error running and caching ansible tags for %s: %w", info.RepoPath, err))
 				continue
 			}
 
@@ -399,5 +406,9 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 	t.Render()
 	fmt.Println()
 
+	// Return accumulated errors if any repos failed
+	if len(errs) > 0 {
+		return fmt.Errorf("errors occurred while searching tags: %v", errs)
+	}
 	return nil
 }

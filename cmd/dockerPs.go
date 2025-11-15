@@ -43,10 +43,11 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 
 		// Process container information
 		var containers []containerInfo
+		var errs []error
 		for _, cs := range containersSummary.Items {
 			containerInspect, err := cli.ContainerInspect(ctx, cs.ID, client.ContainerInspectOptions{})
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Error inspecting container %s: %v\n", cs.ID[:12], err)
+				errs = append(errs, fmt.Errorf("error inspecting container %s: %w", cs.ID[:12], err))
 				continue
 			}
 
@@ -144,6 +145,12 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 
 		// Render the table
 		t.Render()
+
+		// If all containers failed to inspect, return error
+		if len(errs) > 0 && len(containers) == 0 {
+			return fmt.Errorf("failed to inspect all containers: %v", errs)
+		}
+
 		return nil
 	},
 }

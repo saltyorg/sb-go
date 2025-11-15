@@ -55,7 +55,9 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "enter" {
 			selectedItem, ok := m.list.SelectedItem().(ConfigItem)
 			if ok {
-				openEditor(selectedItem.path)
+				if err := openEditor(selectedItem.path); err != nil {
+					fmt.Printf("Error: %v\n", err)
+				}
 				return m, tea.Quit
 			}
 		}
@@ -73,11 +75,10 @@ func (m ConfigSelectorModel) View() string {
 	return "\nSelect a Saltbox configuration file to edit:\n\n" + m.list.View()
 }
 
-func openEditor(path string) {
+func openEditor(path string) error {
 	// Check if file exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		fmt.Printf("Error: the configuration file does not yet exist: %s\n", path)
-		return
+		return fmt.Errorf("configuration file does not yet exist: %s", path)
 	}
 
 	editor := os.Getenv("EDITOR")
@@ -89,8 +90,7 @@ func openEditor(path string) {
 	// Split on whitespace to get the base command
 	editorParts := strings.Fields(editor)
 	if len(editorParts) == 0 {
-		fmt.Printf("Error: Invalid EDITOR environment variable\n")
-		return
+		return fmt.Errorf("invalid EDITOR environment variable")
 	}
 
 	// Get the absolute path of the editor executable
@@ -100,8 +100,7 @@ func openEditor(path string) {
 		if filepath.IsAbs(editorParts[0]) {
 			editorPath = editorParts[0]
 		} else {
-			fmt.Printf("Error: Editor '%s' not found in PATH\n", editorParts[0])
-			return
+			return fmt.Errorf("editor '%s' not found in PATH", editorParts[0])
 		}
 	}
 
@@ -120,8 +119,9 @@ func openEditor(path string) {
 		executor.WithOutputMode(executor.OutputModeInteractive),
 	)
 	if err != nil {
-		fmt.Printf("Error opening editor: %v\n", err)
+		return fmt.Errorf("error opening editor: %w", err)
 	}
+	return nil
 }
 
 func runBubbleTeaList() error {
@@ -191,17 +191,17 @@ var editCmd = &cobra.Command{
 
 		switch args[0] {
 		case "accounts":
-			openEditor(constants.SaltboxAccountsConfigPath)
+			return openEditor(constants.SaltboxAccountsConfigPath)
 		case "adv_settings":
-			openEditor(constants.SaltboxAdvancedSettingsConfigPath)
+			return openEditor(constants.SaltboxAdvancedSettingsConfigPath)
 		case "backup_config":
-			openEditor(constants.SaltboxBackupConfigPath)
+			return openEditor(constants.SaltboxBackupConfigPath)
 		case "hetzner_vlan":
-			openEditor(constants.SaltboxHetznerVLANConfigPath)
+			return openEditor(constants.SaltboxHetznerVLANConfigPath)
 		case "inventory":
-			openEditor(constants.SaltboxInventoryConfigPath)
+			return openEditor(constants.SaltboxInventoryConfigPath)
 		case "settings":
-			openEditor(constants.SaltboxSettingsConfigPath)
+			return openEditor(constants.SaltboxSettingsConfigPath)
 		default:
 			// Use lipgloss to prevent customErrorHandler from transforming the message
 			normalStyle := lipgloss.NewStyle()
@@ -210,7 +210,6 @@ var editCmd = &cobra.Command{
 				normalStyle.Render("Run 'sb edit' to see all available configurations"))
 			return fmt.Errorf("%s", msg)
 		}
-		return nil
 	},
 }
 
@@ -222,8 +221,7 @@ func init() {
 		Use:   "accounts",
 		Short: "Accounts",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxAccountsConfigPath)
-			return nil
+			return openEditor(constants.SaltboxAccountsConfigPath)
 		},
 	})
 
@@ -231,8 +229,7 @@ func init() {
 		Use:   "adv_settings",
 		Short: "Advanced Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxAdvancedSettingsConfigPath)
-			return nil
+			return openEditor(constants.SaltboxAdvancedSettingsConfigPath)
 		},
 	})
 
@@ -240,8 +237,7 @@ func init() {
 		Use:   "backup_config",
 		Short: "Backup Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxBackupConfigPath)
-			return nil
+			return openEditor(constants.SaltboxBackupConfigPath)
 		},
 	})
 
@@ -249,8 +245,7 @@ func init() {
 		Use:   "hetzner_vlan",
 		Short: "Hetzner VLAN Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxHetznerVLANConfigPath)
-			return nil
+			return openEditor(constants.SaltboxHetznerVLANConfigPath)
 		},
 	})
 
@@ -258,8 +253,7 @@ func init() {
 		Use:   "settings",
 		Short: "Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxSettingsConfigPath)
-			return nil
+			return openEditor(constants.SaltboxSettingsConfigPath)
 		},
 	})
 
@@ -267,8 +261,7 @@ func init() {
 		Use:   "inventory",
 		Short: "Inventory Settings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			openEditor(constants.SaltboxInventoryConfigPath)
-			return nil
+			return openEditor(constants.SaltboxInventoryConfigPath)
 		},
 	})
 }

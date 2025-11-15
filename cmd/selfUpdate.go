@@ -59,18 +59,17 @@ func init() {
 }
 
 // promptForConfirmation asks the user for confirmation (y/n)
-func promptForConfirmation(prompt string) bool {
+func promptForConfirmation(prompt string) (bool, error) {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Printf("%s [y/n]: ", prompt)
 
 	response, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Println("Error reading input:", err)
-		return false
+		return false, fmt.Errorf("error reading input: %w", err)
 	}
 
 	response = strings.ToLower(strings.TrimSpace(response))
-	return response == "y" || response == "yes"
+	return response == "y" || response == "yes", nil
 }
 
 func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
@@ -144,7 +143,11 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 
 	// If autoUpdate is false, ask for confirmation
 	if !autoUpdate {
-		if !promptForConfirmation("Do you want to update") {
+		confirmed, err := promptForConfirmation("Do you want to update")
+		if err != nil {
+			return false, err
+		}
+		if !confirmed {
 			_ = spinners.RunWarningSpinner("Update of sb CLI cancelled")
 			fmt.Println()
 			return false, nil
