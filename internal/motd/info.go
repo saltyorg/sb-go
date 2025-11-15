@@ -1051,6 +1051,7 @@ func GetDiskInfo(ctx context.Context, verbose bool) string {
 		if usagePercent < 80 {
 			// 0-79%: Low usage (good)
 			prog = progress.New(
+				progress.WithColorProfile(lipgloss.ColorProfile()),
 				progress.WithSolidFill(ProgressBarLow),
 				progress.WithoutPercentage(),
 			)
@@ -1058,6 +1059,7 @@ func GetDiskInfo(ctx context.Context, verbose bool) string {
 		} else if usagePercent < 90 {
 			// 80-89%: High usage (warning)
 			prog = progress.New(
+				progress.WithColorProfile(lipgloss.ColorProfile()),
 				progress.WithSolidFill(ProgressBarHigh),
 				progress.WithoutPercentage(),
 			)
@@ -1065,6 +1067,7 @@ func GetDiskInfo(ctx context.Context, verbose bool) string {
 		} else {
 			// 90-100%: Critical usage (danger)
 			prog = progress.New(
+				progress.WithColorProfile(lipgloss.ColorProfile()),
 				progress.WithSolidFill(ProgressBarCritical),
 				progress.WithoutPercentage(),
 			)
