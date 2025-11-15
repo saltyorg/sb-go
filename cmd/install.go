@@ -173,8 +173,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 		}
 
 		if len(allSuggestions) > 0 {
-			displaySuggestions(allSuggestions)
-			return fmt.Errorf("invalid tags provided, see suggestions above")
+			return fmt.Errorf("%s", formatSuggestions(allSuggestions))
 		}
 	}
 
@@ -229,66 +228,70 @@ func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []stri
 	return nil
 }
 
-// displaySuggestions formats and displays tag suggestions in a user friendly way
-func displaySuggestions(suggestions []suggestion) {
+// formatSuggestions builds a formatted string with all suggestions
+func formatSuggestions(suggestions []suggestion) string {
 	// Define styles
 	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorYellow))
 	inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorBrightRed)).Bold(true)
 	suggestStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorBrightGreen)).Bold(true)
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(charmtone.Cheeky.Hex()))
-	InfoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorLightBlue))
-	normalStyle := lipgloss.NewStyle()
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(charmtone.Cheeky.Hex())) // Tag:, Try:, Did you mean:
+	normalStyle := lipgloss.NewStyle()                                                   // Regular text
 
-	fmt.Println()
-	fmt.Println("  " + warningStyle.Render("Tag validation found some issues:"))
-	fmt.Println()
+	var result strings.Builder
+	result.WriteString(warningStyle.Render("Tag validation found some issues:") + "\n\n")
 
 	for _, s := range suggestions {
 		switch s.sType {
 		case suggestionExactMatch:
 			// Exact match in other repo - this is the most helpful suggestion
-			fmt.Printf("  %s %s %s\n",
+			result.WriteString(fmt.Sprintf("%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in "+s.currentRepo))
-			fmt.Printf("  %s %s %s\n\n",
+				normalStyle.Render("not present in "+s.currentRepo)))
+			result.WriteString(fmt.Sprintf("%s %s %s\n",
 				labelStyle.Render("Try:"),
 				suggestStyle.Render(s.suggestTag),
-				normalStyle.Render("(from "+s.targetRepo+")"))
+				normalStyle.Render("(from "+s.targetRepo+")")))
 
 		case suggestionTypo:
 			// Likely typo in same repo
-			fmt.Printf("  %s %s %s\n",
+			result.WriteString(fmt.Sprintf("%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in "+s.currentRepo))
-			fmt.Printf("  %s %s\n\n",
+				normalStyle.Render("not present in "+s.currentRepo)))
+			result.WriteString(fmt.Sprintf("%s %s\n",
 				labelStyle.Render("Did you mean:"),
-				suggestStyle.Render(s.suggestTag))
+				suggestStyle.Render(s.suggestTag)))
 
 		case suggestionTypoOther:
 			// Likely typo in other repo
-			fmt.Printf("  %s %s %s\n",
+			result.WriteString(fmt.Sprintf("%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in "+s.currentRepo))
-			fmt.Printf("  %s %s %s\n\n",
+				normalStyle.Render("not present in "+s.currentRepo)))
+			result.WriteString(fmt.Sprintf("%s %s %s\n",
 				labelStyle.Render("Did you mean:"),
 				suggestStyle.Render(s.suggestTag),
-				normalStyle.Render("(from "+s.targetRepo+")"))
+				normalStyle.Render("(from "+s.targetRepo+")")))
 
 		case suggestionNotFound:
 			// Not found anywhere
-			fmt.Printf("  %s %s %s\n",
+			infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorLightBlue))
+			result.WriteString(fmt.Sprintf("%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in Saltbox or Sandbox"))
-			fmt.Printf("  %s %s %s\n\n",
+				normalStyle.Render("not present in Saltbox or Sandbox")))
+			result.WriteString(fmt.Sprintf("%s %s %s\n",
 				labelStyle.Render("Add:"),
-				InfoStyle.Render("--no-cache"),
-				normalStyle.Render("if developing your own role"))
+				infoStyle.Render("--no-cache"),
+				normalStyle.Render("if developing your own role")))
 		}
+
+		// Add blank line between suggestions
+		result.WriteString("\n")
 	}
+
+	return strings.TrimSuffix(result.String(), "\n")
 }
 
 func validateAndSuggest(ctx context.Context, repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) []suggestion {

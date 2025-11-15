@@ -29,25 +29,23 @@ func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
 
 	// Print each line of the error message with proper styling
 	// ErrorText style includes margin, width constraints, and transforms
-	// We unset the width to prevent wrapping long lines (like JSON responses)
-	for i, line := range lines {
+	// We unset both width and transform to prevent wrapping and preserve custom formatting
+	for _, line := range lines {
 		if line != "" {
-			// First line gets the full ErrorText styling (with titleFirstWord transform)
-			// Subsequent lines use the same style without the transform to preserve formatting
-			if i == 0 {
-				lineStyle := styles.ErrorText.UnsetWidth()
-				fmt.Fprintln(w, lineStyle.Render(line))
-			} else {
-				// Use ErrorText style but without the transform and width for subsequent lines
-				lineStyle := styles.ErrorText.UnsetTransform().UnsetWidth()
-				fmt.Fprintln(w, lineStyle.Render(line))
-			}
+			// All lines rendered without transform to preserve custom formatting
+			// This allows error messages with embedded lipgloss styles and ANSI codes
+			// to display correctly without Fang's titleFirstWord transform interfering
+			lineStyle := styles.ErrorText.UnsetTransform().UnsetWidth()
+			fmt.Fprintln(w, lineStyle.Render(line))
 		} else {
 			fmt.Fprintln(w) // Preserve blank lines
 		}
 	}
 
-	fmt.Fprintln(w)
+	// Add trailing newline if error doesn't end with one
+	if !strings.HasSuffix(errorText, "\n") {
+		fmt.Fprintln(w)
+	}
 }
 
 func main() {
