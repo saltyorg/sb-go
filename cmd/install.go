@@ -12,11 +12,33 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/logging"
+	"github.com/saltyorg/sb-go/internal/styles"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/agnivade/levenshtein"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/spf13/cobra"
 )
+
+// suggestionType represents the type of suggestion being made
+type suggestionType int
+
+const (
+	suggestionExactMatch suggestionType = iota // Exact match in other repo
+	suggestionTypo                             // Likely typo in same repo
+	suggestionTypoOther                        // Likely typo in other repo
+	suggestionNotFound                         // Not found anywhere
+)
+
+// suggestion represents a tag validation issue with a proposed solution
+type suggestion struct {
+	inputTag    string
+	suggestTag  string
+	currentRepo string
+	targetRepo  string
+	sType       suggestionType
+}
 
 // installCmd represents the install command
 var installCmd = &cobra.Command{
@@ -140,7 +162,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	}
 
 	if !noCache {
-		var allSuggestions []string
+		var allSuggestions []suggestion
 
 		if len(saltboxTags) > 0 {
 			allSuggestions = append(allSuggestions, validateAndSuggest(ctx, constants.SaltboxRepoPath, saltboxTags, "", "sandbox-", cacheInstance, verbosity)...)
@@ -151,12 +173,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 		}
 
 		if len(allSuggestions) > 0 {
-			fmt.Println("----------------------------------------")
-			fmt.Println("The following issues were found with the provided tags:")
-			for i, suggestion := range allSuggestions {
-				fmt.Printf("%d. %s\n", i+1, suggestion)
-			}
-			fmt.Println("----------------------------------------")
+			displaySuggestions(allSuggestions)
 			return fmt.Errorf("invalid tags provided, see suggestions above")
 		}
 	}
@@ -212,8 +229,70 @@ func runPlaybook(ctx context.Context, repoPath, playbookPath string, tags []stri
 	return nil
 }
 
-func validateAndSuggest(ctx context.Context, repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) []string {
-	var suggestions []string
+// displaySuggestions formats and displays tag suggestions in a user friendly way
+func displaySuggestions(suggestions []suggestion) {
+	// Define styles
+	warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorYellow))
+	inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorBrightRed)).Bold(true)
+	suggestStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorBrightGreen)).Bold(true)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(charmtone.Cheeky.Hex()))
+	InfoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(styles.ColorLightBlue))
+	normalStyle := lipgloss.NewStyle()
+
+	fmt.Println()
+	fmt.Println("  " + warningStyle.Render("Tag validation found some issues:"))
+	fmt.Println()
+
+	for _, s := range suggestions {
+		switch s.sType {
+		case suggestionExactMatch:
+			// Exact match in other repo - this is the most helpful suggestion
+			fmt.Printf("  %s %s %s\n",
+				labelStyle.Render("Tag:"),
+				inputStyle.Render(s.inputTag),
+				normalStyle.Render("not present in "+s.currentRepo))
+			fmt.Printf("  %s %s %s\n\n",
+				labelStyle.Render("Try:"),
+				suggestStyle.Render(s.suggestTag),
+				normalStyle.Render("(from "+s.targetRepo+")"))
+
+		case suggestionTypo:
+			// Likely typo in same repo
+			fmt.Printf("  %s %s %s\n",
+				labelStyle.Render("Tag:"),
+				inputStyle.Render(s.inputTag),
+				normalStyle.Render("not present in "+s.currentRepo))
+			fmt.Printf("  %s %s\n\n",
+				labelStyle.Render("Did you mean:"),
+				suggestStyle.Render(s.suggestTag))
+
+		case suggestionTypoOther:
+			// Likely typo in other repo
+			fmt.Printf("  %s %s %s\n",
+				labelStyle.Render("Tag:"),
+				inputStyle.Render(s.inputTag),
+				normalStyle.Render("not present in "+s.currentRepo))
+			fmt.Printf("  %s %s %s\n\n",
+				labelStyle.Render("Did you mean:"),
+				suggestStyle.Render(s.suggestTag),
+				normalStyle.Render("(from "+s.targetRepo+")"))
+
+		case suggestionNotFound:
+			// Not found anywhere
+			fmt.Printf("  %s %s %s\n",
+				labelStyle.Render("Tag:"),
+				inputStyle.Render(s.inputTag),
+				normalStyle.Render("not present in Saltbox or Sandbox"))
+			fmt.Printf("  %s %s %s\n\n",
+				labelStyle.Render("Add:"),
+				InfoStyle.Render("--no-cache"),
+				normalStyle.Render("if developing your own role"))
+		}
+	}
+}
+
+func validateAndSuggest(ctx context.Context, repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) []suggestion {
+	var suggestions []suggestion
 
 	// Ensure the cache exists and is populated.
 	validTags := getValidTags(ctx, repoPath, cacheInstance, verbosity)
@@ -244,7 +323,13 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 
 		// 2. Check for an exact match in the *other* repository (the strongest suggestion)
 		if slices.Contains(otherValidTags, providedTag) {
-			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s, but '%s%s' exists in %s. Use that instead.", currentPrefix, providedTag, repoName, otherPrefix, providedTag, otherRepoName))
+			suggestions = append(suggestions, suggestion{
+				inputTag:    currentPrefix + providedTag,
+				suggestTag:  otherPrefix + providedTag,
+				currentRepo: repoName,
+				targetRepo:  otherRepoName,
+				sType:       suggestionExactMatch,
+			})
 			logging.Debug(verbosity, "Exact match found in other repo for %s%s, suggesting %s%s", currentPrefix, providedTag, otherPrefix, providedTag)
 			found = true
 		}
@@ -266,7 +351,13 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 		}
 
 		if bestMatch != "" {
-			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s. Did you mean '%s%s'?", currentPrefix, providedTag, repoName, currentPrefix, bestMatch))
+			suggestions = append(suggestions, suggestion{
+				inputTag:    currentPrefix + providedTag,
+				suggestTag:  currentPrefix + bestMatch,
+				currentRepo: repoName,
+				targetRepo:  repoName,
+				sType:       suggestionTypo,
+			})
 			logging.Debug(verbosity, "Suggesting '%s%s' for '%s%s'", currentPrefix, bestMatch, currentPrefix, providedTag)
 			continue
 		}
@@ -283,17 +374,32 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 			}
 		}
 		if bestMatchOther != "" {
-			suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in %s. Did you mean '%s%s' (from %s)?", currentPrefix, providedTag, repoName, otherPrefix, bestMatchOther, otherRepoName))
+			suggestions = append(suggestions, suggestion{
+				inputTag:    currentPrefix + providedTag,
+				suggestTag:  otherPrefix + bestMatchOther,
+				currentRepo: repoName,
+				targetRepo:  otherRepoName,
+				sType:       suggestionTypoOther,
+			})
 			logging.Debug(verbosity, "Suggesting '%s%s' for '%s%s' from other repo", otherPrefix, bestMatchOther, currentPrefix, providedTag)
 			continue
 		}
 
 		// 5. No close match found, provide the generic error message.
-		suggestions = append(suggestions, fmt.Sprintf("'%s%s' doesn't exist in Saltbox nor Sandbox. Use '--no-cache' if developing your own role.", currentPrefix, providedTag))
+		suggestions = append(suggestions, suggestion{
+			inputTag:    currentPrefix + providedTag,
+			suggestTag:  "",
+			currentRepo: repoName,
+			targetRepo:  "",
+			sType:       suggestionNotFound,
+		})
 		logging.Debug(verbosity, "No match found for '%s%s'", currentPrefix, providedTag)
 	}
 
-	sort.Strings(suggestions) // Sort suggestions alphabetically
+	// Sort suggestions by input tag alphabetically
+	sort.Slice(suggestions, func(i, j int) bool {
+		return suggestions[i].inputTag < suggestions[j].inputTag
+	})
 	return suggestions
 }
 
