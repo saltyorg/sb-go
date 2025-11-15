@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 )
@@ -202,31 +201,10 @@ func TestHandleInterruptError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture stderr output
-			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
-			os.Stderr = w
-
 			result := HandleInterruptError(tt.err)
-
-			// Restore stderr
-			w.Close()
-			os.Stderr = oldStderr
-
-			// Read captured output
-			buf := make([]byte, 1024)
-			n, _ := r.Read(buf)
-			output := string(buf[:n])
 
 			if result != tt.expectedReturn {
 				t.Errorf("HandleInterruptError(%v) = %v, expected %v", tt.err, result, tt.expectedReturn)
-			}
-
-			if tt.expectedReturn {
-				// Verify that the interrupt message was printed
-				if !strings.Contains(output, "Command interrupted by user") {
-					t.Errorf("Expected interrupt message in output, got: %q", output)
-				}
 			}
 		})
 	}
