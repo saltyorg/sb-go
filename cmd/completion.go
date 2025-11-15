@@ -8,6 +8,7 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/cache"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -101,7 +102,8 @@ func generateStaticBashCompletion(path, cmdName string) error {
 
 	tags := getCompletionTags(cacheInstance)
 	if len(tags) == 0 {
-		return fmt.Errorf("no tags found in cache - run '%s list' first to populate the cache", cmdName)
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("no tags found in cache - run '%s list' first to populate the cache", cmdName)))
 	}
 
 	// Temporarily set the root command's Use field to match the binary name
@@ -353,7 +355,8 @@ func generateStaticZshCompletion(path, cmdName string) error {
 
 	tags := getCompletionTags(cacheInstance)
 	if len(tags) == 0 {
-		return fmt.Errorf("no tags found in cache - run '%s list' first to populate the cache", cmdName)
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("no tags found in cache - run '%s list' first to populate the cache", cmdName)))
 	}
 
 	// Temporarily set the root command's Use field to match the binary name

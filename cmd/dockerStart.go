@@ -9,6 +9,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -28,11 +29,13 @@ var startCmd = &cobra.Command{
 			}
 
 			if !exists {
-				return fmt.Errorf("the Docker controller service does not exist")
+				normalStyle := lipgloss.NewStyle()
+				return fmt.Errorf("%s", normalStyle.Render("the Docker controller service does not exist"))
 			}
 
 			if !running {
-				return fmt.Errorf("the Docker controller service is not running")
+				normalStyle := lipgloss.NewStyle()
+				return fmt.Errorf("%s", normalStyle.Render("the Docker controller service is not running"))
 			}
 			return nil
 		}

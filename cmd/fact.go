@@ -13,6 +13,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/utils"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"gopkg.in/ini.v1"
 )
@@ -59,7 +60,8 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 	if len(args) < 1 {
 		fmt.Print("Error: Role name is required\n\n")
 		cmd.Help()
-		return fmt.Errorf("role name is required")
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render("role name is required"))
 	}
 
 	role := args[0]
@@ -124,7 +126,8 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 		if len(args) < 2 {
 			fmt.Println("Error: Instance name is required for save method")
 			cmd.Help()
-			return fmt.Errorf("instance name is required for save method")
+			normalStyle := lipgloss.NewStyle()
+			return fmt.Errorf("%s", normalStyle.Render("instance name is required for save method"))
 		}
 		instance := args[1]
 
@@ -153,7 +156,8 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 	case "delete":
 		if config.deleteType == "" {
 			fmt.Println("Error: delete-type is required for delete method")
-			return fmt.Errorf("delete-type is required for delete method")
+			normalStyle := lipgloss.NewStyle()
+			return fmt.Errorf("%s", normalStyle.Render("delete-type is required for delete method"))
 		}
 
 		// Get the Saltbox user for owner/group if needed for cleanup
@@ -181,7 +185,8 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 			if len(args) < 2 {
 				fmt.Println("Error: Instance name is required for instance or key deletion")
 				cmd.Help()
-				return fmt.Errorf("instance name is required for instance or key deletion")
+				normalStyle := lipgloss.NewStyle()
+				return fmt.Errorf("%s", normalStyle.Render("instance name is required for instance or key deletion"))
 			}
 			instance := args[1]
 

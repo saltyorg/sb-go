@@ -52,7 +52,8 @@ var dockerCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// If args are provided, it means an unknown subcommand was used
 		if len(args) > 0 {
-			return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+			normalStyle := lipgloss.NewStyle()
+			return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())))
 		}
 		// No args - show help
 		return cmd.Help()

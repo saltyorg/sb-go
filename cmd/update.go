@@ -19,6 +19,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/validate"
 	"github.com/saltyorg/sb-go/internal/venv"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +58,8 @@ func init() {
 func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelfUpdate bool) error {
 	// Check if running in an interactive terminal
 	if !tty.IsInteractive() {
-		return fmt.Errorf("update command requires an interactive terminal (TTY not available)")
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render("update command requires an interactive terminal (TTY not available)"))
 	}
 
 	// Set verbose mode for spinners
@@ -143,7 +145,8 @@ func validateSaltboxConfig(verbose bool) error {
 func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	// Check if Saltbox repo exists
 	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
-		return fmt.Errorf("error: SB_REPO_PATH does not exist or is not a directory")
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render("error: SB_REPO_PATH does not exist or is not a directory"))
 	}
 
 	// Get Saltbox user
@@ -242,7 +245,8 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 func updateSandbox(ctx context.Context, branchReset *bool) error {
 	// Check if Sandbox repo exists
 	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
-		return fmt.Errorf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)))
 	}
 
 	// Get Saltbox user

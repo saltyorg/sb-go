@@ -64,7 +64,8 @@ var installCmd = &cobra.Command{
 		}
 
 		if len(tags) == 0 {
-			return fmt.Errorf("no tags provided")
+			normalStyle := lipgloss.NewStyle()
+			return fmt.Errorf("%s", normalStyle.Render("no tags provided"))
 		}
 
 		verbosity, _ := cmd.Flags().GetCount("verbose")
@@ -200,7 +201,8 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	}
 
 	if len(parsedTags) == 0 {
-		return fmt.Errorf("no valid tags were provided for installation")
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render("no valid tags were provided for installation"))
 	}
 
 	return nil
