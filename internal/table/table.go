@@ -526,5 +526,5 @@ func (t *Table) styledChar(char string) string {
 }
 
 func (t *Table) writeLine(line string) {
-	_, _ = fmt.Fprintln(t.writer, line)
+	fmt.Fprintf(t.writer, "%s\n", line)
 }
