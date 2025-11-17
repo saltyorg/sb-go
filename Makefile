@@ -45,9 +45,9 @@ help: ## Display this help message
 
 ##@ Build
 
-all: clean fmt vet test build ## Run clean, fmt, vet, test, and build
+all: clean test build ## Run clean, test, and build (build includes quality checks)
 
-build: ## Build the binary with development settings
+build: check ## Build the binary with development settings (runs quality checks first)
 	@echo "$(GREEN)Building $(BINARY_NAME)...$(NC)"
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) go build $(GO_FLAGS) -ldflags="$(LDFLAGS)" -o $(BINARY_PATH) .
