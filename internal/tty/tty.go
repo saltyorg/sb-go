@@ -11,7 +11,8 @@ import (
 var isInteractive bool
 
 func init() {
-	isInteractive = isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
+	// Ubuntu/Linux terminal detection only
+	isInteractive = isatty.IsTerminal(os.Stdout.Fd())
 }
 
 // IsInteractive returns whether stdout is connected to a terminal.

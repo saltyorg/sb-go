@@ -85,11 +85,10 @@ func TestMainPackageStructure(t *testing.T) {
 	})
 
 	t.Run("os.Geteuid check", func(t *testing.T) {
-		// Test that we can call Geteuid
+		// Test that we can call Geteuid on Ubuntu/Linux
 		euid := os.Geteuid()
 
-		// On Windows, Geteuid returns -1 which is expected
-		// On Unix-like systems, 0 means root, >0 means non-root
+		// 0 means root, >0 means non-root
 		// We just verify we can call it
 		_ = euid
 	})
@@ -368,9 +367,8 @@ func TestRootCheckLogic(t *testing.T) {
 
 		isRoot := euid == 0
 
-		// On most test systems, this will be false
-		// On systems with root access, it will be true
-		// On Windows, euid is -1 which is expected
+		// On most test systems, this will be false (non-root)
+		// On systems with root access, it will be true (root)
 		_ = isRoot
 		_ = euid
 	})
