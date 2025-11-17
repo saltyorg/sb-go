@@ -25,12 +25,12 @@ func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
 
 	// Split error message by line breaks
 	errorText := err.Error()
-	lines := strings.Split(errorText, "\n")
+	lines := strings.SplitSeq(errorText, "\n")
 
 	// Print each line of the error message with proper styling
 	// ErrorText style includes margin, width constraints, and transforms
 	// We unset both width and transform to prevent wrapping and preserve custom formatting
-	for _, line := range lines {
+	for line := range lines {
 		if line != "" {
 			// All lines rendered without transform to preserve custom formatting
 			// This allows error messages with embedded lipgloss styles and ANSI codes
