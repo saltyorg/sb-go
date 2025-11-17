@@ -16,16 +16,18 @@ import (
 
 // configValidationJob represents a single config file validation task
 type configValidationJob struct {
-	configPath string
-	schemaPath string
-	name       string
-	optional   bool
+	configPath     string
+	schemaPath     string
+	name           string
+	optional       bool
+	duplicatesOnly bool // Only check for duplicate keys, skip schema validation
 }
 
 // AllSaltboxConfigs validates all Saltbox configuration files using YAML schemas
 func AllSaltboxConfigs(verbose bool) error {
-	// Set verbose mode
+	// Set verbose mode for both validation and spinners
 	SetVerbose(verbose)
+	spinners.SetVerboseMode(verbose)
 
 	// Define all validation jobs
 	jobs := []configValidationJob{
@@ -65,6 +67,13 @@ func AllSaltboxConfigs(verbose bool) error {
 			name:       "motd.yml",
 			optional:   true,
 		},
+		{
+			configPath:     constants.SaltboxInventoryConfigPath,
+			schemaPath:     "", // No schema needed for duplicate-only check
+			name:           "localhost.yml",
+			optional:       true,
+			duplicatesOnly: true,
+		},
 	}
 
 	// Process each validation job
@@ -77,17 +86,117 @@ func AllSaltboxConfigs(verbose bool) error {
 	return nil
 }
 
+// validateDuplicateKeys checks a YAML file for duplicate keys
+func validateDuplicateKeys(configPath, name string) error {
+	successMessage := fmt.Sprintf("Validated %s (no duplicates)", name)
+	failureMessage := fmt.Sprintf("Failed to validate %s (no duplicates)", name)
+
+	validationError := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
+		TaskName:        fmt.Sprintf("Validating %s (no duplicates)", name),
+		StopMessage:     successMessage,
+		StopFailMessage: failureMessage,
+	}, func() error {
+		return checkDuplicateKeys(configPath)
+	})
+
+	if validationError != nil {
+		return fmt.Errorf("%s: %w", failureMessage, validationError)
+	}
+
+	return nil
+}
+
+// checkDuplicateKeys reads a YAML file and detects duplicate keys
+func checkDuplicateKeys(filePath string) error {
+	// Read the file
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("error reading file: %w", err)
+	}
+
+	// Parse YAML into a Node tree which preserves duplicate keys
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		return fmt.Errorf("error parsing YAML: %w", err)
+	}
+
+	// Check for duplicates recursively
+	duplicates := findDuplicateKeys(&node, "")
+	if len(duplicates) > 0 {
+		var errorMsg strings.Builder
+		errorMsg.WriteString("duplicate keys found:")
+		for _, dup := range duplicates {
+			errorMsg.WriteString(fmt.Sprintf("\n  - %s", dup))
+		}
+		return fmt.Errorf("%s", errorMsg.String())
+	}
+
+	return nil
+}
+
+// findDuplicateKeys recursively searches for duplicate keys in a YAML node tree
+func findDuplicateKeys(node *yaml.Node, path string) []string {
+	var duplicates []string
+
+	// Only mapping nodes can have duplicate keys
+	switch node.Kind {
+	case yaml.MappingNode:
+		keysSeen := make(map[string]int)
+
+		// In a mapping node, content alternates between key and value nodes
+		for i := 0; i < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+
+			key := keyNode.Value
+			currentPath := key
+			if path != "" {
+				currentPath = path + "." + key
+			}
+
+			// Check if we've seen this key before
+			if count, exists := keysSeen[key]; exists {
+				keysSeen[key] = count + 1
+				duplicates = append(duplicates, fmt.Sprintf("%s (appears %d times)", currentPath, count+1))
+			} else {
+				keysSeen[key] = 1
+			}
+
+			// Recursively check the value node
+			duplicates = append(duplicates, findDuplicateKeys(valueNode, currentPath)...)
+		}
+	case yaml.SequenceNode:
+		// For sequence nodes, check each item
+		for i, item := range node.Content {
+			itemPath := fmt.Sprintf("%s[%d]", path, i)
+			duplicates = append(duplicates, findDuplicateKeys(item, itemPath)...)
+		}
+	case yaml.DocumentNode:
+		// For document nodes, check the content
+		for _, item := range node.Content {
+			duplicates = append(duplicates, findDuplicateKeys(item, path)...)
+		}
+	}
+
+	return duplicates
+}
+
 // processValidationJob handles validation of a single config file
 func processValidationJob(job configValidationJob, verbose bool) error {
 	// Check if config file exists
 	if _, err := os.Stat(job.configPath); err != nil {
 		if job.optional {
 			if verbose {
-				fmt.Printf("%s not found, skipping validation", job.name)
+				fmt.Printf("%s not found, skipping validation\n", job.name)
 			}
 			return nil
 		}
 		return fmt.Errorf("required config file not found: %s", job.configPath)
+	}
+
+	// If this is a duplicate-only check, skip schema validation
+	if job.duplicatesOnly {
+		return validateDuplicateKeys(job.configPath, job.name)
 	}
 
 	// Check if schema file exists
@@ -96,29 +205,18 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 		return fmt.Errorf("schema file not found: %s", schemaPath)
 	}
 
-	// Perform validation with spinner or verbose output
+	// Perform validation with spinner
 	successMessage := fmt.Sprintf("Validated %s", job.name)
 	failureMessage := fmt.Sprintf("Failed to validate %s", job.name)
 
-	var validationError error
-	if verbose {
-		fmt.Printf("Validating %s...", job.name)
-		validationError = validateConfigWithSchema(job.configPath, schemaPath)
-		if validationError == nil {
-			fmt.Println(successMessage)
-		} else {
-			fmt.Println(failureMessage)
-		}
-	} else {
-		// Note: Using context.Background() here - consider adding context parameter in future refactor
-		validationError = spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
-			TaskName:        fmt.Sprintf("Validating %s", job.name),
-			StopMessage:     successMessage,
-			StopFailMessage: failureMessage,
-		}, func() error {
-			return validateConfigWithSchema(job.configPath, schemaPath)
-		})
-	}
+	// Note: Using context.Background() here - consider adding context parameter in future refactor
+	validationError := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
+		TaskName:        fmt.Sprintf("Validating %s", job.name),
+		StopMessage:     successMessage,
+		StopFailMessage: failureMessage,
+	}, func() error {
+		return validateConfigWithSchema(job.configPath, schemaPath)
+	})
 
 	if validationError != nil {
 		return fmt.Errorf("%s: %w", failureMessage, validationError)
