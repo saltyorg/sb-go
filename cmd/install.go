@@ -92,13 +92,19 @@ var installCmd = &cobra.Command{
 
 		// Check if cache is populated
 		if !isCachePopulated(cacheInstance) {
-			// Try to auto-generate cache
+			// Try to auto-generate cache - at least one must succeed for completion to work
 			ctx := context.Background()
-			ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
-			ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
 
-			// Check again - if still empty, abort completion
-			if !isCachePopulated(cacheInstance) {
+			// Try Saltbox first
+			_, saltboxErr := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
+			saltboxSuccess := saltboxErr == nil
+
+			// Try Sandbox
+			_, sandboxErr := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
+			sandboxSuccess := sandboxErr == nil
+
+			// If both failed, abort completion
+			if !saltboxSuccess && !sandboxSuccess {
 				return nil, cobra.ShellCompDirectiveError
 			}
 		}
@@ -532,20 +538,14 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosit
 
 // isCachePopulated checks if the cache has valid tags for at least one repository
 func isCachePopulated(cacheInstance *cache.Cache) bool {
-	// Check Saltbox cache
-	saltboxCache, ok := cacheInstance.GetRepoCache(constants.SaltboxRepoPath)
-	if ok {
-		if cachedTags, tagsOK := saltboxCache["tags"].([]any); tagsOK && len(cachedTags) > 0 {
-			return true
-		}
+	// Check Saltbox cache using existing validation function
+	if cacheExistsAndIsValid(constants.SaltboxRepoPath, cacheInstance, 0) {
+		return true
 	}
 
-	// Check Sandbox cache
-	sandboxCache, ok := cacheInstance.GetRepoCache(constants.SandboxRepoPath)
-	if ok {
-		if cachedTags, tagsOK := sandboxCache["tags"].([]any); tagsOK && len(cachedTags) > 0 {
-			return true
-		}
+	// Check Sandbox cache using existing validation function
+	if cacheExistsAndIsValid(constants.SandboxRepoPath, cacheInstance, 0) {
+		return true
 	}
 
 	return false

@@ -462,8 +462,8 @@ func TestMockCommandExecutor_CallTracking(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	mock.ExecuteCommand(ctx, "/path1", "git", "status")
-	mock.ExecuteCommand(ctx, "/path2", "git", "log")
+	_, _ = mock.ExecuteCommand(ctx, "/path1", "git", "status")
+	_, _ = mock.ExecuteCommand(ctx, "/path2", "git", "log")
 
 	calls := mock.GetCalls()
 	if len(calls) != 2 {
@@ -535,7 +535,7 @@ func TestGetGitCommitHash_DirectoryNotExist(t *testing.T) {
 	nonExistPath := filepath.Join(os.TempDir(), fmt.Sprintf("nonexistent-%d", os.Getpid()))
 
 	// Ensure it doesn't exist
-	os.RemoveAll(nonExistPath)
+	_ = os.RemoveAll(nonExistPath)
 
 	// Mock executor that simulates git command failure
 	mock := &MockCommandExecutor{

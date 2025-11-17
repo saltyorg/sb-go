@@ -96,7 +96,9 @@ func ValidateSettingsConfig(config *SettingsConfig, inputMap map[string]any) err
 	logging.DebugBool(verboseMode, "\nDEBUG: ValidateSettingsConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
 	logging.DebugBool(verboseMode, "ValidateSettingsConfig - registering custom validators")
-	RegisterCustomValidators(validate) //From generic.go
+	if err := RegisterCustomValidators(validate); err != nil {
+		return err
+	}
 
 	logging.DebugBool(verboseMode, "ValidateSettingsConfig - registering dirpath validator")
 	err := validate.RegisterValidation("dirpath", dirPathValidator) // Register the dirpath validator

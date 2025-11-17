@@ -228,7 +228,7 @@ func getPlexStreamInfo(instance config.PlexInstance) (PlexStreamInfo, error) {
 	if err != nil {
 		return result, fmt.Errorf("failed to connect to Plex: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {

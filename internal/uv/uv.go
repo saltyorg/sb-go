@@ -55,7 +55,7 @@ func DownloadAndInstallUV(ctx context.Context, verbose bool) error {
 	if err != nil {
 		return fmt.Errorf("error downloading uv: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("error downloading uv: received status code %d", resp.StatusCode)
@@ -67,14 +67,14 @@ func DownloadAndInstallUV(ctx context.Context, verbose bool) error {
 		return fmt.Errorf("error creating temporary file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	// Write the response body to the temporary file
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("error writing to temporary file: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Extract the tarball
 	if err := extractUVBinary(tmpPath, UVBinaryPath, verbose); err != nil {
@@ -99,13 +99,13 @@ func extractUVBinary(tarballPath, destPath string, verbose bool) error {
 	if err != nil {
 		return fmt.Errorf("error opening tarball: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	gzr, err := gzip.NewReader(file)
 	if err != nil {
 		return fmt.Errorf("error creating gzip reader: %w", err)
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	tr := tar.NewReader(gzr)
 
@@ -129,7 +129,7 @@ func extractUVBinary(tarballPath, destPath string, verbose bool) error {
 			if err != nil {
 				return fmt.Errorf("error creating output file: %w", err)
 			}
-			defer outFile.Close()
+			defer func() { _ = outFile.Close() }()
 
 			if _, err := io.Copy(outFile, tr); err != nil {
 				return fmt.Errorf("error writing binary: %w", err)

@@ -34,7 +34,7 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 		if err != nil {
 			return err
 		}
-		defer cli.Close()
+		defer func() { _ = cli.Close() }()
 
 		containersSummary, err := cli.ContainerList(ctx, client.ContainerListOptions{All: true})
 		if err != nil {

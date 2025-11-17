@@ -74,11 +74,11 @@ func (s *Schema) ValidateWithTypeFlexibility(config map[string]any) error {
 }
 
 // ValidateWithTypeFlexibilityAsync performs validation with async API checks
-func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]any) (error, *AsyncValidationContext) {
+func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]any) (*AsyncValidationContext, error) {
 	logging.DebugBool(verboseMode, "Schema.ValidateWithTypeFlexibilityAsync called with config keys: %v", getKeys(config))
 	asyncCtx := NewAsyncValidationContext()
 	err := s.validateObjectWithTypeFlexibility(config, s.Rules, "", asyncCtx)
-	return err, asyncCtx
+	return asyncCtx, err
 }
 
 // validateObject validates an object against schema rules

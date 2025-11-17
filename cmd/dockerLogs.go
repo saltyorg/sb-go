@@ -913,7 +913,7 @@ func fetchDockerLogs(cli *client.Client, containerID string, timestamp string, r
 		if err != nil {
 			return dockerLogsMsg{isPrefetch: isPrefetch, err: fmt.Errorf("failed to fetch logs: %w", err)}
 		}
-		defer logsReader.Close()
+		defer func() { _ = logsReader.Close() }()
 
 		// Parse Docker log format
 		entries, err := parseDockerLogs(logsReader)
@@ -1096,7 +1096,7 @@ func handleDockerLogs() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
-	defer cli.Close()
+	defer func() { _ = cli.Close() }()
 
 	containersSummary, err := cli.ContainerList(ctx, client.ContainerListOptions{All: false})
 	if err != nil {

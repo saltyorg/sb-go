@@ -57,7 +57,7 @@ func (m *MockAnsibleExecutor) ExecuteWithIO(ctx context.Context, dir string, nam
 	// Default: write mock output
 	if stdout != nil {
 		if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
-			w.Write([]byte("mock playbook output\n"))
+			_, _ = w.Write([]byte("mock playbook output\n"))
 		}
 	}
 	return nil
@@ -472,7 +472,7 @@ func TestHandleInstall_Integration(t *testing.T) {
 				ExecuteWithIOFunc: func(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
 					if stdout != nil {
 						if w, ok := stdout.(interface{ Write([]byte) (int, error) }); ok {
-							w.Write([]byte("PLAY RECAP\n"))
+							_, _ = w.Write([]byte("PLAY RECAP\n"))
 						}
 					}
 					return nil

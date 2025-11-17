@@ -16,20 +16,11 @@ type (
 	Style     = aquatable.Style
 )
 
-// Cell represents a single cell in the table
-type Cell struct {
-	content ansiBlob
-	colspan int
-	rowspan int
-	align   Alignment
-}
-
 // Table represents a table with support for colspan and rowspan
 type Table struct {
 	writer      io.Writer
 	headers     []string
 	rows        [][]string
-	cells       [][]Cell
 	columnAlign []Alignment
 	dividers    Dividers
 	lineStyle   Style
@@ -249,10 +240,9 @@ func (t *Table) calculateColumnWidths(numCols int) []int {
 	// Check rows
 	for rowIdx, row := range t.rows {
 		// Skip colspan rows in width calculation
-		if colspan, hasColspan := t.colspans[rowIdx]; hasColspan && len(row) == 1 {
+		if _, hasColspan := t.colspans[rowIdx]; hasColspan && len(row) == 1 {
 			// For colspan rows, we don't update individual column widths
 			// The total width is calculated based on the colspan
-			_ = colspan
 			continue
 		}
 
@@ -475,19 +465,6 @@ func (t *Table) middleBorder(colWidths []int, startCol int, endCol int) string {
 	return line
 }
 
-func (t *Table) middleBorderNoJunctions(colWidths []int) string {
-	line := t.styledChar(t.dividers.NES)
-	for i, width := range colWidths {
-		line += strings.Repeat(t.styledChar(t.dividers.EW), width)
-		if i < len(colWidths)-1 {
-			// Use ESW (┬) junction to align with the column separator
-			line += t.styledChar(t.dividers.ESW)
-		}
-	}
-	line += t.styledChar(t.dividers.NSW)
-	return line
-}
-
 func (t *Table) borderNoJunctions(colWidths []int) string {
 	line := t.styledChar(t.dividers.NES)
 	totalWidth := 0
@@ -549,5 +526,5 @@ func (t *Table) styledChar(char string) string {
 }
 
 func (t *Table) writeLine(line string) {
-	fmt.Fprintln(t.writer, line)
+	_, _ = fmt.Fprintln(t.writer, line)
 }

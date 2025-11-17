@@ -53,11 +53,12 @@ func (c *Cache) GetRepoCache(repoPath string) (map[string]any, bool) {
 
 // SetRepoCache updates the cache for a specific repository with new data.
 // It locks the cache for writing, updates the repository's entry, and then saves the entire cache to the file.
+// Note: Save errors are not returned as cache operations are non-critical to application functionality.
 func (c *Cache) SetRepoCache(repoPath string, repoCache map[string]any) {
 	c.mu.Lock()
 	c.data[repoPath] = repoCache
 	c.mu.Unlock()
-	c.save()
+	_ = c.save()
 }
 
 // CheckCache verifies whether all provided tags exist in the cached data for a given repository.

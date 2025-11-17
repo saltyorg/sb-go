@@ -9,32 +9,6 @@ import (
 	"testing"
 )
 
-// mockSignalManager is a mock implementation of the signal manager for testing
-type mockSignalManager struct {
-	shutdownCalled bool
-	shutdownCode   int
-	mu             sync.Mutex
-}
-
-func (m *mockSignalManager) Shutdown(code int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.shutdownCalled = true
-	m.shutdownCode = code
-}
-
-func (m *mockSignalManager) WasShutdownCalled() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.shutdownCalled
-}
-
-func (m *mockSignalManager) GetShutdownCode() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.shutdownCode
-}
-
 // TestIsInterruptError tests the IsInterruptError function with various error types
 func TestIsInterruptError(t *testing.T) {
 	tests := []struct {
@@ -257,7 +231,7 @@ func TestExitWithError(t *testing.T) {
 			ExitWithError(tt.format, tt.args...)
 
 			// Restore stderr
-			w.Close()
+			_ = w.Close()
 			os.Stderr = oldStderr
 
 			// Read captured output
@@ -316,9 +290,9 @@ func TestHandleInterruptError_NonInterruptErrors(t *testing.T) {
 
 			result := HandleInterruptError(err)
 
-			w.Close()
+			_ = w.Close()
 			os.Stderr = oldStderr
-			r.Close()
+			_ = r.Close()
 
 			if result {
 				t.Errorf("HandleInterruptError(%v) returned true, expected false", err)

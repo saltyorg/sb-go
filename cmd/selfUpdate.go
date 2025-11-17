@@ -247,7 +247,7 @@ func (s *SaltboxProxySource) ListReleases(ctx context.Context, repository selfup
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch releases: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -291,7 +291,7 @@ func (s *SaltboxProxySource) DownloadReleaseAsset(ctx context.Context, rel *self
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 

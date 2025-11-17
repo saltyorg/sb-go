@@ -58,7 +58,7 @@ var startCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to start containers: %v", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != http.StatusOK {
 				return fmt.Errorf("failed to start containers (status code: %d)", resp.StatusCode)

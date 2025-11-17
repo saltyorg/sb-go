@@ -111,7 +111,7 @@ func TestGetSaltboxUser(t *testing.T) {
 			}
 
 			// Clean up for next test
-			os.Remove(accountsPath)
+			_ = os.Remove(accountsPath)
 		})
 	}
 }

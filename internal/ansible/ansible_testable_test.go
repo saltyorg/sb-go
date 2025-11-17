@@ -166,7 +166,7 @@ func TestCheckCachedTags(t *testing.T) {
 
 	// Create a git repository mock
 	gitRepoPath := filepath.Join(tmpDir, "test-repo")
-	os.MkdirAll(filepath.Join(gitRepoPath, ".git"), 0755)
+	_ = os.MkdirAll(filepath.Join(gitRepoPath, ".git"), 0755)
 
 	tests := []struct {
 		name           string
@@ -219,7 +219,7 @@ func TestCheckCachedTags(t *testing.T) {
 					},
 				}
 				data, _ := json.Marshal(cacheData)
-				os.WriteFile(cacheFile, data, 0644)
+				_ = os.WriteFile(cacheFile, data, 0644)
 			}
 
 			tags, found := checkCachedTags(context.Background(), tt.repoPath, testCache)
@@ -378,7 +378,7 @@ func TestCacheTagsWithCommit(t *testing.T) {
 
 	// Create a git repository mock
 	gitRepoPath := filepath.Join(tmpDir, "test-repo")
-	os.MkdirAll(filepath.Join(gitRepoPath, ".git"), 0755)
+	_ = os.MkdirAll(filepath.Join(gitRepoPath, ".git"), 0755)
 
 	testCache, err := cache.NewCache()
 	if err != nil {

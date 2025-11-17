@@ -809,11 +809,9 @@ func GetMemoryInfo() string {
 	// Check if we have the required fields
 	if memTotal, ok := memInfo["MemTotal"]; ok {
 		var memAvailable, memFree, memCached uint64
-		memUsed := memTotal // Start with the total, then subtract
 
 		if free, ok := memInfo["MemFree"]; ok {
 			memFree = free
-			memUsed -= free
 		}
 
 		if cached, ok := memInfo["Cached"]; ok {

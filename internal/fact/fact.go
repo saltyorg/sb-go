@@ -69,7 +69,7 @@ func validateBinary(filePath string, expectedSize int64, verbose bool) error {
 	if err != nil {
 		return fmt.Errorf("cannot open file for validation: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	header := make([]byte, 4)
 	if _, err := file.Read(header); err != nil {

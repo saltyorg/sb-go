@@ -127,7 +127,7 @@ func TestValidateAndSuggest(t *testing.T) {
 
 	// Write mock cache to file
 	data, _ := json.Marshal(mockCacheData)
-	os.WriteFile(cacheFile, data, 0644)
+	_ = os.WriteFile(cacheFile, data, 0644)
 
 	tests := []struct {
 		name            string
@@ -262,7 +262,7 @@ func TestGetValidTags(t *testing.T) {
 					},
 				}
 				data, _ := json.Marshal(mockCacheData)
-				os.WriteFile(cacheFile, data, 0644)
+				_ = os.WriteFile(cacheFile, data, 0644)
 			}
 
 			// Test expectations
@@ -335,7 +335,7 @@ func TestCacheExistsAndIsValid(t *testing.T) {
 					constants.SaltboxRepoPath: cacheData,
 				}
 				data, _ := json.Marshal(mockCacheData)
-				os.WriteFile(cacheFile, data, 0644)
+				_ = os.WriteFile(cacheFile, data, 0644)
 			}
 
 			// Test the validation logic structure

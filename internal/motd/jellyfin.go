@@ -144,7 +144,7 @@ func getJellyfinStreamInfo(instance config.JellyfinInstance) (JellyfinStreamInfo
 	// Fetch active sessions
 	sessions, resp, err := client.SessionAPI.GetSessions(context.Background()).Execute()
 	if resp != nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 	}
 	if err != nil {
 		return result, fmt.Errorf("failed to get sessions: %w", err)

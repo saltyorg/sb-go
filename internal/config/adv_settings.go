@@ -101,7 +101,9 @@ func ValidateAdvSettingsConfig(config *AdvSettingsConfig, inputMap map[string]an
 
 	// Register custom validators (from generic.go).
 	logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - registering custom validators")
-	RegisterCustomValidators(validate)
+	if err := RegisterCustomValidators(validate); err != nil {
+		return err
+	}
 
 	// Validate the overall structure.
 	logging.DebugBool(verboseMode, "ValidateAdvSettingsConfig - validating struct: %+v", config)

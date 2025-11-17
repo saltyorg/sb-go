@@ -116,7 +116,9 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 	validate := validator.New()
 
 	// Register the custom SSH key/URL validator.
-	RegisterCustomValidators(validate) // Moved to generic.go
+	if err := RegisterCustomValidators(validate); err != nil {
+		return err
+	}
 
 	err := validate.RegisterValidation("ssh_key_or_url", customSSHKeyOrURLValidator)
 	if err != nil {
@@ -454,7 +456,7 @@ func validateDockerHub(username, token string) error {
 		logging.DebugBool(verboseMode, "validateDockerHub - %v", err)
 		return err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	logging.DebugBool(verboseMode, "validateDockerHub - received HTTP status: %d", res.StatusCode)
 

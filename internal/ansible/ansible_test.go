@@ -260,7 +260,7 @@ func TestPrepareAnsibleListTags_CacheUsage(t *testing.T) {
 				}
 
 				data, _ := json.Marshal(cacheData)
-				os.WriteFile(cacheFile, data, 0644)
+				_ = os.WriteFile(cacheFile, data, 0644)
 			}
 
 			// Test the logic structure
@@ -321,7 +321,7 @@ func TestRunAndCacheAnsibleTags_CacheUpdate(t *testing.T) {
 				}
 
 				data, _ := json.Marshal(cacheData)
-				os.WriteFile(cacheFile, data, 0644)
+				_ = os.WriteFile(cacheFile, data, 0644)
 			}
 
 			// Verify the test expectations are valid
@@ -686,7 +686,7 @@ func TestSaltboxModSpecialCase(t *testing.T) {
 	}
 
 	data, _ := json.Marshal(cacheData)
-	os.WriteFile(cacheFile, data, 0644)
+	_ = os.WriteFile(cacheFile, data, 0644)
 
 	// Test that SaltboxMod always creates a command
 	repoPath := constants.SaltboxModRepoPath

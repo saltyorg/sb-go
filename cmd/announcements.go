@@ -32,9 +32,13 @@ func init() {
 	announcementsCmd.PersistentFlags().StringP("after", "a", "", "Path to the after announcements.yml file")
 	announcementsCmd.PersistentFlags().StringP("repo", "r", "Saltbox", "Repository name (Saltbox or Sandbox)")
 
-	// Mark required flags
-	announcementsCmd.MarkPersistentFlagRequired("before")
-	announcementsCmd.MarkPersistentFlagRequired("after")
+	// Mark required flags - panic if registration fails as this is a programming error
+	if err := announcementsCmd.MarkPersistentFlagRequired("before"); err != nil {
+		panic(fmt.Sprintf("failed to mark 'before' flag as required: %v", err))
+	}
+	if err := announcementsCmd.MarkPersistentFlagRequired("after"); err != nil {
+		panic(fmt.Sprintf("failed to mark 'after' flag as required: %v", err))
+	}
 }
 
 func handleAnnouncements(verbose bool, beforePath, afterPath, repo string) error {

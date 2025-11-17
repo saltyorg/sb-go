@@ -299,14 +299,14 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("could not open source file: %w", err)
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	// Create the destination file.
 	destFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("could not create destination file: %w", err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	// Copy the contents.
 	_, err = io.Copy(destFile, sourceFile)

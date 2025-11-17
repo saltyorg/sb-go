@@ -172,7 +172,7 @@ func callNzbgetAPI(instance config.UserPassAppInstance, method string, target an
 	if err != nil {
 		return fmt.Errorf("failed to connect to NZBGet: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("NZBGet API returned status code %d", resp.StatusCode)

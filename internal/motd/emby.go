@@ -154,7 +154,7 @@ func getEmbyStreamInfo(instance config.EmbyInstance) (EmbyStreamInfo, error) {
 	if err != nil {
 		return result, fmt.Errorf("failed to connect to Emby: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return result, fmt.Errorf("emby API returned status code %d", resp.StatusCode)

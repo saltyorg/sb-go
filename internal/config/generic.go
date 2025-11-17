@@ -178,9 +178,18 @@ func hexColorValidator(fl validator.FieldLevel) bool {
 }
 
 // RegisterCustomValidators registers all the custom validators
-func RegisterCustomValidators(validate *validator.Validate) {
-	validate.RegisterValidation("ansiblebool", ansibleBoolValidator)
-	validate.RegisterValidation("timezone_or_auto", timezoneOrAutoValidator)
-	validate.RegisterValidation("cron_special_time", cronSpecialTimeValidator)
-	validate.RegisterValidation("hexcolor", hexColorValidator)
+func RegisterCustomValidators(validate *validator.Validate) error {
+	if err := validate.RegisterValidation("ansiblebool", ansibleBoolValidator); err != nil {
+		return fmt.Errorf("failed to register ansiblebool validator: %w", err)
+	}
+	if err := validate.RegisterValidation("timezone_or_auto", timezoneOrAutoValidator); err != nil {
+		return fmt.Errorf("failed to register timezone_or_auto validator: %w", err)
+	}
+	if err := validate.RegisterValidation("cron_special_time", cronSpecialTimeValidator); err != nil {
+		return fmt.Errorf("failed to register cron_special_time validator: %w", err)
+	}
+	if err := validate.RegisterValidation("hexcolor", hexColorValidator); err != nil {
+		return fmt.Errorf("failed to register hexcolor validator: %w", err)
+	}
+	return nil
 }

@@ -75,7 +75,7 @@ var restartCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to stop containers: %v", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			// Check status code before reading body to prevent memory exhaustion attacks
 			if resp.StatusCode != http.StatusOK {
@@ -116,7 +116,7 @@ var restartCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("failed to start containers: %v", err)
 			}
-			defer startResp.Body.Close()
+			defer func() { _ = startResp.Body.Close() }()
 
 			// Check status code before reading body to prevent memory exhaustion attacks
 			if startResp.StatusCode != http.StatusOK {

@@ -118,14 +118,14 @@ func generateStaticBashCompletion(path, cmdName string) error {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	// Generate Cobra's native completion (without descriptions for cleaner output)
 	if err := rootCmd.GenBashCompletionV2(tmpFile, false); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("failed to generate bash completion: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Read the generated completion
 	cobraCompletion, err := os.ReadFile(tmpPath)
@@ -138,7 +138,7 @@ func generateStaticBashCompletion(path, cmdName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create completion file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Write Cobra's native completion first
 	if _, err := file.Write(cobraCompletion); err != nil {
@@ -371,14 +371,14 @@ func generateStaticZshCompletion(path, cmdName string) error {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 
 	// Generate Cobra's native completion
 	if err := rootCmd.GenZshCompletion(tmpFile); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("failed to generate zsh completion: %w", err)
 	}
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Read the generated completion
 	cobraCompletion, err := os.ReadFile(tmpPath)
@@ -391,7 +391,7 @@ func generateStaticZshCompletion(path, cmdName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create completion file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Write Cobra's native completion first
 	if _, err := file.Write(cobraCompletion); err != nil {

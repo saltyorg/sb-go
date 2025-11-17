@@ -56,14 +56,14 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 				}
 			}
 			if !verbose && len(result.Stderr) > 0 {
-				return fmt.Errorf("Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), string(result.Stderr))
+				return fmt.Errorf("playbook %s run failed, scroll up to the failed task to review.\nExit code: %d\nStderr:\n%s", playbookPath, exitErr.ExitCode(), string(result.Stderr))
 			}
-			return fmt.Errorf("Playbook %s run failed, scroll up to the failed task to review.\nExit code: %d", playbookPath, exitErr.ExitCode())
+			return fmt.Errorf("playbook %s run failed, scroll up to the failed task to review.\nExit code: %d", playbookPath, exitErr.ExitCode())
 		}
 		if !verbose && len(result.Stderr) > 0 {
-			return fmt.Errorf("Playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, string(result.Stderr))
+			return fmt.Errorf("playbook %s run failed: %w\nStderr:\n%s", playbookPath, err, string(result.Stderr))
 		}
-		return fmt.Errorf("Playbook %s run failed: %w", playbookPath, err)
+		return fmt.Errorf("playbook %s run failed: %w", playbookPath, err)
 	}
 
 	if verbose {

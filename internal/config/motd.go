@@ -152,7 +152,9 @@ func ValidateMOTDConfig(config *MOTDConfig, inputMap map[string]any) error {
 
 	// Register custom validators
 	logging.DebugBool(verboseMode, "ValidateMOTDConfig - registering custom validators")
-	RegisterCustomValidators(validate)
+	if err := RegisterCustomValidators(validate); err != nil {
+		return err
+	}
 
 	// Validate the overall structure
 	logging.DebugBool(verboseMode, "ValidateMOTDConfig - validating struct: %+v", config)

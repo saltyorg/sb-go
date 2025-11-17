@@ -107,7 +107,7 @@ func getJobStatus(ctx context.Context, url string, client *http.Client) (StatusR
 	if err != nil {
 		return statusResp, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Ensure a successful HTTP response.
 	if resp.StatusCode != http.StatusOK {

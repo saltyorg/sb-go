@@ -72,7 +72,9 @@ func ValidateHetznerVLANConfig(config *HetznerVLANConfig, inputMap map[string]an
 	logging.DebugBool(verboseMode, "\nDEBUG: ValidateHetznerVLANConfig called with config: %+v, inputMap: %+v", config, inputMap)
 	validate := validator.New()
 	logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - registering custom validators")
-	RegisterCustomValidators(validate)
+	if err := RegisterCustomValidators(validate); err != nil {
+		return err
+	}
 	logging.DebugBool(verboseMode, "ValidateHetznerVLANConfig - registering whole_number validator")
 	err := validate.RegisterValidation("whole_number", wholeNumberValidator)
 	if err != nil {

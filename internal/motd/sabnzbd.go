@@ -155,7 +155,7 @@ func getSabnzbdQueueInfo(instance config.AppInstance) (SabnzbdInfo, error) {
 	if err != nil {
 		return result, fmt.Errorf("failed to connect to SABnzbd: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return result, fmt.Errorf("SABnzbd API returned status code %d", resp.StatusCode)

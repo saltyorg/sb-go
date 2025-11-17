@@ -86,7 +86,7 @@ func (m *MockCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, nam
 	// Write some mock output if stdout is provided
 	if stdout != nil {
 		if w, ok := stdout.(io.Writer); ok {
-			w.Write([]byte("mock output"))
+			_, _ = w.Write([]byte("mock output")) // Ignore write errors in mock
 		}
 	}
 	return nil

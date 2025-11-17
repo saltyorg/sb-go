@@ -90,19 +90,9 @@ vet: ## Run go vet
 	@echo "$(GREEN)Running go vet...$(NC)"
 	go vet ./...
 
-lint: ## Run linters (staticcheck or golangci-lint if available)
-	@echo "$(GREEN)Running linters...$(NC)"
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		echo "Running golangci-lint..."; \
-		golangci-lint run ./...; \
-	elif command -v staticcheck >/dev/null 2>&1; then \
-		echo "Running staticcheck..."; \
-		staticcheck ./...; \
-	else \
-		echo "$(YELLOW)No linter found. Install golangci-lint or staticcheck.$(NC)"; \
-		echo "  brew install golangci-lint (macOS)"; \
-		echo "  go install honnef.co/go/tools/cmd/staticcheck@latest"; \
-	fi
+lint: ## Run golangci-lint (always uses latest version)
+	@echo "$(GREEN)Running golangci-lint (latest version)...$(NC)"
+	@go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run ./...
 
 check: fmt vet lint ## Run all code quality checks (fmt, vet, lint)
 

@@ -370,7 +370,7 @@ func writeDeb822Sources(sourcesFile, content string) error {
 	if err != nil {
 		return fmt.Errorf("error opening %s for writing: %w", sourcesFile, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	writer := bufio.NewWriter(file)
 	if _, err := writer.WriteString(content); err != nil {
@@ -434,7 +434,7 @@ func addRepo(repoLine, sourcesFile string) error {
 	if err != nil {
 		return fmt.Errorf("error opening %s for writing: %w", sourcesFile, err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	writer := bufio.NewWriter(file)
 	for _, line := range uniqueLines {

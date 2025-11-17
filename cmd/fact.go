@@ -59,7 +59,7 @@ Example usage:
 func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error {
 	if len(args) < 1 {
 		fmt.Print("Error: Role name is required\n\n")
-		cmd.Help()
+		_ = cmd.Help()
 		normalStyle := lipgloss.NewStyle()
 		return fmt.Errorf("%s", normalStyle.Render("role name is required"))
 	}
@@ -125,7 +125,7 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 		// For save, we must have an instance
 		if len(args) < 2 {
 			fmt.Println("Error: Instance name is required for save method")
-			cmd.Help()
+			_ = cmd.Help()
 			normalStyle := lipgloss.NewStyle()
 			return fmt.Errorf("%s", normalStyle.Render("instance name is required for save method"))
 		}
@@ -184,7 +184,7 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 			// For instance or key deletion, we need an instance
 			if len(args) < 2 {
 				fmt.Println("Error: Instance name is required for instance or key deletion")
-				cmd.Help()
+				_ = cmd.Help()
 				normalStyle := lipgloss.NewStyle()
 				return fmt.Errorf("%s", normalStyle.Render("instance name is required for instance or key deletion"))
 			}
@@ -211,7 +211,7 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 
 	default:
 		fmt.Printf("Unknown method: %s\n", config.method)
-		cmd.Help()
+		_ = cmd.Help()
 		return fmt.Errorf("unknown method: %s", config.method)
 	}
 }

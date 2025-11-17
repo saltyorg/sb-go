@@ -411,13 +411,13 @@ func copyBinaryFile(srcPath, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("error opening source file %s: %w", srcPath, err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	destFile, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("error creating destination file %s: %w", destPath, err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	// Copy contents
 	if _, err := io.Copy(destFile, srcFile); err != nil {
@@ -468,13 +468,13 @@ func copyConfigFile(srcPath, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("error opening source file %s: %w", srcPath, err)
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 
 	destFile, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("error creating destination file %s: %w", destPath, err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	// Set Permissions
 	if err := os.Chmod(destPath, 0755); err != nil {

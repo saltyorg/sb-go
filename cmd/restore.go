@@ -281,7 +281,7 @@ func validateFileHeader(filePath string, verbose bool) error {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	n, err := f.Read(header)
-	f.Close()
+	_ = f.Close()
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("failed to read header: %w", err)
 	}
@@ -348,7 +348,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 	if err := setupRestoreFolders(dir, folder, verbose); err != nil {
 		return 0, err
 	}
-	defer os.RemoveAll(folder) // Clean up the temp folder afterward
+	defer func() { _ = os.RemoveAll(folder) }() // Clean up the temp folder afterward
 
 	userHash := fmt.Sprintf("%x", sha1.Sum([]byte(user)))
 	if verbose {
@@ -414,7 +414,7 @@ func validateURL(url string, verbose bool) bool {
 		}
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if verbose {
 		fmt.Printf("DEBUG: URL validation status code: %d\n", resp.StatusCode)
 	}
@@ -429,7 +429,7 @@ func downloadFile(url, filepath string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bad status: %s", resp.Status)
@@ -439,7 +439,7 @@ func downloadFile(url, filepath string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {

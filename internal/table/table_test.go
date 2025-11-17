@@ -181,7 +181,7 @@ func TestMultipleColspanSections(t *testing.T) {
 	rowIndex := 2
 	table.AddRow("\x1b[1mSandbox\x1b[0m")
 	table.SetColSpans(rowIndex, 2)
-	rowIndex++
+	_ = rowIndex // rowIndex is set but not used further in this test
 
 	table.AddRow("sandbox-app1", "sb install sandbox-sandbox-app1")
 	table.AddRow("sandbox-app2", "sb install sandbox-sandbox-app2")

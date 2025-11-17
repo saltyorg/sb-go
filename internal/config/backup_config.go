@@ -68,7 +68,9 @@ func ValidateBackupConfig(config *BackupConfig, inputMap map[string]any) error {
 
 	// Register custom validators (from generic.go).
 	logging.DebugBool(verboseMode, "ValidateBackupConfig - registering custom validators")
-	RegisterCustomValidators(validate)
+	if err := RegisterCustomValidators(validate); err != nil {
+		return err
+	}
 
 	// Validate the overall structure.
 	logging.DebugBool(verboseMode, "ValidateBackupConfig - validating struct: %+v", config)

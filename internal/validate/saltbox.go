@@ -249,7 +249,7 @@ func validateConfigWithSchema(configPath, schemaPath string) error {
 	}
 
 	// Perform schema validation with async API checks
-	syncErr, asyncCtx := schema.ValidateWithTypeFlexibilityAsync(inputMap)
+	asyncCtx, syncErr := schema.ValidateWithTypeFlexibilityAsync(inputMap)
 	if syncErr != nil {
 		return fmt.Errorf("schema validation failed: %w", syncErr)
 	}

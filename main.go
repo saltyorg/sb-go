@@ -21,7 +21,7 @@ import (
 // and renders each line separately for better readability.
 func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
 	// Print error header (already styled by Fang)
-	fmt.Fprintln(w, styles.ErrorHeader.String())
+	_, _ = fmt.Fprintln(w, styles.ErrorHeader.String())
 
 	// Split error message by line breaks
 	errorText := err.Error()
@@ -36,15 +36,15 @@ func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
 			// This allows error messages with embedded lipgloss styles and ANSI codes
 			// to display correctly without Fang's titleFirstWord transform interfering
 			lineStyle := styles.ErrorText.UnsetTransform().UnsetWidth()
-			fmt.Fprintln(w, lineStyle.Render(line))
+			_, _ = fmt.Fprintln(w, lineStyle.Render(line))
 		} else {
-			fmt.Fprintln(w) // Preserve blank lines
+			_, _ = fmt.Fprintln(w) // Preserve blank lines
 		}
 	}
 
 	// Add trailing newline if error doesn't end with one
 	if !strings.HasSuffix(errorText, "\n") {
-		fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w)
 	}
 }
 
@@ -72,10 +72,10 @@ func main() {
 	if colorProfile := os.Getenv("SB_COLOR_PROFILE"); colorProfile != "" {
 		switch colorProfile {
 		case "truecolor":
-			os.Setenv("COLORTERM", "truecolor")
+			_ = os.Setenv("COLORTERM", "truecolor")
 			lipgloss.SetColorProfile(termenv.TrueColor)
 		case "ansi256":
-			os.Setenv("COLORTERM", "256color")
+			_ = os.Setenv("COLORTERM", "256color")
 			lipgloss.SetColorProfile(termenv.ANSI256)
 		case "ansi":
 			lipgloss.SetColorProfile(termenv.ANSI)
@@ -83,12 +83,12 @@ func main() {
 			lipgloss.SetColorProfile(termenv.Ascii)
 		default:
 			// Invalid value, use default (truecolor)
-			os.Setenv("COLORTERM", "truecolor")
+			_ = os.Setenv("COLORTERM", "truecolor")
 			lipgloss.SetColorProfile(termenv.TrueColor)
 		}
 	} else {
 		// Default to truecolor if not set
-		os.Setenv("COLORTERM", "truecolor")
+		_ = os.Setenv("COLORTERM", "truecolor")
 		lipgloss.SetColorProfile(termenv.TrueColor)
 	}
 

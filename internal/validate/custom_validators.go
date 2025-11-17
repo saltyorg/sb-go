@@ -70,7 +70,9 @@ func (ctx *AsyncValidationContext) AddAPIValidation(name string, validator Async
 func (ctx *AsyncValidationContext) Wait() []error {
 	// Close the results channel when all goroutines are done
 	go func() {
-		ctx.eg.Wait()
+		// We don't use errgroup's error return because errors are collected via the results channel
+		// Each goroutine returns nil to errgroup (see AddAPIValidation)
+		_ = ctx.eg.Wait() // Errors are collected via channel, not errgroup
 		close(ctx.results)
 	}()
 
@@ -615,7 +617,7 @@ func validateDockerhubCredentials(username, token string) error {
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != http.StatusOK {
 		var respBody map[string]any
