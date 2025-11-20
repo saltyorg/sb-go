@@ -13,7 +13,7 @@ require (
 	github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20251118172736-77d017256798
-	github.com/cloudflare/cloudflare-go/v6 v6.2.0
+	github.com/cloudflare/cloudflare-go/v6 v6.3.0
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/mattn/go-isatty v0.0.20
