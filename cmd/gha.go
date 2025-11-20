@@ -62,6 +62,12 @@ var ghaCmd = &cobra.Command{
 		}
 		fmt.Println("Default config files copy completed successfully")
 
+		fmt.Println("Starting Git hooks initialization...")
+		if err := setup.InitializeGitHooks(ctx); err != nil {
+			return fmt.Errorf("error initializing Git hooks: %w", err)
+		}
+		fmt.Println("Git hooks initialization completed successfully")
+
 		fmt.Println("GHA setup completed successfully!")
 		return nil
 	},
