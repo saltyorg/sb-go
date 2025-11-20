@@ -13,12 +13,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout sb-go repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: sb-go
 
       - name: Checkout Saltbox repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: saltyorg/Saltbox
           path: saltbox
