@@ -341,6 +341,36 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) error {
 	return nil
 }
 
+// InitializeGitHooks activates git hooks for the Saltbox repository.
+func InitializeGitHooks(ctx context.Context) error {
+	saltboxPath := constants.SaltboxRepoPath
+	initHooksScript := filepath.Join(saltboxPath, "bin", "git", "init-hooks")
+
+	// Check if the init-hooks script exists
+	if _, err := os.Stat(initHooksScript); os.IsNotExist(err) {
+		// Script doesn't exist, skip silently
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("error checking for init-hooks script: %w", err)
+	}
+
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Activating Git hooks", func() error {
+		result, err := executor.Run(ctx, "bash",
+			executor.WithArgs(initHooksScript),
+			executor.WithWorkingDir(saltboxPath),
+			executor.WithOutputMode(executor.OutputModeCombined),
+		)
+		if err != nil {
+			return fmt.Errorf("%w: %s", err, string(result.Combined))
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("error activating Git hooks: %w", err)
+	}
+
+	return nil
+}
+
 // InstallPipDependencies installs pip dependencies in the Ansible virtual environment.
 // The context parameter allows for cancellation of long-running operations.
 func InstallPipDependencies(ctx context.Context, verbose bool) error {

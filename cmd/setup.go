@@ -85,6 +85,11 @@ var setupCmd = &cobra.Command{
 			return fmt.Errorf("error setting up Saltbox repository: %w", err)
 		}
 
+		// Initialize Git hooks
+		if err := setup.InitializeGitHooks(ctx); err != nil {
+			return fmt.Errorf("error initializing Git hooks: %w", err)
+		}
+
 		// Install pip3 Dependencies
 		if err := setup.InstallPipDependencies(ctx, verbose); err != nil {
 			return fmt.Errorf("error installing pip dependencies: %w", err)
