@@ -32,7 +32,7 @@ func handleDiag(cmd *cobra.Command) error {
 		constants.SaltboxPlaybookPath(),
 		constants.AnsiblePlaybookBinaryPath,
 		tags,
-		false,
+		true,
 	)
 	if err != nil {
 		return fmt.Errorf("error running diagnostic role: %w", err)
