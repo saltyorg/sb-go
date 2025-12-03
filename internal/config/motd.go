@@ -26,7 +26,14 @@ type MOTDConfig struct {
 	Nzbget      []UserPassAppInstance `yaml:"nzbget"`
 	Qbittorrent []UserPassAppInstance `yaml:"qbittorrent"`
 	Rtorrent    []UserPassAppInstance `yaml:"rtorrent"`
+	Systemd     *SystemdConfig        `yaml:"systemd"`
 	Colors      *MOTDColors           `yaml:"colors"`
+}
+
+// SystemdConfig represents configuration for the systemd services section
+type SystemdConfig struct {
+	AdditionalServices []string `yaml:"additional_services"`
+	StripPrefixes      []string `yaml:"strip_prefixes"`
 }
 
 // MOTDColors represents customizable color scheme for MOTD

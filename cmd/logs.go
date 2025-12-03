@@ -1,17 +1,16 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/styles"
+	"github.com/saltyorg/sb-go/internal/systemd"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -1053,18 +1052,11 @@ func parseJSONLogs(output []byte) ([]logEntry, error) {
 	return entries, nil
 }
 
-// serviceInfo holds service name and status information
-type serviceInfo struct {
-	name    string
-	active  string
-	sub     string
-	runtime string
-}
-
 func handleLogs() error {
-	filters := []string{"saltbox_managed_", "docker"}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	services, err := getFilteredSystemdServices(filters)
+	services, err := systemd.GetFilteredServices(ctx, systemd.DefaultFilters)
 	if err != nil {
 		return fmt.Errorf("error getting systemd services: %w", err)
 	}
@@ -1077,19 +1069,19 @@ func handleLogs() error {
 	// Calculate maximum service name length for alignment
 	maxNameLength := 0
 	for _, service := range services {
-		if len(service.name) > maxNameLength {
-			maxNameLength = len(service.name)
+		if len(service.Name) > maxNameLength {
+			maxNameLength = len(service.Name)
 		}
 	}
 
-	// Convert serviceInfo slice to list items
+	// Convert systemd.ServiceInfo slice to list items
 	items := make([]list.Item, len(services))
 	for i, service := range services {
 		items[i] = serviceItem{
-			name:      service.name,
-			active:    service.active,
-			sub:       service.sub,
-			runtime:   service.runtime,
+			name:      service.Name,
+			active:    service.Active,
+			sub:       service.Sub,
+			runtime:   service.Runtime,
 			maxLength: maxNameLength,
 		}
 	}
@@ -1137,167 +1129,4 @@ func handleLogs() error {
 	}
 
 	return nil
-}
-
-func getFilteredSystemdServices(filters []string) ([]serviceInfo, error) {
-	// Use context with timeout for systemctl command
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Use a map to deduplicate services across multiple filter queries
-	serviceMap := make(map[string]serviceInfo)
-
-	// For each filter pattern, run a targeted systemctl query
-	for _, filter := range filters {
-		// Use list-units with glob pattern for faster, targeted queries
-		// This filters at the systemd level instead of fetching all services
-		pattern := filter + "*"
-		result, err := executor.Run(ctx, "systemctl",
-			executor.WithArgs("list-units", pattern, "--type=service", "--all", "--no-pager"),
-			executor.WithOutputMode(executor.OutputModeCombined),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list systemd services for pattern %s: %w", pattern, err)
-		}
-
-		output := result.Combined
-
-		// Parse list-units output format: "UNIT LOAD ACTIVE SUB DESCRIPTION"
-		scanner := bufio.NewScanner(strings.NewReader(string(output)))
-		for scanner.Scan() {
-			line := scanner.Text()
-			trimmed := strings.TrimSpace(line)
-
-			// Skip empty lines, header, footer
-			if trimmed == "" || strings.HasPrefix(trimmed, "UNIT") ||
-				strings.HasPrefix(trimmed, "Legend:") || strings.HasPrefix(trimmed, "LOAD") ||
-				strings.Contains(line, "loaded units listed") ||
-				strings.HasPrefix(trimmed, "To show all") {
-				continue
-			}
-
-			// Extract service name and status (columns: UNIT LOAD ACTIVE SUB DESCRIPTION)
-			// Lines may start with ● for failed services
-			fields := strings.Fields(line)
-			if len(fields) >= 4 {
-				serviceName := strings.TrimPrefix(fields[0], "●")
-				serviceName = strings.TrimSpace(serviceName)
-				if strings.HasSuffix(serviceName, ".service") {
-					serviceName = strings.TrimSuffix(serviceName, ".service")
-					// fields[1] is LOAD, fields[2] is ACTIVE, fields[3] is SUB
-					serviceMap[serviceName] = serviceInfo{
-						name:   serviceName,
-						active: fields[2],
-						sub:    fields[3],
-					}
-				}
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			return nil, fmt.Errorf("scanning systemd services output failed: %w", err)
-		}
-	}
-
-	// Convert map to sorted slice
-	filteredServices := make([]serviceInfo, 0, len(serviceMap))
-	for _, service := range serviceMap {
-		filteredServices = append(filteredServices, service)
-	}
-
-	// Sort alphabetically by name
-	sort.Slice(filteredServices, func(i, j int) bool {
-		return filteredServices[i].name < filteredServices[j].name
-	})
-
-	// Fetch runtime information for active services
-	for i := range filteredServices {
-		if filteredServices[i].active == "active" {
-			runtime, err := getServiceRuntime(ctx, filteredServices[i].name)
-			if err == nil {
-				filteredServices[i].runtime = runtime
-			}
-		}
-	}
-
-	return filteredServices, nil
-}
-
-// getServiceRuntime gets the runtime duration for an active service
-func getServiceRuntime(ctx context.Context, serviceName string) (string, error) {
-	serviceUnit := serviceName
-	if !strings.HasSuffix(serviceUnit, ".service") {
-		serviceUnit = serviceUnit + ".service"
-	}
-
-	result, err := executor.Run(ctx, "systemctl",
-		executor.WithArgs("show", serviceUnit, "--property=ActiveEnterTimestamp", "--no-pager"),
-		executor.WithOutputMode(executor.OutputModeCombined),
-	)
-	if err != nil {
-		return "", err
-	}
-
-	output := strings.TrimSpace(string(result.Combined))
-	// Output format: ActiveEnterTimestamp=Mon 2025-11-10 10:11:29 CET
-	parts := strings.SplitN(output, "=", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		return "", fmt.Errorf("no timestamp found")
-	}
-
-	timestampStr := parts[1]
-	// Parse the timestamp
-	// Try multiple formats that systemd might use
-	var startTime time.Time
-	formats := []string{
-		"Mon 2006-01-02 15:04:05 MST",
-		time.RFC1123,
-		time.RFC1123Z,
-		time.RFC3339,
-	}
-
-	for _, format := range formats {
-		t, err := time.Parse(format, timestampStr)
-		if err == nil {
-			startTime = t
-			break
-		}
-	}
-
-	if startTime.IsZero() {
-		return "", fmt.Errorf("failed to parse timestamp: %s", timestampStr)
-	}
-
-	// Calculate runtime duration
-	duration := time.Since(startTime)
-	return formatDuration(duration), nil
-}
-
-// formatDuration formats a duration into a human-readable string
-func formatDuration(d time.Duration) string {
-	if d < time.Minute {
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	}
-	if d < time.Hour {
-		minutes := int(d.Minutes())
-		seconds := int(d.Seconds()) % 60
-		if seconds > 0 {
-			return fmt.Sprintf("%dm %ds", minutes, seconds)
-		}
-		return fmt.Sprintf("%dm", minutes)
-	}
-	if d < 24*time.Hour {
-		hours := int(d.Hours())
-		minutes := int(d.Minutes()) % 60
-		if minutes > 0 {
-			return fmt.Sprintf("%dh %dm", hours, minutes)
-		}
-		return fmt.Sprintf("%dh", hours)
-	}
-	days := int(d.Hours()) / 24
-	hours := int(d.Hours()) % 24
-	if hours > 0 {
-		return fmt.Sprintf("%dd %dh", days, hours)
-	}
-	return fmt.Sprintf("%dd", days)
 }

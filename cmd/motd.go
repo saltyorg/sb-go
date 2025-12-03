@@ -36,6 +36,7 @@ type motdConfig struct {
 	showRtorrent         bool
 	showSabnzbd          bool
 	showSessions         bool
+	showSystemd          bool
 	showTraefik          bool
 	showUptime           bool
 	shareMode            bool
@@ -79,6 +80,7 @@ last login, user sessions, process information, and system update status based o
 		config.showRtorrent, _ = cmd.Flags().GetBool("rtorrent")
 		config.showSabnzbd, _ = cmd.Flags().GetBool("sabnzbd")
 		config.showSessions, _ = cmd.Flags().GetBool("sessions")
+		config.showSystemd, _ = cmd.Flags().GetBool("systemd")
 		config.showTraefik, _ = cmd.Flags().GetBool("traefik")
 		config.showUptime, _ = cmd.Flags().GetBool("uptime")
 		config.bannerFile, _ = cmd.Flags().GetString("banner-file")
@@ -121,6 +123,7 @@ func runMotdCommand(config *motdConfig) error {
 		config.showRtorrent = true
 		config.showSabnzbd = true
 		config.showSessions = true
+		config.showSystemd = true
 		config.showTraefik = true
 		config.showUptime = true
 	}
@@ -130,7 +133,7 @@ func runMotdCommand(config *motdConfig) error {
 		!config.showDocker && !config.showEmby && !config.showGPU && !config.showJellyfin && !config.showKernel && !config.showLastLogin &&
 		!config.showMemory && !config.showNzbget && !config.showPlex && !config.showProcesses && !config.showQbittorrent &&
 		!config.showQueues && !config.showRebootRequired && !config.showRtorrent && !config.showSabnzbd && !config.showSessions &&
-		!config.showTraefik && !config.showUptime {
+		!config.showSystemd && !config.showTraefik && !config.showUptime {
 		return fmt.Errorf("no information selected to display (use --all or specific flags)")
 	}
 
@@ -220,16 +223,17 @@ func displayMotd(config *motdConfig, verbose bool) error {
 		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 11},
 		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 12},
 		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 13},
-		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 14},
-		{Key: "Traefik:", Provider: motd.GetTraefikInfoWithContext, Timeout: 10 * time.Second, Order: 15},
-		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 16},
-		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 17},
-		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 18},
-		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 19},
-		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 20},
-		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 21},
-		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 22},
-		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 23},
+		{Key: "Services:", Provider: motd.GetSystemdServicesInfoWithContext, Timeout: 5 * time.Second, Order: 14},
+		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 15},
+		{Key: "Traefik:", Provider: motd.GetTraefikInfoWithContext, Timeout: 10 * time.Second, Order: 16},
+		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 17},
+		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 18},
+		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 19},
+		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 20},
+		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 21},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 22},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 23},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 24},
 	}
 
 	// Filter sources based on enabled flags
@@ -248,6 +252,7 @@ func displayMotd(config *motdConfig, verbose bool) error {
 		"User Sessions:":   config.showSessions,
 		"Last login:":      config.showLastLogin,
 		"Disk Usage:":      config.showDisk,
+		"Services:":        config.showSystemd,
 		"Docker:":          config.showDocker,
 		"Download Queues:": config.showQueues,
 		"SABnzbd:":         config.showSabnzbd,
@@ -342,6 +347,7 @@ func init() {
 	motdCmd.Flags().Bool("rtorrent", false, "Show rTorrent queue information")
 	motdCmd.Flags().Bool("sabnzbd", false, "Show SABnzbd queue information")
 	motdCmd.Flags().Bool("sessions", false, "Show active user sessions")
+	motdCmd.Flags().Bool("systemd", false, "Show systemd services status")
 	motdCmd.Flags().Bool("traefik", false, "Show Traefik router status information")
 	motdCmd.Flags().Bool("uptime", false, "Show uptime information")
 

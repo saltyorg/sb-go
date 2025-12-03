@@ -515,3 +515,27 @@ func GetTraefikInfoWithContext(ctx context.Context, verbose bool) string {
 		return "" // Return an empty string on timeout to hide this section
 	}
 }
+
+// GetSystemdServicesInfoWithContext provides systemd services info with context/timeout support
+func GetSystemdServicesInfoWithContext(ctx context.Context, verbose bool) string {
+	ch := make(chan string, 1)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Panic in systemd services info provider: %v\n", r)
+				}
+				ch <- "" // Return empty on panic to hide this section
+			}
+		}()
+		ch <- GetSystemdServicesInfo(ctx, verbose)
+	}()
+
+	select {
+	case result := <-ch:
+		return result
+	case <-ctx.Done():
+		return "" // Return an empty string on timeout to hide this section
+	}
+}
