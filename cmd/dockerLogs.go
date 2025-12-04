@@ -1092,7 +1092,7 @@ func parseDockerLogs(reader io.Reader) ([]dockerLogEntry, error) {
 
 func handleDockerLogs() error {
 	ctx := context.Background()
-	cli, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
+	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}

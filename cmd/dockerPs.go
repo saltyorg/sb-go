@@ -30,7 +30,7 @@ var psCmd = &cobra.Command{
 ports (as potentially exposed by Traefik labels) and their external port bindings.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		cli, err := client.New(client.FromEnv, client.WithAPIVersionNegotiation())
+		cli, err := client.New(client.FromEnv)
 		if err != nil {
 			return err
 		}
