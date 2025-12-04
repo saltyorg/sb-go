@@ -30,9 +30,10 @@ var forceUpdate bool
 
 // selfUpdateCmd represents the selfUpdate command
 var selfUpdateCmd = &cobra.Command{
-	Use:   "self-update",
-	Short: "Update Saltbox CLI",
-	Long:  `Update Saltbox CLI`,
+	Use:    "self-update",
+	Hidden: true,
+	Short:  "Update Saltbox CLI",
+	Long:   `Update Saltbox CLI`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check if self-update is disabled at build time (unless the force flag is used)
 		if runtime.DisableSelfUpdate == "true" && !forceUpdate {
