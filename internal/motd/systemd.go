@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/config"
@@ -11,8 +12,14 @@ import (
 	"github.com/saltyorg/sb-go/internal/systemd"
 )
 
-// defaultStripPrefixes are the prefixes to strip from service names by default
-var defaultStripPrefixes = []string{"saltbox_managed_"}
+// defaultDisplayNames maps service names to their display names
+var defaultDisplayNames = map[string]string{
+	"docker":                            "Docker",
+	"saltbox_managed_docker_controller": "Saltbox Docker Controller",
+	"saltbox_managed_docker_controller_helper": "Saltbox Docker Controller Helper",
+	"saltbox_managed_docker_update_hosts":      "Saltbox Docker Hosts Manager",
+	"saltbox_managed_mergerfs":                 "Mergerfs",
+}
 
 // GetSystemdServicesInfo returns formatted information about systemd services.
 // It uses the default filters (saltbox_managed_* prefix and docker exact match)
@@ -20,16 +27,14 @@ var defaultStripPrefixes = []string{"saltbox_managed_"}
 func GetSystemdServicesInfo(ctx context.Context, verbose bool) string {
 	// Load config if available
 	var additionalServices []string
-	stripPrefixes := defaultStripPrefixes
+	var userDisplayNames map[string]string
 	configPath := constants.SaltboxMOTDConfigPath
 
 	if _, err := os.Stat(configPath); err == nil {
 		cfg, err := config.LoadConfig(configPath)
 		if err == nil && cfg.Systemd != nil {
 			additionalServices = cfg.Systemd.AdditionalServices
-			if len(cfg.Systemd.StripPrefixes) > 0 {
-				stripPrefixes = cfg.Systemd.StripPrefixes
-			}
+			userDisplayNames = cfg.Systemd.DisplayNames
 		}
 	}
 
@@ -47,32 +52,47 @@ func GetSystemdServicesInfo(ctx context.Context, verbose bool) string {
 		return ""
 	}
 
-	// Build display names and find max length for alignment
-	displayNames := make([]string, len(services))
+	// Build display names and create index for sorting
+	type serviceWithDisplay struct {
+		service     systemd.ServiceInfo
+		displayName string
+	}
+	servicesWithNames := make([]serviceWithDisplay, len(services))
 	maxNameLen := 0
 	for i, svc := range services {
-		displayNames[i] = getDisplayName(svc.Name, stripPrefixes)
-		if len(displayNames[i]) > maxNameLen {
-			maxNameLen = len(displayNames[i])
+		displayName := getDisplayName(svc.Name, userDisplayNames)
+		servicesWithNames[i] = serviceWithDisplay{service: svc, displayName: displayName}
+		if len(displayName) > maxNameLen {
+			maxNameLen = len(displayName)
 		}
 	}
 
+	// Sort by display name
+	sort.Slice(servicesWithNames, func(i, j int) bool {
+		return servicesWithNames[i].displayName < servicesWithNames[j].displayName
+	})
+
 	var lines []string
-	for i, svc := range services {
-		line := formatServiceLine(svc, displayNames[i], maxNameLen)
+	for _, swd := range servicesWithNames {
+		line := formatServiceLine(swd.service, swd.displayName, maxNameLen)
 		lines = append(lines, line)
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-// getDisplayName returns the display name for a service after stripping configured prefixes.
-func getDisplayName(name string, stripPrefixes []string) string {
-	for _, prefix := range stripPrefixes {
-		if strings.HasPrefix(name, prefix) {
-			return strings.TrimPrefix(name, prefix)
-		}
+// getDisplayName returns the display name for a service.
+// It checks user-configured display names first, then falls back to defaults.
+func getDisplayName(name string, userDisplayNames map[string]string) string {
+	// User config takes priority
+	if displayName, ok := userDisplayNames[name]; ok {
+		return displayName
 	}
+	// Fall back to built-in defaults
+	if displayName, ok := defaultDisplayNames[name]; ok {
+		return displayName
+	}
+	// No mapping found, return original name
 	return name
 }
 

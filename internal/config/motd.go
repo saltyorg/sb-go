@@ -32,8 +32,8 @@ type MOTDConfig struct {
 
 // SystemdConfig represents configuration for the systemd services section
 type SystemdConfig struct {
-	AdditionalServices []string `yaml:"additional_services"`
-	StripPrefixes      []string `yaml:"strip_prefixes"`
+	AdditionalServices []string          `yaml:"additional_services"`
+	DisplayNames       map[string]string `yaml:"display_names"`
 }
 
 // MOTDColors represents customizable color scheme for MOTD
