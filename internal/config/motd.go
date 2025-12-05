@@ -15,25 +15,86 @@ import (
 
 // MOTDConfig represents the MOTD configuration structure
 type MOTDConfig struct {
-	Sonarr      []AppInstance         `yaml:"sonarr"`
-	Radarr      []AppInstance         `yaml:"radarr"`
-	Lidarr      []AppInstance         `yaml:"lidarr"`
-	Readarr     []AppInstance         `yaml:"readarr"`
-	Plex        []PlexInstance        `yaml:"plex"`
-	Jellyfin    []JellyfinInstance    `yaml:"jellyfin"`
-	Emby        []EmbyInstance        `yaml:"emby"`
-	Sabnzbd     []AppInstance         `yaml:"sabnzbd"`
-	Nzbget      []UserPassAppInstance `yaml:"nzbget"`
-	Qbittorrent []UserPassAppInstance `yaml:"qbittorrent"`
-	Rtorrent    []UserPassAppInstance `yaml:"rtorrent"`
-	Systemd     *SystemdConfig        `yaml:"systemd"`
-	Colors      *MOTDColors           `yaml:"colors"`
+	Sonarr      *AppSection         `yaml:"sonarr"`
+	Radarr      *AppSection         `yaml:"radarr"`
+	Lidarr      *AppSection         `yaml:"lidarr"`
+	Readarr     *AppSection         `yaml:"readarr"`
+	Plex        *PlexSection        `yaml:"plex"`
+	Jellyfin    *JellyfinSection    `yaml:"jellyfin"`
+	Emby        *EmbySection        `yaml:"emby"`
+	Sabnzbd     *AppSection         `yaml:"sabnzbd"`
+	Nzbget      *UserPassAppSection `yaml:"nzbget"`
+	Qbittorrent *UserPassAppSection `yaml:"qbittorrent"`
+	Rtorrent    *UserPassAppSection `yaml:"rtorrent"`
+	Systemd     *SystemdConfig      `yaml:"systemd"`
+	Colors      *MOTDColors         `yaml:"colors"`
+}
+
+// AppSection wraps app instances with a section-level enabled toggle
+type AppSection struct {
+	Enabled   *bool         `yaml:"enabled,omitempty"`
+	Instances []AppInstance `yaml:"instances"`
+}
+
+// IsEnabled returns true if the section is enabled (defaults to true if not set)
+func (s *AppSection) IsEnabled() bool {
+	return s == nil || s.Enabled == nil || *s.Enabled
+}
+
+// PlexSection wraps Plex instances with a section-level enabled toggle
+type PlexSection struct {
+	Enabled   *bool          `yaml:"enabled,omitempty"`
+	Instances []PlexInstance `yaml:"instances"`
+}
+
+// IsEnabled returns true if the section is enabled (defaults to true if not set)
+func (s *PlexSection) IsEnabled() bool {
+	return s == nil || s.Enabled == nil || *s.Enabled
+}
+
+// JellyfinSection wraps Jellyfin instances with a section-level enabled toggle
+type JellyfinSection struct {
+	Enabled   *bool              `yaml:"enabled,omitempty"`
+	Instances []JellyfinInstance `yaml:"instances"`
+}
+
+// IsEnabled returns true if the section is enabled (defaults to true if not set)
+func (s *JellyfinSection) IsEnabled() bool {
+	return s == nil || s.Enabled == nil || *s.Enabled
+}
+
+// EmbySection wraps Emby instances with a section-level enabled toggle
+type EmbySection struct {
+	Enabled   *bool          `yaml:"enabled,omitempty"`
+	Instances []EmbyInstance `yaml:"instances"`
+}
+
+// IsEnabled returns true if the section is enabled (defaults to true if not set)
+func (s *EmbySection) IsEnabled() bool {
+	return s == nil || s.Enabled == nil || *s.Enabled
+}
+
+// UserPassAppSection wraps user/pass app instances with a section-level enabled toggle
+type UserPassAppSection struct {
+	Enabled   *bool                 `yaml:"enabled,omitempty"`
+	Instances []UserPassAppInstance `yaml:"instances"`
+}
+
+// IsEnabled returns true if the section is enabled (defaults to true if not set)
+func (s *UserPassAppSection) IsEnabled() bool {
+	return s == nil || s.Enabled == nil || *s.Enabled
 }
 
 // SystemdConfig represents configuration for the systemd services section
 type SystemdConfig struct {
+	Enabled            *bool             `yaml:"enabled,omitempty"`
 	AdditionalServices []string          `yaml:"additional_services"`
 	DisplayNames       map[string]string `yaml:"display_names"`
+}
+
+// IsEnabled returns true if the section is enabled (defaults to true if not set)
+func (c *SystemdConfig) IsEnabled() bool {
+	return c == nil || c.Enabled == nil || *c.Enabled
 }
 
 // MOTDColors represents customizable color scheme for MOTD
@@ -229,222 +290,245 @@ func validateMOTDNestedConfigs(config *MOTDConfig) error {
 	logging.DebugBool(verboseMode, "validateMOTDNestedConfigs called with config: %+v", config)
 
 	// Additional validation for Sonarr instances
-	for _, instance := range config.Sonarr {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Sonarr instance: %+v", instance)
-		if instance.URL != "" && instance.APIKey == "" {
-			err := fmt.Errorf("sonarr instance '%s' has URL but no API key", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.APIKey != "" && instance.URL == "" {
-			err := fmt.Errorf("sonarr instance '%s' has API key but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
+	if config.Sonarr != nil && config.Sonarr.IsEnabled() {
+		for _, instance := range config.Sonarr.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Sonarr instance: %+v", instance)
+			if instance.URL != "" && instance.APIKey == "" {
+				err := fmt.Errorf("sonarr instance '%s' has URL but no API key", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.APIKey != "" && instance.URL == "" {
+				err := fmt.Errorf("sonarr instance '%s' has API key but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
 		}
 	}
 
 	// Additional validation for Radarr instances
-	for _, instance := range config.Radarr {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Radarr instance: %+v", instance)
-		if instance.URL != "" && instance.APIKey == "" {
-			err := fmt.Errorf("radarr instance '%s' has URL but no API key", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.APIKey != "" && instance.URL == "" {
-			err := fmt.Errorf("radarr instance '%s' has API key but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
+	if config.Radarr != nil && config.Radarr.IsEnabled() {
+		for _, instance := range config.Radarr.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Radarr instance: %+v", instance)
+			if instance.URL != "" && instance.APIKey == "" {
+				err := fmt.Errorf("radarr instance '%s' has URL but no API key", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.APIKey != "" && instance.URL == "" {
+				err := fmt.Errorf("radarr instance '%s' has API key but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
 		}
 	}
 
 	// Additional validation for Lidarr instances
-	for _, instance := range config.Lidarr {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Lidarr instance: %+v", instance)
-		if instance.URL != "" && instance.APIKey == "" {
-			err := fmt.Errorf("lidarr instance '%s' has URL but no API key", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.APIKey != "" && instance.URL == "" {
-			err := fmt.Errorf("lidarr instance '%s' has API key but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
+	if config.Lidarr != nil && config.Lidarr.IsEnabled() {
+		for _, instance := range config.Lidarr.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Lidarr instance: %+v", instance)
+			if instance.URL != "" && instance.APIKey == "" {
+				err := fmt.Errorf("lidarr instance '%s' has URL but no API key", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.APIKey != "" && instance.URL == "" {
+				err := fmt.Errorf("lidarr instance '%s' has API key but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
 		}
 	}
 
 	// Additional validation for Readarr instances
-	for _, instance := range config.Readarr {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Readarr instance: %+v", instance)
-		if instance.URL != "" && instance.APIKey == "" {
-			err := fmt.Errorf("readarr instance '%s' has URL but no API key", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.APIKey != "" && instance.URL == "" {
-			err := fmt.Errorf("readarr instance '%s' has API key but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
+	if config.Readarr != nil && config.Readarr.IsEnabled() {
+		for _, instance := range config.Readarr.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Readarr instance: %+v", instance)
+			if instance.URL != "" && instance.APIKey == "" {
+				err := fmt.Errorf("readarr instance '%s' has URL but no API key", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.APIKey != "" && instance.URL == "" {
+				err := fmt.Errorf("readarr instance '%s' has API key but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
 		}
 	}
 
 	// Additional validation for Plex instances
-	for _, instance := range config.Plex {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Plex instance: %+v", instance)
-		if instance.URL != "" && instance.Token == "" {
-			err := fmt.Errorf("plex instance '%s' has URL but no token", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.Token != "" && instance.URL == "" {
-			err := fmt.Errorf("plex instance '%s' has token but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-
-		// If URL is provided, validate it's parseable
-		if instance.URL != "" {
-			_, err := url.Parse(instance.URL)
-			if err != nil {
-				err := fmt.Errorf("invalid URL for Plex instance '%s': %v", instance.Name, err)
+	if config.Plex != nil && config.Plex.IsEnabled() {
+		for _, instance := range config.Plex.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Plex instance: %+v", instance)
+			if instance.URL != "" && instance.Token == "" {
+				err := fmt.Errorf("plex instance '%s' has URL but no token", instance.Name)
 				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 				return err
+			}
+			if instance.Token != "" && instance.URL == "" {
+				err := fmt.Errorf("plex instance '%s' has token but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+
+			// If URL is provided, validate it's parseable
+			if instance.URL != "" {
+				_, err := url.Parse(instance.URL)
+				if err != nil {
+					err := fmt.Errorf("invalid URL for Plex instance '%s': %v", instance.Name, err)
+					logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+					return err
+				}
 			}
 		}
 	}
 
 	// Additional validation for Jellyfin instances
-	for _, instance := range config.Jellyfin {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Jellyfin instance: %+v", instance)
-		if instance.URL != "" && instance.Token == "" {
-			err := fmt.Errorf("jellyfin instance '%s' has URL but no token", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.Token != "" && instance.URL == "" {
-			err := fmt.Errorf("jellyfin instance '%s' has token but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.URL != "" {
-			_, err := url.Parse(instance.URL)
-			if err != nil {
-				err := fmt.Errorf("invalid URL for Jellyfin instance '%s': %v", instance.Name, err)
+	if config.Jellyfin != nil && config.Jellyfin.IsEnabled() {
+		for _, instance := range config.Jellyfin.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Jellyfin instance: %+v", instance)
+			if instance.URL != "" && instance.Token == "" {
+				err := fmt.Errorf("jellyfin instance '%s' has URL but no token", instance.Name)
 				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 				return err
+			}
+			if instance.Token != "" && instance.URL == "" {
+				err := fmt.Errorf("jellyfin instance '%s' has token but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.URL != "" {
+				_, err := url.Parse(instance.URL)
+				if err != nil {
+					err := fmt.Errorf("invalid URL for Jellyfin instance '%s': %v", instance.Name, err)
+					logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+					return err
+				}
 			}
 		}
 	}
 
 	// Additional validation for Emby instances
-	for _, instance := range config.Emby {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
+	if config.Emby != nil && config.Emby.IsEnabled() {
+		for _, instance := range config.Emby.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Emby instance: %+v", instance)
+			if instance.URL != "" && instance.Token == "" {
+				err := fmt.Errorf("emby instance '%s' has URL but no token", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.Token != "" && instance.URL == "" {
+				err := fmt.Errorf("emby instance '%s' has token but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.URL != "" {
+				_, err := url.Parse(instance.URL)
+				if err != nil {
+					err := fmt.Errorf("invalid URL for Emby instance '%s': %v", instance.Name, err)
+					logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+					return err
+				}
+			}
 		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Emby instance: %+v", instance)
-		if instance.URL != "" && instance.Token == "" {
-			err := fmt.Errorf("emby instance '%s' has URL but no token", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.Token != "" && instance.URL == "" {
-			err := fmt.Errorf("emby instance '%s' has token but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.URL != "" {
-			_, err := url.Parse(instance.URL)
-			if err != nil {
-				err := fmt.Errorf("invalid URL for Emby instance '%s': %v", instance.Name, err)
+	}
+
+	// Additional validation for Sabnzbd instances
+	if config.Sabnzbd != nil && config.Sabnzbd.IsEnabled() {
+		for _, instance := range config.Sabnzbd.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Sabnzbd instance: %+v", instance)
+			if instance.URL != "" && instance.APIKey == "" {
+				err := fmt.Errorf("sabnzbd instance '%s' has URL but no API key", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.APIKey != "" && instance.URL == "" {
+				err := fmt.Errorf("sabnzbd instance '%s' has API key but no URL", instance.Name)
 				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
 				return err
 			}
 		}
 	}
 
-	// Additional validation for Sabnzbd instances
-	for _, instance := range config.Sabnzbd {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Sabnzbd instance: %+v", instance)
-		if instance.URL != "" && instance.APIKey == "" {
-			err := fmt.Errorf("sabnzbd instance '%s' has URL but no API key", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.APIKey != "" && instance.URL == "" {
-			err := fmt.Errorf("sabnzbd instance '%s' has API key but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-	}
-
 	// Additional validation for Nzbget instances
-	for _, instance := range config.Nzbget {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Nzbget instance: %+v", instance)
-		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
-			err := fmt.Errorf("nzbget instance '%s' has URL but is missing user or password", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
-			err := fmt.Errorf("nzbget instance '%s' has user/password but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
+	if config.Nzbget != nil && config.Nzbget.IsEnabled() {
+		for _, instance := range config.Nzbget.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Nzbget instance: %+v", instance)
+			if instance.URL != "" && (instance.User == "" || instance.Password == "") {
+				err := fmt.Errorf("nzbget instance '%s' has URL but is missing user or password", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.URL == "" && (instance.User != "" || instance.Password != "") {
+				err := fmt.Errorf("nzbget instance '%s' has user/password but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
 		}
 	}
 
 	// Additional validation for Qbittorrent instances
-	for _, instance := range config.Qbittorrent {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Qbittorrent instance: %+v", instance)
-		if instance.URL != "" && (instance.User == "" || instance.Password == "") {
-			err := fmt.Errorf("qbittorrent instance '%s' has URL but is missing user or password", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
-		}
-		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
-			err := fmt.Errorf("qbittorrent instance '%s' has user/password but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
+	if config.Qbittorrent != nil && config.Qbittorrent.IsEnabled() {
+		for _, instance := range config.Qbittorrent.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating Qbittorrent instance: %+v", instance)
+			if instance.URL != "" && (instance.User == "" || instance.Password == "") {
+				err := fmt.Errorf("qbittorrent instance '%s' has URL but is missing user or password", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
+			if instance.URL == "" && (instance.User != "" || instance.Password != "") {
+				err := fmt.Errorf("qbittorrent instance '%s' has user/password but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
 		}
 	}
 
-	for _, instance := range config.Rtorrent {
-		if !instance.IsEnabled() {
-			continue // Skip validation for disabled instances
-		}
-		logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating rTorrent instance: %+v", instance)
-		// It is valid to have a URL without user/pass for rTorrent,
-		// but not the other way around.
-		if instance.URL == "" && (instance.User != "" || instance.Password != "") {
-			err := fmt.Errorf("rtorrent instance '%s' has user/password but no URL", instance.Name)
-			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
-			return err
+	// Additional validation for rTorrent instances
+	if config.Rtorrent != nil && config.Rtorrent.IsEnabled() {
+		for _, instance := range config.Rtorrent.Instances {
+			if !instance.IsEnabled() {
+				continue // Skip validation for disabled instances
+			}
+			logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - validating rTorrent instance: %+v", instance)
+			// It is valid to have a URL without user/pass for rTorrent,
+			// but not the other way around.
+			if instance.URL == "" && (instance.User != "" || instance.Password != "") {
+				err := fmt.Errorf("rtorrent instance '%s' has user/password but no URL", instance.Name)
+				logging.DebugBool(verboseMode, "validateMOTDNestedConfigs - %v", err)
+				return err
+			}
 		}
 	}
 

@@ -49,10 +49,12 @@ func GetRtorrentInfo(verbose bool) string {
 		return ""
 	}
 
-	rtorrentInstances := cfg.Rtorrent
-	if len(rtorrentInstances) == 0 {
+	// Check if rTorrent section exists and is enabled
+	if cfg.Rtorrent == nil || !cfg.Rtorrent.IsEnabled() || len(cfg.Rtorrent.Instances) == 0 {
 		return ""
 	}
+
+	rtorrentInstances := cfg.Rtorrent.Instances
 
 	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup

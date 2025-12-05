@@ -61,10 +61,12 @@ func GetSabnzbdInfo(verbose bool) string {
 		return ""
 	}
 
-	sabnzbdInstances := cfg.Sabnzbd
-	if len(sabnzbdInstances) == 0 {
+	// Check if SABnzbd section exists and is enabled
+	if cfg.Sabnzbd == nil || !cfg.Sabnzbd.IsEnabled() || len(cfg.Sabnzbd.Instances) == 0 {
 		return ""
 	}
+
+	sabnzbdInstances := cfg.Sabnzbd.Instances
 
 	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup

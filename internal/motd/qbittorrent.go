@@ -48,10 +48,12 @@ func GetQbittorrentInfo(verbose bool) string {
 		return ""
 	}
 
-	qbittorrentInstances := cfg.Qbittorrent
-	if len(qbittorrentInstances) == 0 {
+	// Check if qBittorrent section exists and is enabled
+	if cfg.Qbittorrent == nil || !cfg.Qbittorrent.IsEnabled() || len(cfg.Qbittorrent.Instances) == 0 {
 		return ""
 	}
+
+	qbittorrentInstances := cfg.Qbittorrent.Instances
 
 	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup

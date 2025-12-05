@@ -33,6 +33,10 @@ func GetSystemdServicesInfo(ctx context.Context, verbose bool) string {
 	if _, err := os.Stat(configPath); err == nil {
 		cfg, err := config.LoadConfig(configPath)
 		if err == nil && cfg.Systemd != nil {
+			// Check if section is disabled
+			if !cfg.Systemd.IsEnabled() {
+				return ""
+			}
 			additionalServices = cfg.Systemd.AdditionalServices
 			userDisplayNames = cfg.Systemd.DisplayNames
 		}

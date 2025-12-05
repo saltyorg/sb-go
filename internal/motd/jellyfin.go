@@ -47,11 +47,12 @@ func GetJellyfinInfo(verbose bool) string {
 		return ""
 	}
 
-	jellyfinInstances := cfg.Jellyfin
-	if len(jellyfinInstances) == 0 {
-
+	// Check if Jellyfin section exists and is enabled
+	if cfg.Jellyfin == nil || !cfg.Jellyfin.IsEnabled() || len(cfg.Jellyfin.Instances) == 0 {
 		return ""
 	}
+
+	jellyfinInstances := cfg.Jellyfin.Instances
 
 	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup

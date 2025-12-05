@@ -59,10 +59,12 @@ func GetEmbyInfo(verbose bool) string {
 		return ""
 	}
 
-	embyInstances := cfg.Emby
-	if len(embyInstances) == 0 {
+	// Check if Emby section exists and is enabled
+	if cfg.Emby == nil || !cfg.Emby.IsEnabled() || len(cfg.Emby.Instances) == 0 {
 		return ""
 	}
+
+	embyInstances := cfg.Emby.Instances
 
 	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup

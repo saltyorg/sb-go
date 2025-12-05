@@ -97,11 +97,12 @@ func GetPlexInfo(verbose bool) string {
 		return ""
 	}
 
-	// Check if a Plex section exists in the config
-	plexInstances := cfg.Plex
-	if len(plexInstances) == 0 {
+	// Check if a Plex section exists and is enabled in the config
+	if cfg.Plex == nil || !cfg.Plex.IsEnabled() || len(cfg.Plex.Instances) == 0 {
 		return ""
 	}
+
+	plexInstances := cfg.Plex.Instances
 
 	if verbose {
 		fmt.Printf("DEBUG: Found %d Plex instance(s) in config\n", len(plexInstances))

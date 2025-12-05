@@ -73,10 +73,12 @@ func GetNzbgetInfo(verbose bool) string {
 		return ""
 	}
 
-	nzbgetInstances := cfg.Nzbget
-	if len(nzbgetInstances) == 0 {
+	// Check if NZBGet section exists and is enabled
+	if cfg.Nzbget == nil || !cfg.Nzbget.IsEnabled() || len(cfg.Nzbget.Instances) == 0 {
 		return ""
 	}
+
+	nzbgetInstances := cfg.Nzbget.Instances
 
 	// Create a wait group and mutex for async processing
 	var wg sync.WaitGroup

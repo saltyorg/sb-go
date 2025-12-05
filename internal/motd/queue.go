@@ -56,9 +56,24 @@ func GetQueueInfo(verbose bool) string {
 		return ""
 	}
 
+	// Helper to get instance count safely
+	sonarrCount, radarrCount, lidarrCount, readarrCount := 0, 0, 0, 0
+	if cfg.Sonarr != nil {
+		sonarrCount = len(cfg.Sonarr.Instances)
+	}
+	if cfg.Radarr != nil {
+		radarrCount = len(cfg.Radarr.Instances)
+	}
+	if cfg.Lidarr != nil {
+		lidarrCount = len(cfg.Lidarr.Instances)
+	}
+	if cfg.Readarr != nil {
+		readarrCount = len(cfg.Readarr.Instances)
+	}
+
 	if verbose {
 		fmt.Printf("DEBUG: Loaded config - Sonarr: %d instances, Radarr: %d instances, Lidarr: %d instances, Readarr: %d instances\n",
-			len(cfg.Sonarr), len(cfg.Radarr), len(cfg.Lidarr), len(cfg.Readarr))
+			sonarrCount, radarrCount, lidarrCount, readarrCount)
 	}
 
 	// Create a wait group to fetch all queues concurrently
@@ -69,195 +84,203 @@ func GetQueueInfo(verbose bool) string {
 	var allQueues []QueueInfo
 
 	// Fetch Sonarr queues concurrently
-	for i, instance := range cfg.Sonarr {
-		if !instance.IsEnabled() {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Sonarr instance %d because it is disabled\n", i)
-			}
-			continue
-		}
-		if instance.URL == "" || instance.APIKey == "" {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Sonarr instance %d due to missing URL or API key\n", i)
-			}
-			continue
-		}
-
-		wg.Add(1)
-		go func(idx int, inst config.AppInstance) {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					if verbose {
-						fmt.Fprintf(os.Stderr, "PANIC in Sonarr queue fetch (instance %d): %v\n", idx, r)
-					}
-				}
-			}()
-
-			if verbose {
-				fmt.Printf("DEBUG: Processing Sonarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
-			}
-
-			queue, err := getSonarrQueueDetailed(inst, verbose)
-			if err != nil {
+	if cfg.Sonarr != nil && cfg.Sonarr.IsEnabled() {
+		for i, instance := range cfg.Sonarr.Instances {
+			if !instance.IsEnabled() {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting detailed Sonarr queue for instance %d, hiding entry: %v\n", idx, err)
+					fmt.Printf("DEBUG: Skipping Sonarr instance %d because it is disabled\n", i)
 				}
-				return
+				continue
+			}
+			if instance.URL == "" || instance.APIKey == "" {
+				if verbose {
+					fmt.Printf("DEBUG: Skipping Sonarr instance %d due to missing URL or API key\n", i)
+				}
+				continue
 			}
 
-			if verbose {
-				fmt.Printf("DEBUG: Successfully retrieved detailed Sonarr queue for instance %d: %d items\n", idx, len(queue.Items))
-			}
+			wg.Add(1)
+			go func(idx int, inst config.AppInstance) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						if verbose {
+							fmt.Fprintf(os.Stderr, "PANIC in Sonarr queue fetch (instance %d): %v\n", idx, r)
+						}
+					}
+				}()
 
-			mu.Lock()
-			allQueues = append(allQueues, queue)
-			mu.Unlock()
-		}(i, instance)
+				if verbose {
+					fmt.Printf("DEBUG: Processing Sonarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
+				}
+
+				queue, err := getSonarrQueueDetailed(inst, verbose)
+				if err != nil {
+					if verbose {
+						fmt.Printf("DEBUG: Error getting detailed Sonarr queue for instance %d, hiding entry: %v\n", idx, err)
+					}
+					return
+				}
+
+				if verbose {
+					fmt.Printf("DEBUG: Successfully retrieved detailed Sonarr queue for instance %d: %d items\n", idx, len(queue.Items))
+				}
+
+				mu.Lock()
+				allQueues = append(allQueues, queue)
+				mu.Unlock()
+			}(i, instance)
+		}
 	}
 
 	// Fetch Radarr queues concurrently
-	for i, instance := range cfg.Radarr {
-		if !instance.IsEnabled() {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Radarr instance %d because it is disabled\n", i)
-			}
-			continue
-		}
-		if instance.URL == "" || instance.APIKey == "" {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Radarr instance %d due to missing URL or API key\n", i)
-			}
-			continue
-		}
-
-		wg.Add(1)
-		go func(idx int, inst config.AppInstance) {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					if verbose {
-						fmt.Fprintf(os.Stderr, "PANIC in Radarr queue fetch (instance %d): %v\n", idx, r)
-					}
-				}
-			}()
-
-			if verbose {
-				fmt.Printf("DEBUG: Processing Radarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
-			}
-
-			queue, err := getRadarrQueueDetailed(inst, verbose)
-			if err != nil {
+	if cfg.Radarr != nil && cfg.Radarr.IsEnabled() {
+		for i, instance := range cfg.Radarr.Instances {
+			if !instance.IsEnabled() {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting detailed Radarr queue for instance %d, hiding entry: %v\n", idx, err)
+					fmt.Printf("DEBUG: Skipping Radarr instance %d because it is disabled\n", i)
 				}
-				return
+				continue
+			}
+			if instance.URL == "" || instance.APIKey == "" {
+				if verbose {
+					fmt.Printf("DEBUG: Skipping Radarr instance %d due to missing URL or API key\n", i)
+				}
+				continue
 			}
 
-			if verbose {
-				fmt.Printf("DEBUG: Successfully retrieved detailed Radarr queue for instance %d: %d items\n", idx, len(queue.Items))
-			}
+			wg.Add(1)
+			go func(idx int, inst config.AppInstance) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						if verbose {
+							fmt.Fprintf(os.Stderr, "PANIC in Radarr queue fetch (instance %d): %v\n", idx, r)
+						}
+					}
+				}()
 
-			mu.Lock()
-			allQueues = append(allQueues, queue)
-			mu.Unlock()
-		}(i, instance)
+				if verbose {
+					fmt.Printf("DEBUG: Processing Radarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
+				}
+
+				queue, err := getRadarrQueueDetailed(inst, verbose)
+				if err != nil {
+					if verbose {
+						fmt.Printf("DEBUG: Error getting detailed Radarr queue for instance %d, hiding entry: %v\n", idx, err)
+					}
+					return
+				}
+
+				if verbose {
+					fmt.Printf("DEBUG: Successfully retrieved detailed Radarr queue for instance %d: %d items\n", idx, len(queue.Items))
+				}
+
+				mu.Lock()
+				allQueues = append(allQueues, queue)
+				mu.Unlock()
+			}(i, instance)
+		}
 	}
 
 	// Fetch Lidarr queues concurrently
-	for i, instance := range cfg.Lidarr {
-		if !instance.IsEnabled() {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Lidarr instance %d because it is disabled\n", i)
-			}
-			continue
-		}
-		if instance.URL == "" || instance.APIKey == "" {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Lidarr instance %d due to missing URL or API key\n", i)
-			}
-			continue
-		}
-
-		wg.Add(1)
-		go func(idx int, inst config.AppInstance) {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					if verbose {
-						fmt.Fprintf(os.Stderr, "PANIC in Lidarr queue fetch (instance %d): %v\n", idx, r)
-					}
-				}
-			}()
-
-			if verbose {
-				fmt.Printf("DEBUG: Processing Lidarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
-			}
-
-			queue, err := getLidarrQueueDetailed(inst, verbose)
-			if err != nil {
+	if cfg.Lidarr != nil && cfg.Lidarr.IsEnabled() {
+		for i, instance := range cfg.Lidarr.Instances {
+			if !instance.IsEnabled() {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting detailed Lidarr queue for instance %d, hiding entry: %v\n", idx, err)
+					fmt.Printf("DEBUG: Skipping Lidarr instance %d because it is disabled\n", i)
 				}
-				return
+				continue
+			}
+			if instance.URL == "" || instance.APIKey == "" {
+				if verbose {
+					fmt.Printf("DEBUG: Skipping Lidarr instance %d due to missing URL or API key\n", i)
+				}
+				continue
 			}
 
-			if verbose {
-				fmt.Printf("DEBUG: Successfully retrieved detailed Lidarr queue for instance %d: %d items\n", idx, len(queue.Items))
-			}
+			wg.Add(1)
+			go func(idx int, inst config.AppInstance) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						if verbose {
+							fmt.Fprintf(os.Stderr, "PANIC in Lidarr queue fetch (instance %d): %v\n", idx, r)
+						}
+					}
+				}()
 
-			mu.Lock()
-			allQueues = append(allQueues, queue)
-			mu.Unlock()
-		}(i, instance)
+				if verbose {
+					fmt.Printf("DEBUG: Processing Lidarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
+				}
+
+				queue, err := getLidarrQueueDetailed(inst, verbose)
+				if err != nil {
+					if verbose {
+						fmt.Printf("DEBUG: Error getting detailed Lidarr queue for instance %d, hiding entry: %v\n", idx, err)
+					}
+					return
+				}
+
+				if verbose {
+					fmt.Printf("DEBUG: Successfully retrieved detailed Lidarr queue for instance %d: %d items\n", idx, len(queue.Items))
+				}
+
+				mu.Lock()
+				allQueues = append(allQueues, queue)
+				mu.Unlock()
+			}(i, instance)
+		}
 	}
 
 	// Fetch Readarr queues concurrently
-	for i, instance := range cfg.Readarr {
-		if !instance.IsEnabled() {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Readarr instance %d because it is disabled\n", i)
-			}
-			continue
-		}
-		if instance.URL == "" || instance.APIKey == "" {
-			if verbose {
-				fmt.Printf("DEBUG: Skipping Readarr instance %d due to missing URL or API key\n", i)
-			}
-			continue
-		}
-
-		wg.Add(1)
-		go func(idx int, inst config.AppInstance) {
-			defer wg.Done()
-			defer func() {
-				if r := recover(); r != nil {
-					if verbose {
-						fmt.Fprintf(os.Stderr, "PANIC in Readarr queue fetch (instance %d): %v\n", idx, r)
-					}
-				}
-			}()
-
-			if verbose {
-				fmt.Printf("DEBUG: Processing Readarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
-			}
-
-			queue, err := getReadarrQueueDetailed(inst, verbose)
-			if err != nil {
+	if cfg.Readarr != nil && cfg.Readarr.IsEnabled() {
+		for i, instance := range cfg.Readarr.Instances {
+			if !instance.IsEnabled() {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting detailed Readarr queue for instance %d, hiding entry: %v\n", idx, err)
+					fmt.Printf("DEBUG: Skipping Readarr instance %d because it is disabled\n", i)
 				}
-				return
+				continue
+			}
+			if instance.URL == "" || instance.APIKey == "" {
+				if verbose {
+					fmt.Printf("DEBUG: Skipping Readarr instance %d due to missing URL or API key\n", i)
+				}
+				continue
 			}
 
-			if verbose {
-				fmt.Printf("DEBUG: Successfully retrieved detailed Readarr queue for instance %d: %d items\n", idx, len(queue.Items))
-			}
+			wg.Add(1)
+			go func(idx int, inst config.AppInstance) {
+				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						if verbose {
+							fmt.Fprintf(os.Stderr, "PANIC in Readarr queue fetch (instance %d): %v\n", idx, r)
+						}
+					}
+				}()
 
-			mu.Lock()
-			allQueues = append(allQueues, queue)
-			mu.Unlock()
-		}(i, instance)
+				if verbose {
+					fmt.Printf("DEBUG: Processing Readarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
+				}
+
+				queue, err := getReadarrQueueDetailed(inst, verbose)
+				if err != nil {
+					if verbose {
+						fmt.Printf("DEBUG: Error getting detailed Readarr queue for instance %d, hiding entry: %v\n", idx, err)
+					}
+					return
+				}
+
+				if verbose {
+					fmt.Printf("DEBUG: Successfully retrieved detailed Readarr queue for instance %d: %d items\n", idx, len(queue.Items))
+				}
+
+				mu.Lock()
+				allQueues = append(allQueues, queue)
+				mu.Unlock()
+			}(i, instance)
+		}
 	}
 
 	// Wait for all goroutines to complete
