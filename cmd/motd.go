@@ -40,6 +40,7 @@ type motdConfig struct {
 	showTraefik          bool
 	showUptime           bool
 	shareMode            bool
+	generateConfig       bool
 	bannerFile           string
 	bannerFileToiletArgs string
 	bannerFont           string
@@ -90,56 +91,63 @@ last login, user sessions, process information, and system update status based o
 		config.bannerType, _ = cmd.Flags().GetString("type")
 		config.verbosity, _ = cmd.Flags().GetCount("verbose")
 		config.shareMode, _ = cmd.Flags().GetBool("share")
+		config.generateConfig, _ = cmd.Flags().GetBool("generate-config")
 
 		return runMotdCommand(config)
 	},
 }
 
 // runMotdCommand handles the main logic for the motd command
-func runMotdCommand(config *motdConfig) error {
+func runMotdCommand(mcfg *motdConfig) error {
+	// Handle --generate-config flag
+	if mcfg.generateConfig {
+		fmt.Print(motd.GenerateExampleConfig())
+		return nil
+	}
+
 	// Initialize custom colors from config if available
 	motd.InitializeColors()
 
 	// If --all flag is used, enable everything
-	if config.showAll {
-		config.showAptStatus = true
-		config.showCPU = true
-		config.showCpuAverages = true
-		config.showDisk = true
-		config.showDistribution = true
-		config.showDocker = true
-		config.showEmby = true
-		config.showGPU = true
-		config.showJellyfin = true
-		config.showKernel = true
-		config.showLastLogin = true
-		config.showMemory = true
-		config.showNzbget = true
-		config.showPlex = true
-		config.showProcesses = true
-		config.showQbittorrent = true
-		config.showQueues = true
-		config.showRebootRequired = true
-		config.showRtorrent = true
-		config.showSabnzbd = true
-		config.showSessions = true
-		config.showSystemd = true
-		config.showTraefik = true
-		config.showUptime = true
+	if mcfg.showAll {
+		mcfg.showAptStatus = true
+		mcfg.showCPU = true
+		mcfg.showCpuAverages = true
+		mcfg.showDisk = true
+		mcfg.showDistribution = true
+		mcfg.showDocker = true
+		mcfg.showEmby = true
+		mcfg.showGPU = true
+		mcfg.showJellyfin = true
+		mcfg.showKernel = true
+		mcfg.showLastLogin = true
+		mcfg.showMemory = true
+		mcfg.showNzbget = true
+		mcfg.showPlex = true
+		mcfg.showProcesses = true
+		mcfg.showQbittorrent = true
+		mcfg.showQueues = true
+		mcfg.showRebootRequired = true
+		mcfg.showRtorrent = true
+		mcfg.showSabnzbd = true
+		mcfg.showSessions = true
+		mcfg.showSystemd = true
+		mcfg.showTraefik = true
+		mcfg.showUptime = true
 	}
 
 	// Check if at least one flag is enabled
-	if !config.showAptStatus && !config.showCPU && !config.showCpuAverages && !config.showDisk && !config.showDistribution &&
-		!config.showDocker && !config.showEmby && !config.showGPU && !config.showJellyfin && !config.showKernel && !config.showLastLogin &&
-		!config.showMemory && !config.showNzbget && !config.showPlex && !config.showProcesses && !config.showQbittorrent &&
-		!config.showQueues && !config.showRebootRequired && !config.showRtorrent && !config.showSabnzbd && !config.showSessions &&
-		!config.showSystemd && !config.showTraefik && !config.showUptime {
+	if !mcfg.showAptStatus && !mcfg.showCPU && !mcfg.showCpuAverages && !mcfg.showDisk && !mcfg.showDistribution &&
+		!mcfg.showDocker && !mcfg.showEmby && !mcfg.showGPU && !mcfg.showJellyfin && !mcfg.showKernel && !mcfg.showLastLogin &&
+		!mcfg.showMemory && !mcfg.showNzbget && !mcfg.showPlex && !mcfg.showProcesses && !mcfg.showQbittorrent &&
+		!mcfg.showQueues && !mcfg.showRebootRequired && !mcfg.showRtorrent && !mcfg.showSabnzbd && !mcfg.showSessions &&
+		!mcfg.showSystemd && !mcfg.showTraefik && !mcfg.showUptime {
 		return fmt.Errorf("no information selected to display (use --all or specific flags)")
 	}
 
 	// Validate banner type if specified
-	if config.bannerType != "" && config.bannerType != "none" {
-		validType := slices.Contains(motd.AvailableBannerTypes, config.bannerType)
+	if mcfg.bannerType != "" && mcfg.bannerType != "none" {
+		validType := slices.Contains(motd.AvailableBannerTypes, mcfg.bannerType)
 
 		if !validType {
 			var availableTypes strings.Builder
@@ -155,12 +163,12 @@ func runMotdCommand(config *motdConfig) error {
 			}
 			availableTypes.WriteString("\n")
 
-			return fmt.Errorf("invalid banner type specified: %s%s", config.bannerType, availableTypes.String())
+			return fmt.Errorf("invalid banner type specified: %s%s", mcfg.bannerType, availableTypes.String())
 		}
 	}
 
 	// Validate font if specified
-	if config.bannerFont != "" && !motd.IsValidFont(config.bannerFont) {
+	if mcfg.bannerFont != "" && !motd.IsValidFont(mcfg.bannerFont) {
 		var availableFonts strings.Builder
 		availableFonts.WriteString("\nAvailable fonts (from /usr/share/figlet):\n")
 
@@ -175,10 +183,10 @@ func runMotdCommand(config *motdConfig) error {
 		}
 		availableFonts.WriteString("\n")
 
-		return fmt.Errorf("invalid font specified: %s%s", config.bannerFont, availableFonts.String())
+		return fmt.Errorf("invalid font specified: %s%s", mcfg.bannerFont, availableFonts.String())
 	}
 
-	return displayMotd(config, config.verbosity > 0)
+	return displayMotd(mcfg, mcfg.verbosity > 0)
 }
 
 func displayMotd(config *motdConfig, verbose bool) error {
@@ -356,6 +364,9 @@ func init() {
 
 	// Add share mode flag
 	motdCmd.Flags().Bool("share", false, "Obscure sensitive information like IP addresses for sharing screenshots")
+
+	// Add config generation flag
+	motdCmd.Flags().Bool("generate-config", false, "Print an example MOTD configuration file to stdout")
 
 	// Add banner options
 	motdCmd.Flags().String("title", "Saltbox", "Text to display in the banner")
