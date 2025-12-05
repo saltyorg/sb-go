@@ -101,7 +101,11 @@ last login, user sessions, process information, and system update status based o
 func runMotdCommand(mcfg *motdConfig) error {
 	// Handle --generate-config flag
 	if mcfg.generateConfig {
-		fmt.Print(motd.GenerateExampleConfig())
+		config, err := motd.GenerateExampleConfig()
+		if err != nil {
+			return fmt.Errorf("failed to generate example config: %w", err)
+		}
+		fmt.Print(config)
 		return nil
 	}
 

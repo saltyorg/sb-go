@@ -23,6 +23,9 @@ type SchemaRule struct {
 	CustomValidator string                 `yaml:"custom_validator"`
 	Properties      map[string]*SchemaRule `yaml:"properties"`
 	Items           *SchemaRule            `yaml:"items"` // For array validation
+	// Fields for example config generation
+	Description string `yaml:"description"` // Comment to display above the section
+	Example     any    `yaml:"example"`     // Example value for this field
 }
 
 // Schema holds validation rules

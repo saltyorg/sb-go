@@ -1,125 +1,174 @@
 package motd
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/validate"
+)
+
+// sectionOrder defines the order of sections in generated config (alphabetical).
+// This is needed because YAML maps don't preserve key order.
+var sectionOrder = []string{
+	"colors",
+	"emby",
+	"jellyfin",
+	"lidarr",
+	"nzbget",
+	"plex",
+	"qbittorrent",
+	"radarr",
+	"readarr",
+	"rtorrent",
+	"sabnzbd",
+	"sonarr",
+	"systemd",
+}
 
 // GenerateExampleConfig returns a YAML string with an example MOTD configuration
 // where all sections are disabled and contain placeholder values.
+// It reads the schema file to dynamically generate the config based on
+// descriptions and example values defined in the schema.
 // Color values are taken from the actual defaults defined in this package.
-func GenerateExampleConfig() string {
-	return fmt.Sprintf(`# Saltbox MOTD Configuration
-# All sections are disabled by default. Set enabled: true and fill in the values to use.
+func GenerateExampleConfig() (string, error) {
+	schema, err := validate.LoadSchema(constants.SaltboxMOTDSchemaPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to load schema: %w", err)
+	}
 
-# Sonarr instances for download queue information
-sonarr:
-  enabled: false
-  instances:
-    - name: Sonarr
-      url: http://localhost:8989
-      apikey: your-api-key-here
-      timeout: 5
+	var buf strings.Builder
+	buf.WriteString("# Saltbox MOTD Configuration\n")
+	buf.WriteString("# All sections are disabled by default. Set enabled: true and fill in the values to use.\n")
 
-# Radarr instances for download queue information
-radarr:
-  enabled: false
-  instances:
-    - name: Radarr
-      url: http://localhost:7878
-      apikey: your-api-key-here
-      timeout: 5
+	for _, sectionName := range sectionOrder {
+		rule, exists := schema.Rules[sectionName]
+		if !exists {
+			continue
+		}
 
-# Lidarr instances for download queue information
-lidarr:
-  enabled: false
-  instances:
-    - name: Lidarr
-      url: http://localhost:8686
-      apikey: your-api-key-here
-      timeout: 5
+		buf.WriteString("\n")
 
-# Readarr instances for download queue information
-readarr:
-  enabled: false
-  instances:
-    - name: Readarr
-      url: http://localhost:8787
-      apikey: your-api-key-here
-      timeout: 5
+		// Handle colors section specially - use Go defaults for values
+		if sectionName == "colors" {
+			buf.WriteString(generateColorsSection(rule))
+			continue
+		}
 
-# Plex instances for streaming information
-plex:
-  enabled: false
-  instances:
-    - name: Plex
-      url: http://localhost:32400
-      token: your-plex-token-here
-      timeout: 5
+		// Write section comment from description
+		if rule.Description != "" {
+			for _, line := range strings.Split(strings.TrimSpace(rule.Description), "\n") {
+				buf.WriteString(fmt.Sprintf("# %s\n", line))
+			}
+		}
 
-# Jellyfin instances for streaming information
-jellyfin:
-  enabled: false
-  instances:
-    - name: Jellyfin
-      url: http://localhost:8096
-      token: your-api-token-here
-      timeout: 5
+		// Generate the section based on its structure
+		buf.WriteString(fmt.Sprintf("%s:\n", sectionName))
+		generateSection(&buf, rule, "  ")
+	}
 
-# Emby instances for streaming information
-emby:
-  enabled: false
-  instances:
-    - name: Emby
-      url: http://localhost:8096
-      token: your-api-token-here
-      timeout: 5
+	return buf.String(), nil
+}
 
-# SABnzbd instances for download information
-sabnzbd:
-  enabled: false
-  instances:
-    - name: SABnzbd
-      url: http://localhost:8080
-      apikey: your-api-key-here
-      timeout: 5
+// generateSection generates YAML for a section based on its schema rule.
+func generateSection(buf *strings.Builder, rule *validate.SchemaRule, indent string) {
+	if rule.Properties == nil {
+		return
+	}
 
-# NZBGet instances for download information
-nzbget:
-  enabled: false
-  instances:
-    - name: NZBGet
-      url: http://localhost:6789
-      user: your-username
-      password: your-password
-      timeout: 5
+	// Define field order for section properties
+	fieldOrder := []string{"enabled", "instances", "additional_services", "display_names"}
 
-# qBittorrent instances for torrent information
-qbittorrent:
-  enabled: false
-  instances:
-    - name: qBittorrent
-      url: http://localhost:8080
-      user: your-username
-      password: your-password
-      timeout: 5
+	for _, fieldName := range fieldOrder {
+		propRule, exists := rule.Properties[fieldName]
+		if !exists {
+			continue
+		}
 
-# rTorrent instances for torrent information
-rtorrent:
-  enabled: false
-  instances:
-    - name: rTorrent
-      url: http://localhost:8080
-      user: your-username  # optional
-      password: your-password  # optional
-      timeout: 5
+		// Handle instances array specially - generate example item
+		if fieldName == "instances" && propRule.Type == "array" && propRule.Items != nil {
+			buf.WriteString(fmt.Sprintf("%sinstances:\n", indent))
+			generateInstanceExample(buf, propRule.Items, indent+"  ")
+			continue
+		}
 
-# Systemd services monitoring
-systemd:
-  enabled: false
-  additional_services: []
-  display_names: {}
+		// Use example if available
+		if propRule.Example != nil {
+			buf.WriteString(fmt.Sprintf("%s%s: %s\n", indent, fieldName, formatValue(propRule.Example)))
+		}
+	}
+}
 
-# Custom color scheme (all values are hex colors)
-# These are the default values - uncomment and modify to customize
-colors:
+// formatValue formats a value for YAML output.
+func formatValue(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case bool:
+		return fmt.Sprintf("%v", val)
+	case int, int64, float64:
+		return fmt.Sprintf("%v", val)
+	case []any:
+		if len(val) == 0 {
+			return "[]"
+		}
+		return fmt.Sprintf("%v", val)
+	case map[string]any:
+		if len(val) == 0 {
+			return "{}"
+		}
+		return fmt.Sprintf("%v", val)
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
+// generateInstanceExample generates an example instance entry from schema.
+func generateInstanceExample(buf *strings.Builder, itemRule *validate.SchemaRule, indent string) {
+	if itemRule.Properties == nil {
+		return
+	}
+
+	buf.WriteString(fmt.Sprintf("%s- ", indent))
+	first := true
+
+	// Define field order for instances
+	fieldOrder := []string{"name", "url", "apikey", "token", "user", "password", "timeout", "enabled"}
+
+	for _, fieldName := range fieldOrder {
+		fieldRule, exists := itemRule.Properties[fieldName]
+		if !exists {
+			continue
+		}
+
+		// Only include fields that have an example value defined
+		if fieldRule.Example == nil {
+			continue
+		}
+
+		if first {
+			first = false
+		} else {
+			buf.WriteString(fmt.Sprintf("%s  ", indent))
+		}
+
+		buf.WriteString(fmt.Sprintf("%s: %s\n", fieldName, formatValue(fieldRule.Example)))
+	}
+}
+
+// generateColorsSection generates the colors section with Go defaults.
+// It uses the description from schema but values from Go constants.
+func generateColorsSection(rule *validate.SchemaRule) string {
+	var buf strings.Builder
+
+	// Write description from schema
+	if rule.Description != "" {
+		for _, line := range strings.Split(strings.TrimSpace(rule.Description), "\n") {
+			buf.WriteString(fmt.Sprintf("# %s\n", line))
+		}
+	}
+
+	buf.WriteString(fmt.Sprintf(`colors:
   text:
     label: "%s"
     value: "%s"
@@ -134,5 +183,7 @@ colors:
     critical: "%s"
 `, defaultKey, defaultValue, defaultAppName,
 		defaultWarning, defaultSuccess, defaultError,
-		defaultProgressBarLow, defaultProgressBarHigh, defaultProgressBarCritical)
+		defaultProgressBarLow, defaultProgressBarHigh, defaultProgressBarCritical))
+
+	return buf.String()
 }
