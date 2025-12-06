@@ -5,7 +5,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/saltyorg/sb-go/internal/motd"
 
@@ -220,32 +219,32 @@ func displayMotd(config *motdConfig, verbose bool) error {
 		fmt.Println(banner)
 	}
 
-	// Set up info sources with appropriate timeouts and display order
+	// Set up info sources with display order
 	sources := []motd.InfoSource{
-		{Key: "Distribution:", Provider: motd.GetDistributionWithContext, Timeout: 2 * time.Second, Order: 1},
-		{Key: "Kernel:", Provider: motd.GetKernelWithContext, Timeout: 1 * time.Second, Order: 2},
-		{Key: "Uptime:", Provider: motd.GetUptimeWithContext, Timeout: 1 * time.Second, Order: 3},
-		{Key: "Load Averages:", Provider: motd.GetCpuAveragesWithContext, Timeout: 1 * time.Second, Order: 4},
-		{Key: "Processes:", Provider: motd.GetProcessCountWithContext, Timeout: 2 * time.Second, Order: 5},
-		{Key: "CPU:", Provider: motd.GetCpuInfoWithContext, Timeout: 2 * time.Second, Order: 6},
-		{Key: "GPU:", Provider: motd.GetGpuInfoWithContext, Timeout: 3 * time.Second, Order: 7},
-		{Key: "Memory Usage:", Provider: motd.GetMemoryInfoWithContext, Timeout: 2 * time.Second, Order: 8},
-		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Timeout: 5 * time.Second, Order: 9},
-		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Timeout: 2 * time.Second, Order: 10},
-		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Timeout: 1 * time.Second, Order: 11},
-		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Timeout: 3 * time.Second, Order: 12},
-		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Timeout: 3 * time.Second, Order: 13},
-		{Key: "Services:", Provider: motd.GetSystemdServicesInfoWithContext, Timeout: 5 * time.Second, Order: 14},
-		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Timeout: 5 * time.Second, Order: 15},
-		{Key: "Traefik:", Provider: motd.GetTraefikInfoWithContext, Timeout: 10 * time.Second, Order: 16},
-		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Timeout: 10 * time.Second, Order: 17},
-		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Timeout: 10 * time.Second, Order: 18},
-		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Timeout: 10 * time.Second, Order: 19},
-		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Timeout: 10 * time.Second, Order: 20},
-		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Timeout: 10 * time.Second, Order: 21},
-		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Timeout: 10 * time.Second, Order: 22},
-		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Timeout: 10 * time.Second, Order: 23},
-		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Timeout: 10 * time.Second, Order: 24},
+		{Key: "Distribution:", Provider: motd.GetDistributionWithContext, Order: 1},
+		{Key: "Kernel:", Provider: motd.GetKernelWithContext, Order: 2},
+		{Key: "Uptime:", Provider: motd.GetUptimeWithContext, Order: 3},
+		{Key: "Load Averages:", Provider: motd.GetCpuAveragesWithContext, Order: 4},
+		{Key: "Processes:", Provider: motd.GetProcessCountWithContext, Order: 5},
+		{Key: "CPU:", Provider: motd.GetCpuInfoWithContext, Order: 6},
+		{Key: "GPU:", Provider: motd.GetGpuInfoWithContext, Order: 7},
+		{Key: "Memory Usage:", Provider: motd.GetMemoryInfoWithContext, Order: 8},
+		{Key: "Package Status:", Provider: motd.GetAptStatusWithContext, Order: 9},
+		{Key: "Reboot Status:", Provider: motd.GetRebootRequiredWithContext, Order: 10},
+		{Key: "User Sessions:", Provider: motd.GetUserSessionsWithContext, Order: 11},
+		{Key: "Last login:", Provider: motd.GetLastLoginWithContext, Order: 12},
+		{Key: "Disk Usage:", Provider: motd.GetDiskInfoWithContext, Order: 13},
+		{Key: "Services:", Provider: motd.GetSystemdServicesInfoWithContext, Order: 14},
+		{Key: "Docker:", Provider: motd.GetDockerInfoWithContext, Order: 15},
+		{Key: "Traefik:", Provider: motd.GetTraefikInfoWithContext, Order: 16},
+		{Key: "Download Queues:", Provider: motd.GetQueueInfoWithContext, Order: 17},
+		{Key: "SABnzbd:", Provider: motd.GetSabnzbdInfoWithContext, Order: 18},
+		{Key: "NZBGet:", Provider: motd.GetNzbgetInfoWithContext, Order: 19},
+		{Key: "qBittorrent:", Provider: motd.GetQbittorrentInfoWithContext, Order: 20},
+		{Key: "rTorrent:", Provider: motd.GetRtorrentInfoWithContext, Order: 21},
+		{Key: "Plex:", Provider: motd.GetPlexInfoWithContext, Order: 22},
+		{Key: "Emby:", Provider: motd.GetEmbyInfoWithContext, Order: 23},
+		{Key: "Jellyfin:", Provider: motd.GetJellyfinInfoWithContext, Order: 24},
 	}
 
 	// Filter sources based on enabled flags

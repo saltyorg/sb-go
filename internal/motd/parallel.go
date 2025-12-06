@@ -14,10 +14,9 @@ type InfoProvider func(ctx context.Context, verbose bool) string
 
 // InfoSource represents a source of system information
 type InfoSource struct {
-	Key      string        // The label for the information (e.g., "Distribution:")
-	Provider any           // The function that retrieves the information (can be string or []string)
-	Timeout  time.Duration // How long to wait before timing out
-	Order    int           // Display order for a consistent output
+	Key      string // The label for the information (e.g., "Distribution:")
+	Provider any    // The function that retrieves the information (can be string or []string)
+	Order    int    // Display order for a consistent output
 }
 
 // Result stores the output of a single information function
@@ -62,9 +61,7 @@ func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
 				}
 			}()
 
-			// Create context with timeout
-			ctx, cancel := context.WithTimeout(context.Background(), src.Timeout)
-			defer cancel()
+			ctx := context.Background()
 
 			// Track timing if verbose mode is enabled
 			var start time.Time
