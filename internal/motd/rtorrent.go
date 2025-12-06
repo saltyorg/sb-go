@@ -133,19 +133,24 @@ func getRtorrentStats(instance config.UserPassAppInstance) (rtorrentInfo, error)
 		BasicPass: instance.Password,
 	}
 
-	client := rtorrent.NewClient(clientCfg)
+	ctx := context.Background()
 
-	// Correctly apply the timeout by creating a custom http.Client
-	if instance.Timeout > 0 {
-		httpClient := &http.Client{
-			Timeout: time.Duration(instance.Timeout) * time.Second,
-		}
-		// Use the WithHTTPClient method to apply the custom client
-		client = client.WithHTTPClient(httpClient)
+	// Quick connectivity check with short timeout to fail fast if unavailable
+	checkClient := rtorrent.NewClientWithOpts(clientCfg, rtorrent.WithCustomClient(&http.Client{
+		Timeout: 1 * time.Second,
+	}))
+	if _, err := checkClient.Name(ctx); err != nil {
+		return result, fmt.Errorf("could not connect to rtorrent: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	// Use user-configured timeout or default for data fetch
+	timeout := instance.Timeout
+	if timeout == 0 {
+		timeout = 20
+	}
+	client := rtorrent.NewClientWithOpts(clientCfg, rtorrent.WithCustomClient(&http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
+	}))
 
 	// Fetch all torrents
 	torrents, err := client.GetTorrents(ctx, rtorrent.ViewMain)

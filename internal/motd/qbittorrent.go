@@ -3,9 +3,11 @@ package motd
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/config"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -124,25 +126,27 @@ func getQbittorrentStats(instance config.UserPassAppInstance) (qbittorrentInfo, 
 		result.Name = "qBittorrent"
 	}
 
-	// Use user-configured timeout or default
+	ctx := context.Background()
+
+	// Create client with short timeout for quick connectivity check
+	client := qbittorrent.NewClient(qbittorrent.Config{
+		Host:     instance.URL,
+		Username: instance.User,
+		Password: instance.Password,
+		Timeout:  1, // 1 second for connectivity check
+	})
+	if err := client.LoginCtx(ctx); err != nil {
+		return result, fmt.Errorf("failed to login to qbittorrent: %w", err)
+	}
+
+	// Swap to longer timeout for data fetch (preserves session cookies)
 	timeout := instance.Timeout
 	if timeout == 0 {
 		timeout = 20
 	}
-	clientCfg := qbittorrent.Config{
-		Host:     instance.URL,
-		Username: instance.User,
-		Password: instance.Password,
-		Timeout:  timeout,
-	}
-	client := qbittorrent.NewClient(clientCfg)
-
-	ctx := context.Background()
-
-	// Login
-	if err := client.LoginCtx(ctx); err != nil {
-		return result, fmt.Errorf("failed to login to qbittorrent: %w", err)
-	}
+	client = client.WithHTTPClient(&http.Client{
+		Timeout: time.Duration(timeout) * time.Second,
+	})
 
 	// Fetch all data
 	mainData, err := client.SyncMainDataCtx(ctx, 0) // rid=0 to get a full update
