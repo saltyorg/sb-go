@@ -36,9 +36,29 @@ type AppSection struct {
 	Instances []AppInstance `yaml:"instances"`
 }
 
+// UnmarshalYAML implements custom unmarshalling to support both old and new config formats.
+// Old format: direct array of instances
+// New format: object with enabled and instances fields
+func (s *AppSection) UnmarshalYAML(value *yaml.Node) error {
+	// Check if this is a sequence (old format: direct array of instances)
+	if value.Kind == yaml.SequenceNode {
+		var instances []AppInstance
+		if err := value.Decode(&instances); err != nil {
+			return err
+		}
+		s.Instances = instances
+		s.Enabled = nil // defaults to enabled
+		return nil
+	}
+
+	// Otherwise, decode as the new format (mapping with enabled/instances)
+	type rawAppSection AppSection
+	return value.Decode((*rawAppSection)(s))
+}
+
 // IsEnabled returns true if the section is enabled (defaults to true if not set)
 func (s *AppSection) IsEnabled() bool {
-	return s == nil || s.Enabled == nil || *s.Enabled
+	return s.Enabled == nil || *s.Enabled
 }
 
 // PlexSection wraps Plex instances with a section-level enabled toggle
@@ -47,9 +67,24 @@ type PlexSection struct {
 	Instances []PlexInstance `yaml:"instances"`
 }
 
+// UnmarshalYAML implements custom unmarshalling to support both old and new config formats.
+func (s *PlexSection) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.SequenceNode {
+		var instances []PlexInstance
+		if err := value.Decode(&instances); err != nil {
+			return err
+		}
+		s.Instances = instances
+		s.Enabled = nil
+		return nil
+	}
+	type rawPlexSection PlexSection
+	return value.Decode((*rawPlexSection)(s))
+}
+
 // IsEnabled returns true if the section is enabled (defaults to true if not set)
 func (s *PlexSection) IsEnabled() bool {
-	return s == nil || s.Enabled == nil || *s.Enabled
+	return s.Enabled == nil || *s.Enabled
 }
 
 // JellyfinSection wraps Jellyfin instances with a section-level enabled toggle
@@ -58,9 +93,24 @@ type JellyfinSection struct {
 	Instances []JellyfinInstance `yaml:"instances"`
 }
 
+// UnmarshalYAML implements custom unmarshalling to support both old and new config formats.
+func (s *JellyfinSection) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.SequenceNode {
+		var instances []JellyfinInstance
+		if err := value.Decode(&instances); err != nil {
+			return err
+		}
+		s.Instances = instances
+		s.Enabled = nil
+		return nil
+	}
+	type rawJellyfinSection JellyfinSection
+	return value.Decode((*rawJellyfinSection)(s))
+}
+
 // IsEnabled returns true if the section is enabled (defaults to true if not set)
 func (s *JellyfinSection) IsEnabled() bool {
-	return s == nil || s.Enabled == nil || *s.Enabled
+	return s.Enabled == nil || *s.Enabled
 }
 
 // EmbySection wraps Emby instances with a section-level enabled toggle
@@ -69,9 +119,24 @@ type EmbySection struct {
 	Instances []EmbyInstance `yaml:"instances"`
 }
 
+// UnmarshalYAML implements custom unmarshalling to support both old and new config formats.
+func (s *EmbySection) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.SequenceNode {
+		var instances []EmbyInstance
+		if err := value.Decode(&instances); err != nil {
+			return err
+		}
+		s.Instances = instances
+		s.Enabled = nil
+		return nil
+	}
+	type rawEmbySection EmbySection
+	return value.Decode((*rawEmbySection)(s))
+}
+
 // IsEnabled returns true if the section is enabled (defaults to true if not set)
 func (s *EmbySection) IsEnabled() bool {
-	return s == nil || s.Enabled == nil || *s.Enabled
+	return s.Enabled == nil || *s.Enabled
 }
 
 // UserPassAppSection wraps user/pass app instances with a section-level enabled toggle
@@ -80,9 +145,24 @@ type UserPassAppSection struct {
 	Instances []UserPassAppInstance `yaml:"instances"`
 }
 
+// UnmarshalYAML implements custom unmarshalling to support both old and new config formats.
+func (s *UserPassAppSection) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.SequenceNode {
+		var instances []UserPassAppInstance
+		if err := value.Decode(&instances); err != nil {
+			return err
+		}
+		s.Instances = instances
+		s.Enabled = nil
+		return nil
+	}
+	type rawUserPassAppSection UserPassAppSection
+	return value.Decode((*rawUserPassAppSection)(s))
+}
+
 // IsEnabled returns true if the section is enabled (defaults to true if not set)
 func (s *UserPassAppSection) IsEnabled() bool {
-	return s == nil || s.Enabled == nil || *s.Enabled
+	return s.Enabled == nil || *s.Enabled
 }
 
 // SystemdConfig represents configuration for the systemd services section
@@ -94,7 +174,7 @@ type SystemdConfig struct {
 
 // IsEnabled returns true if the section is enabled (defaults to true if not set)
 func (c *SystemdConfig) IsEnabled() bool {
-	return c == nil || c.Enabled == nil || *c.Enabled
+	return c.Enabled == nil || *c.Enabled
 }
 
 // MOTDColors represents customizable color scheme for MOTD
