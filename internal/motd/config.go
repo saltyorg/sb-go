@@ -57,7 +57,7 @@ func GenerateExampleConfig() (string, error) {
 
 		// Write section comment from description
 		if rule.Description != "" {
-			for _, line := range strings.Split(strings.TrimSpace(rule.Description), "\n") {
+			for line := range strings.SplitSeq(strings.TrimSpace(rule.Description), "\n") {
 				buf.WriteString(fmt.Sprintf("# %s\n", line))
 			}
 		}
@@ -163,7 +163,7 @@ func generateColorsSection(rule *validate.SchemaRule) string {
 
 	// Write description from schema
 	if rule.Description != "" {
-		for _, line := range strings.Split(strings.TrimSpace(rule.Description), "\n") {
+		for line := range strings.SplitSeq(strings.TrimSpace(rule.Description), "\n") {
 			buf.WriteString(fmt.Sprintf("# %s\n", line))
 		}
 	}

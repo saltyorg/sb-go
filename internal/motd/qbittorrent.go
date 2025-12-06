@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/saltyorg/sb-go/internal/config"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -125,17 +124,20 @@ func getQbittorrentStats(instance config.UserPassAppInstance) (qbittorrentInfo, 
 		result.Name = "qBittorrent"
 	}
 
-	// Configure the client
+	// Use user-configured timeout or default
+	timeout := instance.Timeout
+	if timeout == 0 {
+		timeout = 20
+	}
 	clientCfg := qbittorrent.Config{
 		Host:     instance.URL,
 		Username: instance.User,
 		Password: instance.Password,
-		Timeout:  instance.Timeout,
+		Timeout:  timeout,
 	}
 	client := qbittorrent.NewClient(clientCfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	// Login
 	if err := client.LoginCtx(ctx); err != nil {
