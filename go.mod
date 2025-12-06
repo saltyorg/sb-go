@@ -13,7 +13,7 @@ require (
 	github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20251201173703-9f73bfd934ff
-	github.com/cloudflare/cloudflare-go/v6 v6.3.0
+	github.com/cloudflare/cloudflare-go/v6 v6.4.0
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/mattn/go-isatty v0.0.20
@@ -46,7 +46,7 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.3.3 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20251202162030-ecc8c1ae4b2b // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20251205161215-1948445e3318 // indirect
 	github.com/charmbracelet/x/ansi v0.11.2 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.14 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20251201173703-9f73bfd934ff // indirect
@@ -104,7 +104,7 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
-	gitlab.com/gitlab-org/api/client-go v1.5.0 // indirect
+	gitlab.com/gitlab-org/api/client-go v1.6.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
