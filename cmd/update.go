@@ -297,19 +297,20 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 
 // regenerateInstalledCompletions auto-installs or regenerates shell completion files
 func regenerateInstalledCompletions() {
-	bashPath, zshPath := getCompletionPaths()
-	cmdName := getBinaryName()
-
-	// Always install or regenerate bash completion for current binary name
-	_ = InstallOrRegenerateCompletion("bash", bashPath, func(path string) error {
-		return generateStaticBashCompletion(path, cmdName)
-	})
-
-	// Only install or regenerate zsh completion if zsh is installed
-	if isZshInstalled() {
-		_ = InstallOrRegenerateCompletion("zsh", zshPath, func(path string) error {
-			return generateStaticZshCompletion(path, cmdName)
+	// Install/regenerate completion for all names (binary + symlinks)
+	for _, cmdName := range getAllBinaryNames() {
+		bashPath := fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
+		_ = InstallOrRegenerateCompletion("bash", bashPath, func(path string) error {
+			return generateStaticBashCompletion(path, cmdName)
 		})
+
+		// Only install or regenerate zsh completion if zsh is installed
+		if isZshInstalled() {
+			zshPath := fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
+			_ = InstallOrRegenerateCompletion("zsh", zshPath, func(path string) error {
+				return generateStaticZshCompletion(path, cmdName)
+			})
+		}
 	}
 
 	// Silent execution - errors are ignored

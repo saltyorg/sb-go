@@ -12,20 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// getBinaryName returns the name the binary was invoked as (e.g., "sb" or "sb2")
-func getBinaryName() string {
-	binaryPath := os.Args[0]
-	return filepath.Base(binaryPath)
-}
-
-// getCompletionPaths returns the appropriate completion paths based on the binary name
-func getCompletionPaths() (bashPath, zshPath string) {
-	cmdName := getBinaryName()
-	bashPath = fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
-	zshPath = fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
-	return
-}
-
 // completionCmd represents the completion command
 var completionCmd = &cobra.Command{
 	Use:    "completion",
@@ -43,21 +29,11 @@ After installation, restart your shell or source the completion file.`,
 var bashCompletionCmd = &cobra.Command{
 	Use:   "bash",
 	Short: "Install bash completion",
-	Long: `Installs bash completion script for the current binary name.
+	Long: `Installs bash completion script for all binary names (including symlinks).
 
 After installation, restart your shell or source the completion file.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		bashPath, _ := getCompletionPaths()
-		cmdName := getBinaryName()
-
-		// Install completion for the binary name used
-		if err := installCompletion("bash", bashPath, func(path string) error {
-			return generateStaticBashCompletion(path, cmdName)
-		}); err != nil {
-			return err
-		}
-
-		return nil
+		return installCompletionsForAllNames("bash")
 	},
 }
 
@@ -65,22 +41,12 @@ After installation, restart your shell or source the completion file.`,
 var zshCompletionCmd = &cobra.Command{
 	Use:   "zsh",
 	Short: "Install zsh completion",
-	Long: `Installs zsh completion script for the current binary name.
+	Long: `Installs zsh completion script for all binary names (including symlinks).
 
 After installation, restart your shell or run:
   autoload -U compinit && compinit`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		_, zshPath := getCompletionPaths()
-		cmdName := getBinaryName()
-
-		// Install completion for the binary name used
-		if err := installCompletion("zsh", zshPath, func(path string) error {
-			return generateStaticZshCompletion(path, cmdName)
-		}); err != nil {
-			return err
-		}
-
-		return nil
+		return installCompletionsForAllNames("zsh")
 	},
 }
 
@@ -88,6 +54,125 @@ func init() {
 	rootCmd.AddCommand(completionCmd)
 	completionCmd.AddCommand(bashCompletionCmd)
 	completionCmd.AddCommand(zshCompletionCmd)
+}
+
+// getAllBinaryNames returns the binary name plus all symlinks pointing to it
+func getAllBinaryNames() []string {
+	exe, err := os.Executable()
+	if err != nil {
+		// Fallback to os.Args[0]
+		return []string{filepath.Base(os.Args[0])}
+	}
+
+	// Start with the actual binary name
+	baseName := filepath.Base(exe)
+	names := []string{baseName}
+
+	// Add any symlinks pointing to us
+	symlinks := findSymlinksToExecutable()
+	for _, s := range symlinks {
+		if s != baseName {
+			names = append(names, s)
+		}
+	}
+
+	return names
+}
+
+// findSymlinksToExecutable searches common bin directories for symlinks pointing to our executable
+func findSymlinksToExecutable() []string {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil
+	}
+
+	realExe, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		realExe = exe
+	}
+
+	var symlinks []string
+	searchDirs := []string{"/usr/local/bin", "/usr/bin", "/bin"}
+
+	for _, dir := range searchDirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+
+			linkPath := filepath.Join(dir, entry.Name())
+			target, err := filepath.EvalSymlinks(linkPath)
+			if err != nil {
+				continue
+			}
+
+			if target == realExe {
+				symlinks = append(symlinks, entry.Name())
+			}
+		}
+	}
+
+	return symlinks
+}
+
+// installCompletionsForAllNames installs completion for all binary names (main binary + symlinks)
+func installCompletionsForAllNames(shellName string) error {
+	names := getAllBinaryNames()
+	var installedPaths []string
+
+	for _, cmdName := range names {
+		var targetPath string
+		var generateFunc func(string) error
+
+		switch shellName {
+		case "bash":
+			targetPath = fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
+			generateFunc = func(path string) error {
+				return generateStaticBashCompletion(path, cmdName)
+			}
+		case "zsh":
+			targetPath = fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
+			generateFunc = func(path string) error {
+				return generateStaticZshCompletion(path, cmdName)
+			}
+		}
+
+		// Ensure the target directory exists
+		targetDir := filepath.Dir(targetPath)
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
+		}
+
+		// Generate the completion file
+		if err := generateFunc(targetPath); err != nil {
+			return fmt.Errorf("failed to generate %s completion for %s: %w", shellName, cmdName, err)
+		}
+
+		installedPaths = append(installedPaths, targetPath)
+	}
+
+	// Print summary
+	fmt.Printf("✓ %s completion installed to:\n", shellName)
+	for _, p := range installedPaths {
+		fmt.Printf("  - %s\n", p)
+	}
+
+	// Provide shell-specific reload instructions
+	fmt.Println("\nTo enable completions in your current shell:")
+	switch shellName {
+	case "bash":
+		fmt.Printf("  source %s\n", installedPaths[0])
+	case "zsh":
+		fmt.Println("  autoload -U compinit && compinit")
+	}
+	fmt.Println("\nOr restart your shell.")
+
+	return nil
 }
 
 // generateStaticBashCompletion creates a hybrid bash completion script:
@@ -559,6 +644,11 @@ _%s_custom() {
                     _%s_custom_install_tags
                     ;;
                 *)
+                    # Restore the full command line for _%s
+                    # _arguments with *::arg:->args shifts words, losing the command name
+                    # We need to prepend it back so _%s sees "sb2 docker" not just "docker"
+                    words=("%s" "${words[@]}")
+                    (( CURRENT++ ))
                     _%s
                     ;;
             esac
@@ -568,7 +658,7 @@ _%s_custom() {
 
 # Replace default completion with custom wrapper
 compdef _%s_custom %s
-`, cmdName, formatTagsForZsh(tags), cmdName, cmdName, cmdName, cmdName, cmdName, cmdName)
+`, cmdName, formatTagsForZsh(tags), cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName)
 
 	if _, err := file.WriteString(customInstallCompletion); err != nil {
 		return fmt.Errorf("failed to write custom completion: %w", err)
@@ -584,38 +674,6 @@ func formatTagsForZsh(tags []string) string {
 		lines = append(lines, fmt.Sprintf("    %q", tag))
 	}
 	return strings.Join(lines, "\n")
-}
-
-// installCompletion handles the common logic for installing completion scripts
-func installCompletion(shellName, targetPath string, generateFunc func(string) error) error {
-	// Note: Root check not needed - main.go automatically elevates to root
-
-	// Ensure the target directory exists
-	targetDir := filepath.Dir(targetPath)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
-	}
-
-	// Generate the completion file
-	if err := generateFunc(targetPath); err != nil {
-		return fmt.Errorf("failed to generate %s completion: %w", shellName, err)
-	}
-
-	fmt.Printf("✓ %s completion installed to %s\n", shellName, targetPath)
-
-	// Provide shell-specific reload instructions
-	switch shellName {
-	case "bash":
-		fmt.Println("\nTo enable completions in your current shell, run:")
-		fmt.Printf("  source %s\n", targetPath)
-		fmt.Println("\nOr restart your shell.")
-	case "zsh":
-		fmt.Println("\nTo enable completions in your current shell, run:")
-		fmt.Println("  autoload -U compinit && compinit")
-		fmt.Println("\nOr restart your shell.")
-	}
-
-	return nil
 }
 
 // isZshInstalled checks if zsh is installed by checking if the vendor-completions directory exists
