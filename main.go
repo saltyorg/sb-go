@@ -100,6 +100,7 @@ func main() {
 	// Fang provides styled help, formatted errors, and improved presentation
 	if err := fang.Execute(ctx, cmd.GetRootCommand(),
 		fang.WithErrorHandler(customErrorHandler),
+		fang.WithoutVersion(), // We have a dedicated 'version' command
 	); err != nil {
 		os.Exit(1)
 	}
