@@ -96,6 +96,10 @@ func getDisplayName(name string, userDisplayNames map[string]string) string {
 	if displayName, ok := defaultDisplayNames[name]; ok {
 		return displayName
 	}
+	// For unmapped saltbox_managed_ services, strip the prefix for a cleaner display
+	if strings.HasPrefix(name, "saltbox_managed_") {
+		return strings.TrimPrefix(name, "saltbox_managed_")
+	}
 	// No mapping found, return original name
 	return name
 }
