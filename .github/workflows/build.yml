@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload Artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.APP_NAME }}
           path: ${{ env.APP_NAME }}
