@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/fang v0.4.4
 	github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/charmbracelet/x/exp/charmtone v0.0.0-20251201173703-9f73bfd934ff
+	github.com/charmbracelet/x/exp/charmtone v0.0.0-20251212161403-a3028fabe6bc
 	github.com/cloudflare/cloudflare-go/v6 v6.4.0
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
 	github.com/go-playground/validator/v10 v10.28.0
