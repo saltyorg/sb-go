@@ -15,7 +15,7 @@ require (
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20251201173703-9f73bfd934ff
 	github.com/cloudflare/cloudflare-go/v6 v6.4.0
 	github.com/creativeprojects/go-selfupdate v1.5.2-0.20250926140123-d7d55b927907
-	github.com/go-playground/validator/v10 v10.28.0
+	github.com/go-playground/validator/v10 v10.29.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-runewidth v0.0.19
 	github.com/moby/moby/api v1.52.0
