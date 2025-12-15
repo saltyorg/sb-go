@@ -225,7 +225,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	saltboxCache, saltboxCacheExists := ansibleCache.GetRepoCache(constants.SaltboxRepoPath)
-	_, saltboxTagsExist := saltboxCache["tags"]
+	saltboxTagsExist := saltboxCacheExists && saltboxCache["tags"] != nil
 
 	if oldCommitHash != newCommitHash || !saltboxCacheExists || !saltboxTagsExist {
 		if err := spinners.RunInfoSpinner("Updating Saltbox tags cache."); err != nil {
@@ -279,7 +279,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 	}
 
 	sandboxCache, sandboxCacheExists := ansibleCache.GetRepoCache(constants.SandboxRepoPath)
-	_, sandboxTagsExist := sandboxCache["tags"]
+	sandboxTagsExist := sandboxCacheExists && sandboxCache["tags"] != nil
 
 	if oldCommitHash != newCommitHash || !sandboxCacheExists || !sandboxTagsExist {
 		if err := spinners.RunInfoSpinner("Updating Sandbox tags cache."); err != nil {
