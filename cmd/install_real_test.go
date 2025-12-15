@@ -356,7 +356,7 @@ func TestCacheExistsAndIsValidFunction(t *testing.T) {
 				}
 
 				// Set cache directly in the cache instance
-				testCache.SetRepoCache(constants.SaltboxRepoPath, cacheData)
+				_ = testCache.SetRepoCache(constants.SaltboxRepoPath, cacheData)
 			}
 
 			result := cacheExistsAndIsValid(constants.SaltboxRepoPath, testCache, 0)

@@ -79,7 +79,7 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 		{
 			name: "valid cache with tags",
 			setupCache: func(c *cache.Cache) {
-				c.SetRepoCache(testRepoPath, map[string]any{
+				_ = c.SetRepoCache(testRepoPath, map[string]any{
 					"commit": "abc123",
 					"tags":   []any{"tag1", "tag2", "tag3"},
 				})
@@ -91,7 +91,7 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 		{
 			name: "cache with empty tags",
 			setupCache: func(c *cache.Cache) {
-				c.SetRepoCache(testRepoPath, map[string]any{
+				_ = c.SetRepoCache(testRepoPath, map[string]any{
 					"commit": "abc123",
 					"tags":   []any{},
 				})
@@ -103,7 +103,7 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 		{
 			name: "cache without tags key",
 			setupCache: func(c *cache.Cache) {
-				c.SetRepoCache(testRepoPath, map[string]any{
+				_ = c.SetRepoCache(testRepoPath, map[string]any{
 					"commit": "abc123",
 				})
 			},
@@ -174,7 +174,7 @@ func TestGetValidTags_Integration(t *testing.T) {
 			name:     "valid cached tags",
 			repoPath: testRepoPath,
 			setupCache: func(c *cache.Cache, path string) {
-				c.SetRepoCache(path, map[string]any{
+				_ = c.SetRepoCache(path, map[string]any{
 					"commit": "abc123def456",
 					"tags":   []any{"tag1", "tag2", "tag3"},
 				})
@@ -188,7 +188,7 @@ func TestGetValidTags_Integration(t *testing.T) {
 			name:     "cache miss - needs update",
 			repoPath: testRepoPath,
 			setupCache: func(c *cache.Cache, path string) {
-				c.SetRepoCache(path, map[string]any{
+				_ = c.SetRepoCache(path, map[string]any{
 					"commit": "old123",
 					"tags":   []any{"oldtag1", "oldtag2"},
 				})
@@ -386,11 +386,11 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 				t.Fatalf("Failed to create test cache: %v", err)
 			}
 
-			c.SetRepoCache(tt.repoPath, map[string]any{
+			_ = c.SetRepoCache(tt.repoPath, map[string]any{
 				"commit": "abc123def456",
 				"tags":   convertToAnySlice(tt.saltboxTags),
 			})
-			c.SetRepoCache(tt.otherRepoPath, map[string]any{
+			_ = c.SetRepoCache(tt.otherRepoPath, map[string]any{
 				"commit": "abc123def456",
 				"tags":   convertToAnySlice(tt.sandboxTags),
 			})
@@ -496,11 +496,11 @@ func TestHandleInstall_Integration(t *testing.T) {
 				t.Fatalf("Failed to create test cache: %v", err)
 			}
 
-			c.SetRepoCache(constants.SaltboxRepoPath, map[string]any{
+			_ = c.SetRepoCache(constants.SaltboxRepoPath, map[string]any{
 				"commit": "abc123def456",
 				"tags":   []any{"plex", "sonarr", "radarr"},
 			})
-			c.SetRepoCache(constants.SandboxRepoPath, map[string]any{
+			_ = c.SetRepoCache(constants.SandboxRepoPath, map[string]any{
 				"commit": "abc123def456",
 				"tags":   []any{"overseerr", "tautulli"},
 			})

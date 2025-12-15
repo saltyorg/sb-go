@@ -110,9 +110,7 @@ func cacheTagsWithCommit(ctx context.Context, repoPath string, tags []string, ca
 		"commit": currentCommit,
 		"tags":   tags,
 	}
-	cache.SetRepoCache(repoPath, repoCache)
-
-	return nil
+	return cache.SetRepoCache(repoPath, repoCache)
 }
 
 // formatPlaybookError formats an error message for playbook execution failures

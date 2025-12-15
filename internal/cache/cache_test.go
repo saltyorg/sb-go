@@ -27,7 +27,9 @@ func TestCache_SetGetRepoCache(t *testing.T) {
 	}
 
 	// Set repo cache
-	cache.SetRepoCache(testRepoPath, testData)
+	if err := cache.SetRepoCache(testRepoPath, testData); err != nil {
+		t.Fatalf("Failed to set repo cache: %v", err)
+	}
 
 	// Get repo cache
 	retrieved, ok := cache.GetRepoCache(testRepoPath)
@@ -136,7 +138,9 @@ func TestCache_SaveToFile(t *testing.T) {
 	testData := map[string]any{
 		"tags": []string{"tag1", "tag2"},
 	}
-	cache.SetRepoCache("/test/repo", testData)
+	if err := cache.SetRepoCache("/test/repo", testData); err != nil {
+		t.Fatalf("Failed to set repo cache: %v", err)
+	}
 
 	// Verify file was created
 	if _, err := os.Stat(cacheFile); os.IsNotExist(err) {
@@ -193,7 +197,9 @@ func TestCache_CheckCache(t *testing.T) {
 	testData := map[string]any{
 		"tags": []any{"tag1", "tag2", "tag3"},
 	}
-	cache.SetRepoCache(testRepoPath, testData)
+	if err := cache.SetRepoCache(testRepoPath, testData); err != nil {
+		t.Fatalf("Failed to set repo cache: %v", err)
+	}
 
 	tests := []struct {
 		name            string
@@ -273,7 +279,7 @@ func TestCache_ConcurrentAccess(t *testing.T) {
 			testData := map[string]any{
 				"tags": []string{"tag1", "tag2"},
 			}
-			cache.SetRepoCache("/test/repo", testData)
+			_ = cache.SetRepoCache("/test/repo", testData)
 			done <- true
 		}(i)
 	}

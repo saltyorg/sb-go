@@ -178,7 +178,9 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 			"commit": currentCommit,
 			"tags":   tags,
 		}
-		cache.SetRepoCache(repoPath, repoCache)
+		if err := cache.SetRepoCache(repoPath, repoCache); err != nil {
+			return false, fmt.Errorf("failed to save cache: %w", err)
+		}
 		logging.Debug(verbosity, "RunAndCacheAnsibleTags: Cache updated with %d tags", len(tags))
 		return false, nil // Cache was used, not rebuilt
 	}
@@ -221,7 +223,9 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 			"commit": currentCommit,
 			"tags":   tags,
 		}
-		cache.SetRepoCache(repoPath, repoCache)
+		if err := cache.SetRepoCache(repoPath, repoCache); err != nil {
+			return true, fmt.Errorf("failed to save cache: %w", err)
+		}
 
 		logging.Debug(verbosity, "RunAndCacheAnsibleTags: Cache rebuilt with %d tags, commit: %s", len(tags), currentCommit)
 		return true, nil // Cache was rebuilt with new tag information
