@@ -79,10 +79,10 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 // the function checks whether cached tags can be used by comparing the repository's commit hash.
 // If the repoPath corresponds to a specific known path (i.e., saltbox_mod), a fixed command configuration is used.
 // The function returns command args (or nil if cached tags are available), a function to parse the command output,
-// and an error if any configuration or cache retrieval fails.
+// the commit hash (if cache was valid, empty string otherwise), and an error if any configuration or cache retrieval fails.
 // The context parameter allows for cancellation of the command execution.
 // The verbosity parameter controls debug output (0 = no debug, >0 = debug).
-func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache, verbosity int) ([]string, func(string) ([]string, error), error) {
+func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache, verbosity int) ([]string, func(string) ([]string, error), string, error) {
 	// parseOutput extracts tags from the ansible-playbook output using a regular expression.
 	parseOutput := func(output string) ([]string, error) {
 		re := regexp.MustCompile(`TASK TAGS:\s*\[(.*?)]`)
@@ -111,7 +111,7 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 		if commit, commitOK := repoCache["commit"].(string); commitOK {
 			currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, "", err
 			}
 
 			logging.Debug(verbosity, "PrepareAnsibleListTags: Cached commit: %s, Current commit: %s", commit, currentCommit)
@@ -126,10 +126,10 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 						if strTag, ok := tag.(string); ok {
 							stringTags[i] = strTag
 						} else {
-							return nil, nil, fmt.Errorf("cached tags are not strings")
+							return nil, nil, "", fmt.Errorf("cached tags are not strings")
 						}
 					}
-					return nil, func(string) ([]string, error) { return stringTags, nil }, nil
+					return nil, func(string) ([]string, error) { return stringTags, nil }, currentCommit, nil
 				} else {
 					logging.Debug(verbosity, "PrepareAnsibleListTags: Cached tags not in expected format")
 				}
@@ -145,7 +145,7 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 
 	// No valid cache found; build the command args to list tags.
 	args := []string{playbookPath, "--become", "--list-tags", fmt.Sprintf("--skip-tags=always,%s", extraSkipTags)}
-	return args, parseOutput, nil
+	return args, parseOutput, "", nil
 }
 
 // RunAndCacheAnsibleTags runs the ansible-playbook command to list available tags,
@@ -157,25 +157,22 @@ func PrepareAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSk
 // The context parameter allows for cancellation of the command execution.
 // The verbosity parameter controls debug output (0 = no debug, >0 = debug).
 func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache, verbosity int) (bool, error) {
-	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache, verbosity)
+	args, tagParser, cachedCommit, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache, verbosity)
 	if err != nil {
 		return false, err
 	}
 
 	if args == nil && tagParser != nil {
 		// Cached tags are available; retrieve and update the cache.
+		// cachedCommit already contains the current commit hash from PrepareAnsibleListTags.
 		logging.Debug(verbosity, "RunAndCacheAnsibleTags: Using cached tags for %s", repoPath)
 		tags, err := tagParser("")
 		if err != nil {
 			return false, err
 		}
-		currentCommit, err := git.GetGitCommitHash(ctx, repoPath)
-		if err != nil {
-			return false, err
-		}
 
 		repoCache := map[string]any{
-			"commit": currentCommit,
+			"commit": cachedCommit,
 			"tags":   tags,
 		}
 		if err := cache.SetRepoCache(repoPath, repoCache); err != nil {
@@ -241,7 +238,7 @@ func RunAndCacheAnsibleTags(ctx context.Context, repoPath, playbookPath, extraSk
 // The context parameter allows for cancellation of the command execution.
 // The verbosity parameter controls debug output (0 = no debug, >0 = debug).
 func RunAnsibleListTags(ctx context.Context, repoPath, playbookPath, extraSkipTags string, cache *cache.Cache, verbosity int) ([]string, error) {
-	args, tagParser, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache, verbosity)
+	args, tagParser, _, err := PrepareAnsibleListTags(ctx, repoPath, playbookPath, extraSkipTags, cache, verbosity)
 	if err != nil {
 		return nil, err
 	}
