@@ -56,8 +56,8 @@ func (c *Cache) GetRepoCache(repoPath string) (map[string]any, bool) {
 // Note: Save errors are not returned as cache operations are non-critical to application functionality.
 func (c *Cache) SetRepoCache(repoPath string, repoCache map[string]any) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.data[repoPath] = repoCache
-	c.mu.Unlock()
 	_ = c.save()
 }
 
@@ -113,12 +113,9 @@ func (c *Cache) load() error {
 }
 
 // save serializes the current cache data to JSON and writes it to the file specified in the Cache struct.
-// It uses a read lock to ensure the cache data is consistent during serialization.
+// The caller must hold a lock on c.mu before calling this method.
 // The file is written with permissions 0644.
 func (c *Cache) save() error {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	data, err := json.Marshal(c.data)
 	if err != nil {
 		return err
