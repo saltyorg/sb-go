@@ -134,12 +134,7 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 		return fmt.Errorf("error creating cache: %w", err)
 	}
 
-	var parsedTags []string
-	for _, arg := range tags {
-		parsedTags = append(parsedTags, strings.TrimSpace(arg))
-	}
-
-	for _, tag := range parsedTags {
+	for _, tag := range tags {
 		if after, ok := strings.CutPrefix(tag, "mod-"); ok {
 			saltboxModTags = append(saltboxModTags, after)
 		} else if after, ok := strings.CutPrefix(tag, "sandbox-"); ok {
@@ -204,11 +199,6 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 		if err := runPlaybook(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), sandboxTags, ansibleBinaryPath, extraVars, skipTags, extraArgs); err != nil {
 			return err
 		}
-	}
-
-	if len(parsedTags) == 0 {
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render("no valid tags were provided for installation"))
 	}
 
 	return nil
