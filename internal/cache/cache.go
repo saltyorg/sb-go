@@ -61,39 +61,6 @@ func (c *Cache) SetRepoCache(repoPath string, repoCache map[string]any) error {
 	return c.save()
 }
 
-// CheckCache verifies whether all provided tags exist in the cached data for a given repository.
-// It returns a boolean indicating if all tags are present and a slice of any missing tags.
-// If no cache exists for the repository or if the tags cannot be parsed, it assumes the cache is missing.
-func (c *Cache) CheckCache(repoPath string, tags []string) (bool, []string) {
-	repoCache, ok := c.GetRepoCache(repoPath)
-	if !ok || repoCache == nil {
-		return true, []string{}
-	}
-
-	cachedTags, ok := repoCache["tags"].([]any)
-	if !ok {
-		return true, []string{}
-	}
-
-	// Build a set of cached tags for a quick lookup.
-	cachedTagSet := make(map[string]bool)
-	for _, tag := range cachedTags {
-		if strTag, ok := tag.(string); ok {
-			cachedTagSet[strTag] = true
-		}
-	}
-
-	// Identify any tags missing from the cache.
-	var missingTags []string
-	for _, tag := range tags {
-		if _, ok := cachedTagSet[tag]; !ok {
-			missingTags = append(missingTags, tag)
-		}
-	}
-
-	return len(missingTags) == 0, missingTags
-}
-
 // load reads the cache data from the file specified in the Cache struct.
 // If the file does not exist, the cache remains empty (no error is returned).
 // On success, it will unmarshal the JSON data into the cache's internal map.

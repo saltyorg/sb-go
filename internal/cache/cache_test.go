@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 )
 
@@ -180,84 +179,6 @@ func TestCache_LoadFromFile_NonExistent(t *testing.T) {
 	// Cache should be empty
 	if len(cache.data) != 0 {
 		t.Error("Expected cache to be empty when file doesn't exist")
-	}
-}
-
-func TestCache_CheckCache(t *testing.T) {
-	tmpDir := t.TempDir()
-	cacheFile := filepath.Join(tmpDir, "test_cache.json")
-
-	cache := &Cache{
-		data: make(map[string]any),
-		file: cacheFile,
-	}
-
-	// Set up test repo cache
-	testRepoPath := "/test/repo"
-	testData := map[string]any{
-		"tags": []any{"tag1", "tag2", "tag3"},
-	}
-	if err := cache.SetRepoCache(testRepoPath, testData); err != nil {
-		t.Fatalf("Failed to set repo cache: %v", err)
-	}
-
-	tests := []struct {
-		name            string
-		repoPath        string
-		tags            []string
-		expectedFound   bool
-		expectedMissing []string
-	}{
-		{
-			name:            "All tags present",
-			repoPath:        testRepoPath,
-			tags:            []string{"tag1", "tag2"},
-			expectedFound:   true,
-			expectedMissing: []string{},
-		},
-		{
-			name:            "Some tags missing",
-			repoPath:        testRepoPath,
-			tags:            []string{"tag1", "tag4"},
-			expectedFound:   false,
-			expectedMissing: []string{"tag4"},
-		},
-		{
-			name:            "All tags missing",
-			repoPath:        testRepoPath,
-			tags:            []string{"tag4", "tag5"},
-			expectedFound:   false,
-			expectedMissing: []string{"tag4", "tag5"},
-		},
-		{
-			name:            "Non-existent repo",
-			repoPath:        "/nonexistent",
-			tags:            []string{"tag1"},
-			expectedFound:   true,
-			expectedMissing: []string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			found, missing := cache.CheckCache(tt.repoPath, tt.tags)
-
-			if found != tt.expectedFound {
-				t.Errorf("Expected found=%v, got %v", tt.expectedFound, found)
-			}
-
-			if len(missing) != len(tt.expectedMissing) {
-				t.Errorf("Expected %d missing tags, got %d", len(tt.expectedMissing), len(missing))
-			}
-
-			// Verify missing tags match
-			for _, expectedTag := range tt.expectedMissing {
-				foundMissing := slices.Contains(missing, expectedTag)
-				if !foundMissing {
-					t.Errorf("Expected missing tag %s not found in result", expectedTag)
-				}
-			}
-		})
 	}
 }
 
