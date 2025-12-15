@@ -492,16 +492,25 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 		logging.Debug(verbosity, "'tags' key missing after update for %s", repoPath)
 		return []string{}
 	}
-	cachedTags, ok := cachedTagsInterface.([]string) // Cast to []string directly
-	if !ok {
-		logging.Debug(verbosity, "Cache is invalid type after update for %s.  Expected []string, got %T", repoPath, cachedTagsInterface)
+
+	// Handle both []string (freshly cached) and []any (loaded from JSON)
+	switch tags := cachedTagsInterface.(type) {
+	case []string:
+		logging.Debug(verbosity, "Returning tags after update ([]string): %v", tags)
+		return tags
+	case []any:
+		cachedTagsStrings := make([]string, 0, len(tags))
+		for _, tag := range tags {
+			if strTag, ok := tag.(string); ok {
+				cachedTagsStrings = append(cachedTagsStrings, strTag)
+			}
+		}
+		logging.Debug(verbosity, "Returning tags after update ([]any): %v", cachedTagsStrings)
+		return cachedTagsStrings
+	default:
+		logging.Debug(verbosity, "Cache is invalid type after update for %s. Expected []string or []any, got %T", repoPath, cachedTagsInterface)
 		return []string{}
 	}
-
-	cachedTagsStrings := make([]string, 0, len(cachedTags)) // Pre-allocate for efficiency
-	cachedTagsStrings = append(cachedTagsStrings, cachedTags...)
-	logging.Debug(verbosity, "Returning tags after update: %v", cachedTagsStrings)
-	return cachedTagsStrings
 }
 
 // Helper function to check cache existence and validity (DRY principle)
