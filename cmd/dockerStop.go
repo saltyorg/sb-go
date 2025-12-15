@@ -56,14 +56,15 @@ var stopCmd = &cobra.Command{
 		// Create a stop container task
 		stopContainersTask := func() error {
 			// Build query parameters
-			url := fmt.Sprintf("%s/stop", constants.DockerControllerAPIURL)
+			var url strings.Builder
+			url.WriteString(fmt.Sprintf("%s/stop", constants.DockerControllerAPIURL))
 			if len(ignoreContainers) > 0 {
-				url += "?"
+				url.WriteString("?")
 				for i, container := range ignoreContainers {
 					if i > 0 {
-						url += "&"
+						url.WriteString("&")
 					}
-					url += fmt.Sprintf("ignore=%s", container)
+					url.WriteString(fmt.Sprintf("ignore=%s", container))
 				}
 
 				if verbose {
@@ -72,7 +73,7 @@ var stopCmd = &cobra.Command{
 			}
 
 			// Call the API to stop containers
-			resp, err := http.Post(url, "application/json", nil)
+			resp, err := http.Post(url.String(), "application/json", nil)
 			if err != nil {
 				return fmt.Errorf("failed to stop containers: %v", err)
 			}

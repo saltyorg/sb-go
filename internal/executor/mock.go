@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // MockExecutor is a mock implementation of Executor for testing
@@ -159,10 +160,11 @@ func (m *MockExecutor) String() string {
 	if len(m.Calls) == 0 {
 		return "MockExecutor: no calls"
 	}
-	output := fmt.Sprintf("MockExecutor: %d calls\n", len(m.Calls))
+	var output strings.Builder
+	output.WriteString(fmt.Sprintf("MockExecutor: %d calls\n", len(m.Calls)))
 	for i, call := range m.Calls {
-		output += fmt.Sprintf("  Call %d: %s %v (working dir: %s, exit code: %d)\n",
-			i, call.Config.Command, call.Config.Args, call.Config.WorkingDir, call.Result.ExitCode)
+		output.WriteString(fmt.Sprintf("  Call %d: %s %v (working dir: %s, exit code: %d)\n",
+			i, call.Config.Command, call.Config.Args, call.Config.WorkingDir, call.Result.ExitCode))
 	}
-	return output
+	return output.String()
 }

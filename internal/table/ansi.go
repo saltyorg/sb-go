@@ -10,11 +10,11 @@ import (
 type ansiBlob []ansiSegment
 
 func (a ansiBlob) Strip() string {
-	var output string
+	var output strings.Builder
 	for _, segment := range a {
-		output += segment.value
+		output.WriteString(segment.value)
 	}
-	return output
+	return output.String()
 }
 
 func (a ansiBlob) TrimSpace() ansiBlob {
@@ -30,19 +30,19 @@ func (a ansiBlob) Len() int {
 }
 
 func (a ansiBlob) String() string {
-	var output string
+	var output strings.Builder
 	for _, segment := range a {
-		output += segment.style + segment.value
+		output.WriteString(segment.style + segment.value)
 	}
-	return output
+	return output.String()
 }
 
 func (a ansiBlob) ANSI() string {
-	var output string
+	var output strings.Builder
 	for _, segment := range a {
-		output += segment.style
+		output.WriteString(segment.style)
 	}
-	return simplifyANSI(output)
+	return simplifyANSI(output.String())
 }
 
 func simplifyANSI(input string) string {
@@ -52,7 +52,7 @@ func simplifyANSI(input string) string {
 
 func (a ansiBlob) Cut(index int) (ansiBlob, ansiBlob) {
 	var current int
-	var outputBefore string
+	var outputBefore strings.Builder
 	var outputAfter string
 	var found bool
 	for _, segment := range a {
@@ -62,15 +62,15 @@ func (a ansiBlob) Cut(index int) (ansiBlob, ansiBlob) {
 		}
 		if index < current+utf8.RuneCountInString(segment.value) {
 			localIndex := index - current
-			outputBefore += string([]rune(segment.value)[:localIndex])
+			outputBefore.WriteString(string([]rune(segment.value)[:localIndex]))
 			outputAfter = segment.style + string([]rune(segment.value)[localIndex:])
 			found = true
 			continue
 		}
-		outputBefore += segment.style + segment.value
+		outputBefore.WriteString(segment.style + segment.value)
 		current += utf8.RuneCountInString(segment.value)
 	}
-	return newANSI(outputBefore), newANSI(outputAfter)
+	return newANSI(outputBefore.String()), newANSI(outputAfter)
 }
 
 func (a ansiBlob) Words() []ansiBlob {

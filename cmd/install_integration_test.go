@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/saltyorg/sb-go/internal/ansible"
@@ -232,14 +233,14 @@ func TestGetValidTags_Integration(t *testing.T) {
 			mockAnsible := &MockAnsibleExecutor{
 				ExecuteContextFunc: func(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
 					// Return tags in ansible format
-					tagsStr := ""
+					var tagsStr strings.Builder
 					for i, tag := range tt.mockTags {
 						if i > 0 {
-							tagsStr += ", "
+							tagsStr.WriteString(", ")
 						}
-						tagsStr += tag
+						tagsStr.WriteString(tag)
 					}
-					return []byte("TASK TAGS: [" + tagsStr + "]"), nil
+					return []byte("TASK TAGS: [" + tagsStr.String() + "]"), nil
 				},
 			}
 			ansible.SetExecutor(mockAnsible)
@@ -368,14 +369,14 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 						tags = tt.sandboxTags
 					}
 
-					tagsStr := ""
+					var tagsStr strings.Builder
 					for i, tag := range tags {
 						if i > 0 {
-							tagsStr += ", "
+							tagsStr.WriteString(", ")
 						}
-						tagsStr += tag
+						tagsStr.WriteString(tag)
 					}
-					return []byte("TASK TAGS: [" + tagsStr + "]"), nil
+					return []byte("TASK TAGS: [" + tagsStr.String() + "]"), nil
 				},
 			}
 			ansible.SetExecutor(mockAnsible)

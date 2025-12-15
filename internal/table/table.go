@@ -265,7 +265,8 @@ func (t *Table) calculateColumnWidths(numCols int) []int {
 }
 
 func (t *Table) renderHeaders(colWidths []int, numCols int) {
-	line := t.styledChar(t.dividers.NS)
+	var line strings.Builder
+	line.WriteString(t.styledChar(t.dividers.NS))
 
 	headerIdx := 0
 	colIdx := 0
@@ -301,7 +302,7 @@ func (t *Table) renderHeaders(colWidths []int, numCols int) {
 
 		// Center align by default for headers, with padding
 		paddedContent := t.addPadding(content, totalWidth, aquatable.AlignCenter)
-		line += paddedContent.String() + t.styledChar(t.dividers.NS)
+		line.WriteString(paddedContent.String() + t.styledChar(t.dividers.NS))
 
 		colIdx += colspan
 		headerIdx++
@@ -309,15 +310,16 @@ func (t *Table) renderHeaders(colWidths []int, numCols int) {
 
 	// Fill remaining columns if any
 	for colIdx < numCols {
-		line += strings.Repeat(" ", colWidths[colIdx]) + t.styledChar(t.dividers.NS)
+		line.WriteString(strings.Repeat(" ", colWidths[colIdx]) + t.styledChar(t.dividers.NS))
 		colIdx++
 	}
 
-	t.writeLine(line)
+	t.writeLine(line.String())
 }
 
 func (t *Table) renderRow(row []string, colWidths []int, numCols int) {
-	line := t.styledChar(t.dividers.NS)
+	var line strings.Builder
+	line.WriteString(t.styledChar(t.dividers.NS))
 
 	for i := range numCols {
 		var content ansiBlob
@@ -335,10 +337,10 @@ func (t *Table) renderRow(row []string, colWidths []int, numCols int) {
 
 		// Add padding and align
 		paddedContent := t.addPadding(content, colWidths[i], align)
-		line += paddedContent.String() + t.styledChar(t.dividers.NS)
+		line.WriteString(paddedContent.String() + t.styledChar(t.dividers.NS))
 	}
 
-	t.writeLine(line)
+	t.writeLine(line.String())
 }
 
 func (t *Table) renderColspanRow(content string, colWidths []int, colspan int, numCols int) {
@@ -368,7 +370,7 @@ func (t *Table) renderColspanRow(content string, colWidths []int, colspan int, n
 
 // stripANSI is a helper to remove ANSI codes from styled characters
 func stripANSI(s string) string {
-	result := ""
+	var result strings.Builder
 	inEscape := false
 	for _, r := range s {
 		if r == '\x1b' {
@@ -381,9 +383,9 @@ func stripANSI(s string) string {
 			}
 			continue
 		}
-		result += string(r)
+		result.WriteString(string(r))
 	}
-	return result
+	return result.String()
 }
 
 func (t *Table) addPadding(content ansiBlob, width int, align Alignment) ansiBlob {
@@ -427,15 +429,16 @@ func (t *Table) alignCell(content ansiBlob, width int, align Alignment) ansiBlob
 }
 
 func (t *Table) topBorder(colWidths []int) string {
-	line := t.styledChar(t.dividers.ES)
+	var line strings.Builder
+	line.WriteString(t.styledChar(t.dividers.ES))
 	for i, width := range colWidths {
-		line += strings.Repeat(t.styledChar(t.dividers.EW), width)
+		line.WriteString(strings.Repeat(t.styledChar(t.dividers.EW), width))
 		if i < len(colWidths)-1 {
-			line += t.styledChar(t.dividers.ESW)
+			line.WriteString(t.styledChar(t.dividers.ESW))
 		}
 	}
-	line += t.styledChar(t.dividers.SW)
-	return line
+	line.WriteString(t.styledChar(t.dividers.SW))
+	return line.String()
 }
 
 func (t *Table) topBorderNoJunctions(colWidths []int) string {
@@ -454,15 +457,16 @@ func (t *Table) topBorderNoJunctions(colWidths []int) string {
 }
 
 func (t *Table) middleBorder(colWidths []int, startCol int, endCol int) string {
-	line := t.styledChar(t.dividers.NES)
+	var line strings.Builder
+	line.WriteString(t.styledChar(t.dividers.NES))
 	for i, width := range colWidths {
-		line += strings.Repeat(t.styledChar(t.dividers.EW), width)
+		line.WriteString(strings.Repeat(t.styledChar(t.dividers.EW), width))
 		if i < len(colWidths)-1 {
-			line += t.styledChar(t.dividers.ALL)
+			line.WriteString(t.styledChar(t.dividers.ALL))
 		}
 	}
-	line += t.styledChar(t.dividers.NSW)
-	return line
+	line.WriteString(t.styledChar(t.dividers.NSW))
+	return line.String()
 }
 
 func (t *Table) borderNoJunctions(colWidths []int) string {
@@ -482,40 +486,43 @@ func (t *Table) borderNoJunctions(colWidths []int) string {
 
 func (t *Table) borderAfterColspan(colWidths []int) string {
 	// After a colspan row - use downward junctions (┬)
-	line := t.styledChar(t.dividers.NES)
+	var line strings.Builder
+	line.WriteString(t.styledChar(t.dividers.NES))
 	for i, width := range colWidths {
-		line += strings.Repeat(t.styledChar(t.dividers.EW), width)
+		line.WriteString(strings.Repeat(t.styledChar(t.dividers.EW), width))
 		if i < len(colWidths)-1 {
-			line += t.styledChar(t.dividers.ESW) // ┬ downward junction
+			line.WriteString(t.styledChar(t.dividers.ESW)) // ┬ downward junction
 		}
 	}
-	line += t.styledChar(t.dividers.NSW)
-	return line
+	line.WriteString(t.styledChar(t.dividers.NSW))
+	return line.String()
 }
 
 func (t *Table) borderBeforeColspan(colWidths []int) string {
 	// Before a colspan row - use upward junctions (┴)
-	line := t.styledChar(t.dividers.NES)
+	var line strings.Builder
+	line.WriteString(t.styledChar(t.dividers.NES))
 	for i, width := range colWidths {
-		line += strings.Repeat(t.styledChar(t.dividers.EW), width)
+		line.WriteString(strings.Repeat(t.styledChar(t.dividers.EW), width))
 		if i < len(colWidths)-1 {
-			line += t.styledChar(t.dividers.NEW) // ┴ upward junction
+			line.WriteString(t.styledChar(t.dividers.NEW)) // ┴ upward junction
 		}
 	}
-	line += t.styledChar(t.dividers.NSW)
-	return line
+	line.WriteString(t.styledChar(t.dividers.NSW))
+	return line.String()
 }
 
 func (t *Table) bottomBorder(colWidths []int) string {
-	line := t.styledChar(t.dividers.NE)
+	var line strings.Builder
+	line.WriteString(t.styledChar(t.dividers.NE))
 	for i, width := range colWidths {
-		line += strings.Repeat(t.styledChar(t.dividers.EW), width)
+		line.WriteString(strings.Repeat(t.styledChar(t.dividers.EW), width))
 		if i < len(colWidths)-1 {
-			line += t.styledChar(t.dividers.NEW)
+			line.WriteString(t.styledChar(t.dividers.NEW))
 		}
 	}
-	line += t.styledChar(t.dividers.NW)
-	return line
+	line.WriteString(t.styledChar(t.dividers.NW))
+	return line.String()
 }
 
 func (t *Table) styledChar(char string) string {

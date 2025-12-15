@@ -174,7 +174,7 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 
 	// --- Check for extra fields at the TOP LEVEL ---
 	logging.DebugBool(verboseMode, "ValidateConfig - checking for extra top-level fields in inputMap: %+v", inputMap)
-	configType := reflect.TypeOf(Config{})
+	configType := reflect.TypeFor[Config]()
 	for key := range inputMap {
 		logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s'", key)
 		found := false
@@ -197,7 +197,7 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 	// --- 2. Check for extra fields in the "user" section ---
 	if userMap, ok := inputMap["user"].(map[string]any); ok {
 		logging.DebugBool(verboseMode, "ValidateConfig - found 'user' section in inputMap: %+v", userMap)
-		userType := reflect.TypeOf(UserConfig{})
+		userType := reflect.TypeFor[UserConfig]()
 		for key := range userMap {
 			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'user' section", key)
 			found := false
@@ -233,7 +233,7 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 
 	if cfMap, ok := inputMap["cloudflare"].(map[string]any); ok {
 		logging.DebugBool(verboseMode, "ValidateConfig - found 'cloudflare' section in inputMap: %+v", cfMap)
-		cfType := reflect.TypeOf(CloudflareConfig{})
+		cfType := reflect.TypeFor[CloudflareConfig]()
 		for key := range cfMap {
 			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'cloudflare' section", key)
 			found := false
@@ -255,7 +255,7 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 
 	if dhMap, ok := inputMap["dockerhub"].(map[string]any); ok {
 		logging.DebugBool(verboseMode, "ValidateConfig - found 'dockerhub' section in inputMap: %+v", dhMap)
-		dhType := reflect.TypeOf(DockerhubConfig{})
+		dhType := reflect.TypeFor[DockerhubConfig]()
 		for key := range dhMap {
 			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'dockerhub' section", key)
 			found := false
