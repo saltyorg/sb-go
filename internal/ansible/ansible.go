@@ -40,7 +40,8 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 	result, err := executor.Run(ctx, command[0],
 		executor.WithArgs(command[1:]...),
 		executor.WithWorkingDir(repoPath),
-		executor.WithOutputMode(outputMode))
+		executor.WithOutputMode(outputMode),
+		executor.WithInheritEnv())
 
 	if err != nil {
 		// Check if the error is due to context cancellation (signal interruption)
