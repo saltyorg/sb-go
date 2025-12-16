@@ -117,6 +117,7 @@ func openEditor(path string) error {
 	_, err = executor.Run(context.Background(), editorPath,
 		executor.WithArgs(args...),
 		executor.WithOutputMode(executor.OutputModeInteractive),
+		executor.WithInheritEnv(),
 	)
 	if err != nil {
 		return fmt.Errorf("error opening editor: %w", err)
