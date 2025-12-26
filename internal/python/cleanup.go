@@ -135,24 +135,29 @@ func RemoveDeadsnakesPackages(ctx context.Context, pythonVersion string, verbose
 		return nil
 	}
 
+	// Wait for apt lock to be available
+	if err := apt.WaitForAptLock(ctx, verbose); err != nil {
+		return fmt.Errorf("failed waiting for apt lock: %w", err)
+	}
+
 	// --- Step 1: Remove the main installed packages ---
 	args := append([]string{"remove", "-y"}, installedPackages...)
 
 	if verbose {
-		fmt.Printf("Running command: apt %s\n", strings.Join(args, " "))
+		fmt.Printf("Running command: apt-get %s\n", strings.Join(args, " "))
 	}
 
-	if err := executor.RunVerbose(ctx, "apt", args, verbose,
+	if err := executor.RunVerbose(ctx, "apt-get", args, verbose,
 		executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive")); err != nil {
 		return fmt.Errorf("error removing Python packages: %w", err)
 	}
 
 	// --- Step 2: Run apt autoremove to clean up dependencies ---
 	if verbose {
-		fmt.Println("Running command: apt autoremove -y")
+		fmt.Println("Running command: apt-get autoremove -y")
 	}
 
-	if err := executor.RunVerbose(ctx, "apt", []string{"autoremove", "-y"}, verbose,
+	if err := executor.RunVerbose(ctx, "apt-get", []string{"autoremove", "-y"}, verbose,
 		executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive")); err != nil {
 		return fmt.Errorf("error running apt autoremove: %w", err)
 	}
