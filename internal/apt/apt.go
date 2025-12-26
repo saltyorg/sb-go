@@ -3,15 +3,98 @@ package apt
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/logging"
 )
+
+// aptLockFile is the primary lock file used by dpkg/apt operations.
+const aptLockFile = "/var/lib/dpkg/lock-frontend"
+
+// isAptLocked checks if the apt/dpkg lock file is currently held by another process.
+// It attempts to acquire a non-blocking exclusive lock on the lock file.
+// Returns true if the lock is held by another process, false if available.
+func isAptLocked() (bool, error) {
+	f, err := os.Open(aptLockFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Lock file doesn't exist, apt is not locked
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to open lock file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err != nil {
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return true, nil // locked by another process
+		}
+		return false, fmt.Errorf("failed to check lock: %w", err)
+	}
+
+	// We got the lock, release it immediately
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return false, nil // not locked
+}
+
+// WaitForAptLock waits for the apt/dpkg lock to be released before proceeding.
+// It checks the lock file and waits with exponential backoff until it is released
+// or the context is cancelled/times out.
+// The verbose flag controls whether waiting messages are printed.
+func WaitForAptLock(ctx context.Context, verbose bool) error {
+	const maxRetries = 24 // ~2 minutes total with exponential backoff
+	const initialDelay = 5 * time.Second
+
+	delay := initialDelay
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check if context is already cancelled
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for apt lock: %w", ctx.Err())
+		default:
+		}
+
+		locked, err := isAptLocked()
+		if err != nil {
+			return fmt.Errorf("failed to check apt lock: %w", err)
+		}
+
+		if !locked {
+			if attempt == 1 {
+				logging.DebugBool(verbose, "Apt lock is available, proceeding...")
+			} else {
+				logging.DebugBool(verbose, "Apt lock released, proceeding...")
+			}
+			return nil // Lock is available, proceed
+		}
+
+		// Lock is held, wait and retry
+		logging.DebugBool(verbose, "Waiting for apt lock to be released (attempt %d/%d), retrying in %v...",
+			attempt, maxRetries, delay)
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for apt lock: %w", ctx.Err())
+		case <-time.After(delay):
+			// Cap delay at 10 seconds to avoid waiting too long between checks
+			if delay < 10*time.Second {
+				delay = min(delay*2, 10*time.Second)
+			}
+		}
+	}
+
+	return fmt.Errorf("timed out waiting for apt lock after %d attempts", maxRetries)
+}
 
 // InstallPackage returns a function that installs one or more apt packages using "apt-get install".
 // When executed, the returned function builds a command that includes:
@@ -24,6 +107,11 @@ import (
 // The context parameter allows for cancellation of the installation process.
 func InstallPackage(ctx context.Context, packages []string, verbose bool) func() error {
 	return func() error {
+		// Wait for apt lock to be available
+		if err := WaitForAptLock(ctx, verbose); err != nil {
+			return fmt.Errorf("failed waiting for apt lock: %w", err)
+		}
+
 		// Build the command arguments starting with "apt-get install -y"
 		args := append([]string{"apt-get", "install", "-y"}, packages...)
 
@@ -62,6 +150,11 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 // Timeout errors are treated as retryable, just like mirror sync errors.
 func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 	return func() error {
+		// Wait for apt lock to be available before starting
+		if err := WaitForAptLock(ctx, verbose); err != nil {
+			return fmt.Errorf("failed waiting for apt lock: %w", err)
+		}
+
 		const maxRetries = 3
 		const initialDelay = 5 * time.Second
 		const attemptTimeout = 2 * time.Minute
@@ -454,6 +547,11 @@ func addRepo(repoLine, sourcesFile string) error {
 // The context parameter allows for cancellation of the operation.
 func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
 	return func() error {
+		// Wait for apt lock to be available
+		if err := WaitForAptLock(ctx, verbose); err != nil {
+			return fmt.Errorf("failed waiting for apt lock: %w", err)
+		}
+
 		// Run the command with the unified executor
 		err := executor.RunVerbose(ctx, "sudo", []string{"add-apt-repository", ppa, "--yes"}, verbose,
 			executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
