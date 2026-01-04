@@ -34,3 +34,4 @@ CLAUDE.md
 .mcp.json
 coverage
 coverage.*
+.cache
