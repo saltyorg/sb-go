@@ -1036,9 +1036,7 @@ func parseJSONLogs(output []byte) ([]logEntry, error) {
 		} else if unit, ok := rawEntry["SYSLOG_IDENTIFIER"].(string); ok {
 			entry.unit = unit
 		}
-		if message, ok := rawEntry["MESSAGE"].(string); ok {
-			entry.message = message
-		}
+		entry.message = decodeMessage(rawEntry["MESSAGE"])
 		if cursor, ok := rawEntry["__CURSOR"].(string); ok {
 			entry.cursor = cursor
 		}
@@ -1050,6 +1048,31 @@ func parseJSONLogs(output []byte) ([]logEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// decodeMessage handles journalctl MESSAGE values that may be strings or byte arrays (e.g., when colored output is used).
+func decodeMessage(raw any) string {
+	switch v := raw.(type) {
+	case string:
+		return v
+	case []any:
+		buf := make([]byte, 0, len(v))
+		for _, val := range v {
+			switch n := val.(type) {
+			case float64: // encoding/json decodes numbers to float64
+				buf = append(buf, byte(n))
+			case int:
+				buf = append(buf, byte(n))
+			case int64:
+				buf = append(buf, byte(n))
+			default:
+				return ""
+			}
+		}
+		return string(buf)
+	default:
+		return ""
+	}
 }
 
 func handleLogs() error {
