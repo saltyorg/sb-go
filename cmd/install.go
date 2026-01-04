@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -39,6 +40,8 @@ type suggestion struct {
 	targetRepo  string
 	sType       suggestionType
 }
+
+var forceDiskFull bool
 
 // installCmd represents the install command
 var installCmd = &cobra.Command{
@@ -121,6 +124,8 @@ func init() {
 	installCmd.Flags().StringSliceP("skip-tags", "s", []string{}, "Tags to skip during Ansible playbook execution")
 	installCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
 	installCmd.Flags().Bool("no-cache", false, "Skip cache validation and always perform tag checks")
+	installCmd.Flags().BoolVar(&forceDiskFull, "force-disk-full", false, "Force disk space failure (debug)")
+	_ = installCmd.Flags().MarkHidden("force-disk-full")
 }
 
 func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTags []string, extraArgs []string, verbosity int, noCache bool) error {
@@ -128,6 +133,16 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 	var saltboxTags []string
 	var sandboxTags []string
 	var saltboxModTags []string
+
+	appDataPath := filepath.Dir(constants.SandboxRepoPath)
+
+	if forceDiskFull {
+		return utils.DiskSpaceError(appDataPath, 100.0, 0)
+	}
+
+	if err := utils.CheckDiskSpace([]string{"/", appDataPath}, verbosity); err != nil {
+		return err
+	}
 
 	cacheInstance, err := cache.NewCache()
 	if err != nil {

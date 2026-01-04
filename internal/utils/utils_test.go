@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sys/unix"
 	"gopkg.in/yaml.v3"
 )
 
@@ -264,6 +265,114 @@ func TestCheckDesktopEnvironment(t *testing.T) {
 					t.Error("Should not error when package is not installed")
 				}
 			})
+		}
+	})
+}
+
+func TestCheckDiskSpace(t *testing.T) {
+	tmpDir := t.TempDir()
+	targetPath := filepath.Join(tmpDir, "nested")
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+		t.Fatalf("failed to set up test directories: %v", err)
+	}
+
+	originalStatfs := statfsFunc
+	defer func() {
+		statfsFunc = originalStatfs
+	}()
+
+	rootStat := unix.Statfs_t{
+		Blocks: 8 * 1024 * 1024, // 8M blocks
+		Bavail: 4 * 1024 * 1024, // 4M blocks available -> ~4 GiB at 1 KiB block size
+		Bsize:  1024,
+		Fsid:   unix.Fsid{Val: [2]int32{1, 1}},
+	}
+
+	fakeStats := map[string]unix.Statfs_t{
+		"/":        rootStat,
+		targetPath: rootStat,
+	}
+
+	statfsFunc = func(path string, stat *unix.Statfs_t) error {
+		if s, ok := fakeStats[path]; ok {
+			*stat = s
+			return nil
+		}
+		*stat = rootStat
+		return nil
+	}
+
+	tests := []struct {
+		name        string
+		appStat     unix.Statfs_t
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "sufficient space",
+			appStat: unix.Statfs_t{
+				Blocks: 8 * 1024 * 1024,
+				Bavail: 4 * 1024 * 1024,
+				Bsize:  1024,
+				Fsid:   unix.Fsid{Val: [2]int32{2, 2}},
+			},
+			wantErr: false,
+		},
+		{
+			name: "low available bytes",
+			appStat: unix.Statfs_t{
+				Blocks: 8 * 1024 * 1024,
+				Bavail: 300 * 1024, // ~300 MiB available, below threshold
+				Bsize:  1024,
+				Fsid:   unix.Fsid{Val: [2]int32{2, 2}},
+			},
+			wantErr:     true,
+			errContains: "INSUFFICIENT DISK SPACE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeStats[targetPath] = tt.appStat
+
+			err := CheckDiskSpace([]string{"/", targetPath}, 0)
+			if tt.wantErr && err == nil {
+				t.Fatalf("expected error but got none")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("expected no error but got: %v", err)
+			}
+			if tt.wantErr && tt.errContains != "" && err != nil && !strings.Contains(err.Error(), tt.errContains) {
+				t.Fatalf("expected error to contain %q, got %v", tt.errContains, err)
+			}
+		})
+	}
+
+	t.Run("skips duplicate filesystem paths", func(t *testing.T) {
+		fakeStats["/"] = rootStat
+		fakeStats[targetPath] = unix.Statfs_t{
+			Blocks: rootStat.Blocks,
+			Bavail: 100, // would fail if checked
+			Bsize:  rootStat.Bsize,
+			Fsid:   rootStat.Fsid, // same filesystem
+		}
+
+		if err := CheckDiskSpace([]string{"/", targetPath}, 0); err != nil {
+			t.Fatalf("expected no error due to dedupe, got %v", err)
+		}
+	})
+
+	t.Run("different filesystem still checked", func(t *testing.T) {
+		fakeStats["/"] = rootStat
+		fakeStats[targetPath] = unix.Statfs_t{
+			Blocks: rootStat.Blocks,
+			Bavail: 100, // should fail
+			Bsize:  rootStat.Bsize,
+			Fsid:   unix.Fsid{Val: [2]int32{3, 3}},
+		}
+
+		if err := CheckDiskSpace([]string{"/", targetPath}, 0); err == nil {
+			t.Fatalf("expected error for low space on different fs but got none")
 		}
 	})
 }

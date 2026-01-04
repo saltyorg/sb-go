@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/saltyorg/sb-go/internal/announcements"
 	"github.com/saltyorg/sb-go/internal/ansible"
@@ -60,6 +61,16 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 	if !tty.IsInteractive() {
 		normalStyle := lipgloss.NewStyle()
 		return fmt.Errorf("%s", normalStyle.Render("update command requires an interactive terminal (TTY not available)"))
+	}
+
+	appDataPath := filepath.Dir(constants.SandboxRepoPath)
+	pathsToCheck := []string{"/", appDataPath, "/srv"}
+	verbosity := 0
+	if verbose {
+		verbosity = 1
+	}
+	if err := utils.CheckDiskSpace(pathsToCheck, verbosity); err != nil {
+		return err
 	}
 
 	// Set verbose mode for spinners

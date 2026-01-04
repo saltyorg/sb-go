@@ -11,6 +11,8 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
+
+	"github.com/spf13/cobra"
 )
 
 // TestTagParsing tests the tag parsing and categorization logic
@@ -204,6 +206,32 @@ func TestValidateAndSuggest(t *testing.T) {
 				t.Errorf("Invalid test: wantSuggestions cannot be negative")
 			}
 		})
+	}
+}
+
+func TestForceDiskFullFlagHidden(t *testing.T) {
+	flag := installCmd.Flags().Lookup("force-disk-full")
+	if flag == nil {
+		t.Fatalf("force-disk-full flag not found")
+	}
+	if !flag.Hidden {
+		t.Fatalf("force-disk-full flag should be hidden")
+	}
+}
+
+func TestHandleInstallForceDiskFull(t *testing.T) {
+	defer func() { forceDiskFull = false }()
+	forceDiskFull = true
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+
+	err := handleInstall(cmd, []string{"plex"}, nil, nil, nil, 0, false)
+	if err == nil {
+		t.Fatalf("expected forced disk full error but got nil")
+	}
+	if !strings.Contains(err.Error(), "INSUFFICIENT DISK SPACE") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
