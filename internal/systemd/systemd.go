@@ -100,7 +100,14 @@ func parseSystemctlOutput(output string, filter ServiceFilter, serviceMap map[st
 		// Lines may start with ● for failed services
 		fields := strings.Fields(line)
 		if len(fields) >= 4 {
-			serviceName := strings.TrimPrefix(fields[0], "●")
+			fieldOffset := 0
+			if fields[0] == "●" {
+				fieldOffset = 1
+			}
+			if len(fields) < fieldOffset+4 {
+				continue
+			}
+			serviceName := strings.TrimPrefix(fields[fieldOffset], "●")
 			serviceName = strings.TrimSpace(serviceName)
 
 			if !strings.HasSuffix(serviceName, ".service") {
@@ -116,8 +123,8 @@ func parseSystemctlOutput(output string, filter ServiceFilter, serviceMap map[st
 
 			serviceMap[serviceName] = ServiceInfo{
 				Name:   serviceName,
-				Active: fields[2],
-				Sub:    fields[3],
+				Active: fields[fieldOffset+2],
+				Sub:    fields[fieldOffset+3],
 			}
 		}
 	}
