@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/signals"
 	"github.com/saltyorg/sb-go/internal/styles"
 	"github.com/saltyorg/sb-go/internal/systemd"
 
@@ -917,8 +918,9 @@ func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea
 			}
 		}
 
-		// Use context with timeout
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		// Use context with timeout, canceled on shutdown
+		baseCtx := signals.GetGlobalManager().Context()
+		ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
 		defer cancel()
 
 		result, err := executor.Run(ctx, args[0],
