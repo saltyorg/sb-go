@@ -893,6 +893,7 @@ func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea
 			"journalctl",
 			"-u", serviceUnit,
 			"-o", "json", // Use JSON for structured parsing
+			"--all", // Prevent truncation of large fields (e.g., big MESSAGE payloads)
 		}
 
 		if cursor != "" {
