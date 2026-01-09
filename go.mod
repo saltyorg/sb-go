@@ -12,7 +12,7 @@ require (
 	github.com/charmbracelet/fang v0.4.4
 	github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
-	github.com/charmbracelet/x/exp/charmtone v0.0.0-20251215102626-e0db08df7383
+	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260109001716-2fbdffcb221f
 	github.com/cloudflare/cloudflare-go/v6 v6.5.0
 	github.com/creativeprojects/go-selfupdate v1.5.2
 	github.com/go-playground/validator/v10 v10.30.1
@@ -27,6 +27,7 @@ require (
 	golang.org/x/crypto v0.46.0
 	golang.org/x/net v0.48.0
 	golang.org/x/sync v0.19.0
+	golang.org/x/sys v0.39.0
 	golang.org/x/term v0.38.0
 	golift.io/starr v1.2.1
 	gopkg.in/ini.v1 v1.67.0
@@ -112,7 +113,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/validator.v2 v2.0.1 // indirect
