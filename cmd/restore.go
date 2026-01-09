@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -55,21 +57,22 @@ func initialRestoreModel() *restoreModel {
 		t = textinput.New()
 		t.Cursor.Style = cursorStyle
 		t.CharLimit = 64
+		t.Width = 32
 
 		switch i {
 		case 0:
-			t.Placeholder = "Username"
+			t.Placeholder = "Restore service username"
 			t.Prompt = "Username: "
 			t.Focus()
 			t.PromptStyle = focusedStyle
 			t.TextStyle = focusedStyle
 		case 1:
-			t.Placeholder = "Password"
+			t.Placeholder = "Restore service password"
 			t.Prompt = "Password: "
 			t.EchoMode = textinput.EchoPassword
 			t.EchoCharacter = '•'
 		case 2:
-			t.Placeholder = "Confirm Password"
+			t.Placeholder = "Repeat restore service password"
 			t.Prompt = "Password: "
 			t.EchoMode = textinput.EchoPassword
 			t.EchoCharacter = '•'
@@ -275,20 +278,20 @@ func setupRestoreFolders(dir, folder string, verbose bool) error {
 
 // validateFileHeader checks if the downloaded file has the expected "Salted" header
 func validateFileHeader(filePath string, verbose bool) error {
-	header := make([]byte, 10)
+	header := make([]byte, len("Salted__"))
 	f, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	n, err := f.Read(header)
+	n, err := io.ReadFull(f, header)
 	_ = f.Close()
-	if err != nil && err != io.EOF {
+	if err != nil {
 		return fmt.Errorf("failed to read header: %w", err)
 	}
 	if verbose {
 		fmt.Printf("DEBUG: Read %d bytes for header. Header: %s\n", n, string(header))
 	}
-	if !strings.Contains(string(header), "Salted") {
+	if !bytes.HasPrefix(header, []byte("Salted__")) {
 		return fmt.Errorf("invalid file header")
 	}
 	return nil
@@ -335,7 +338,7 @@ func processRestoredFile(file, folder, dir, password string, verbose bool) error
 		return fmt.Errorf("source file not found")
 	}
 
-	if err := os.Rename(sourcePath, destPath); err != nil {
+	if err := moveFile(sourcePath, destPath, 0600); err != nil {
 		return fmt.Errorf("failed to move file: %w", err)
 	}
 
@@ -382,10 +385,9 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 			fmt.Println(" [FAIL]")
 			continue
 		}
-		fmt.Println(" [DONE]")
 
 		if err := processRestoredFile(file, folder, dir, password, verbose); err != nil {
-			fmt.Printf("%-20.20s [FAIL]\n", file)
+			fmt.Println(" [FAIL]")
 			if strings.Contains(err.Error(), "incorrect password") {
 				fmt.Println("Decryption failed. This likely means the password was incorrect")
 			} else {
@@ -394,7 +396,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 			continue
 		}
 
-		fmt.Printf("%-20.20s [DONE]\n", file)
+		fmt.Println(" [DONE]")
 		successfulDownloads++
 	}
 	return successfulDownloads, nil
@@ -478,9 +480,12 @@ func decryptFile(inputFile, outputFile, password string, verbose bool) error {
 	if verbose {
 		fmt.Printf("DEBUG: Salt: %x\n", salt)
 	}
+	if len(ciphertext) == 0 || len(ciphertext)%aes.BlockSize != 0 {
+		return fmt.Errorf("invalid ciphertext length: %d", len(ciphertext))
+	}
 	key, iv := deriveKeyAndIV([]byte(password), salt, verbose)
 	if verbose {
-		fmt.Printf("DEBUG: Key: %x, IV: %x\n", key, iv)
+		fmt.Printf("DEBUG: Derived key and IV (redacted)\n")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -491,6 +496,9 @@ func decryptFile(inputFile, outputFile, password string, verbose bool) error {
 	plaintext := make([]byte, len(ciphertext))
 	cbc.CryptBlocks(plaintext, ciphertext)
 
+	if len(plaintext) == 0 {
+		return &paddingError{fmt.Errorf("invalid plaintext length")}
+	}
 	paddingLen := int(plaintext[len(plaintext)-1])
 	if verbose {
 		fmt.Printf("DEBUG: Padding Size Before Check: %d\n", paddingLen)
@@ -511,7 +519,7 @@ func decryptFile(inputFile, outputFile, password string, verbose bool) error {
 	if verbose {
 		fmt.Printf("DEBUG: Plaintext length after unpadding: %d\n", len(plaintext))
 	}
-	return os.WriteFile(outputFile, plaintext, 0644)
+	return os.WriteFile(outputFile, plaintext, 0600)
 }
 
 func deriveKeyAndIV(password, salt []byte, verbose bool) ([]byte, []byte) {
@@ -522,4 +530,50 @@ func deriveKeyAndIV(password, salt []byte, verbose bool) ([]byte, []byte) {
 	keySize := 48 // 32 for key, 16 for IV
 	key := pbkdf2.Key(password, salt, iterations, keySize, sha256.New)
 	return key[:32], key[32:]
+}
+
+func moveFile(src, dst string, perm os.FileMode) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	} else if linkErr, ok := err.(*os.LinkError); ok && errors.Is(linkErr.Err, syscall.EXDEV) {
+		return copyFileWithPerm(src, dst, perm)
+	} else {
+		return err
+	}
+}
+
+func copyFileWithPerm(src, dst string, perm os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+
+	dir := filepath.Dir(dst)
+	tmp, err := os.CreateTemp(dir, ".restore-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := io.Copy(tmp, in); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		return err
+	}
+	return os.Remove(src)
 }
