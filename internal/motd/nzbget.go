@@ -2,6 +2,7 @@ package motd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -52,7 +53,7 @@ type listGroupsResponse struct {
 }
 
 // GetNzbgetInfo fetches and formats NZBGet queue information
-func GetNzbgetInfo(verbose bool) string {
+func GetNzbgetInfo(ctx context.Context, verbose bool) string {
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
@@ -115,7 +116,7 @@ func GetNzbgetInfo(verbose bool) string {
 				fmt.Printf("DEBUG: Processing NZBGet instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
-			info, err := getNzbgetQueueInfo(inst)
+			info, err := getNzbgetQueueInfo(ctx, inst)
 			if err != nil {
 				if verbose {
 					fmt.Printf("DEBUG: Error getting NZBGet info for %s, hiding entry: %v\n", inst.Name, err)
@@ -144,7 +145,7 @@ func GetNzbgetInfo(verbose bool) string {
 }
 
 // callNzbgetAPI is a helper to perform JSON-RPC calls
-func callNzbgetAPI(instance config.UserPassAppInstance, method string, target any) error {
+func callNzbgetAPI(ctx context.Context, instance config.UserPassAppInstance, method string, target any) error {
 	timeout := 1 * time.Second
 	if instance.Timeout > 0 {
 		timeout = time.Duration(instance.Timeout) * time.Second
@@ -164,7 +165,7 @@ func callNzbgetAPI(instance config.UserPassAppInstance, method string, target an
 		return fmt.Errorf("failed to create JSON request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonReq))
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonReq))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -189,7 +190,7 @@ func callNzbgetAPI(instance config.UserPassAppInstance, method string, target an
 }
 
 // getNzbgetQueueInfo fetches queue information from a single NZBGet server
-func getNzbgetQueueInfo(instance config.UserPassAppInstance) (NzbgetInfo, error) {
+func getNzbgetQueueInfo(ctx context.Context, instance config.UserPassAppInstance) (NzbgetInfo, error) {
 	result := NzbgetInfo{Name: instance.Name}
 	if result.Name == "" {
 		result.Name = "NZBGet"
@@ -197,7 +198,7 @@ func getNzbgetQueueInfo(instance config.UserPassAppInstance) (NzbgetInfo, error)
 
 	// Get status
 	var status statusResponse
-	if err := callNzbgetAPI(instance, "status", &status); err != nil {
+	if err := callNzbgetAPI(ctx, instance, "status", &status); err != nil {
 		return result, err
 	}
 	result.IsPaused = status.Result.ServerPaused
@@ -205,7 +206,7 @@ func getNzbgetQueueInfo(instance config.UserPassAppInstance) (NzbgetInfo, error)
 
 	// Get queue details
 	var queue listGroupsResponse
-	if err := callNzbgetAPI(instance, "listgroups", &queue); err != nil {
+	if err := callNzbgetAPI(ctx, instance, "listgroups", &queue); err != nil {
 		return result, err
 	}
 

@@ -173,7 +173,11 @@ func GenerateBannerFromFile(content string, toiletArgs string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	args := splitShellArgs(toiletArgs)
+	args, err := splitShellArgs(toiletArgs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing banner-file-toilet args: %v\n", err)
+		return content
+	}
 	result, err := executor.Run(ctx, "toilet",
 		executor.WithArgs(args...),
 		executor.WithStdin(strings.NewReader(content)),
@@ -188,50 +192,78 @@ func GenerateBannerFromFile(content string, toiletArgs string) string {
 	return string(result.Combined)
 }
 
-func splitShellArgs(input string) []string {
+func splitShellArgs(input string) ([]string, error) {
 	var args []string
 	var buf strings.Builder
-	inQuote := rune(0)
 	escaped := false
+	inSingle := false
+	inDouble := false
+	inToken := false
 
 	flush := func() {
-		if buf.Len() > 0 {
-			args = append(args, buf.String())
-			buf.Reset()
+		if !inToken {
+			return
 		}
+		args = append(args, buf.String())
+		buf.Reset()
+		inToken = false
 	}
 
 	for _, r := range input {
 		if escaped {
 			buf.WriteRune(r)
 			escaped = false
+			inToken = true
 			continue
 		}
 
-		if r == '\\' {
-			escaped = true
+		if inSingle {
+			if r == '\'' {
+				inSingle = false
+			} else {
+				buf.WriteRune(r)
+			}
+			inToken = true
 			continue
 		}
 
-		if inQuote != 0 {
-			if r == inQuote {
-				inQuote = 0
+		if inDouble {
+			switch r {
+			case '"':
+				inDouble = false
+				inToken = true
+				continue
+			case '\\':
+				escaped = true
+				continue
+			default:
+				buf.WriteRune(r)
+				inToken = true
 				continue
 			}
-			buf.WriteRune(r)
-			continue
 		}
 
 		switch {
-		case r == '"' || r == '\'':
-			inQuote = r
 		case unicode.IsSpace(r):
 			flush()
+		case r == '\'':
+			inSingle = true
+			inToken = true
+		case r == '"':
+			inDouble = true
+			inToken = true
+		case r == '\\':
+			escaped = true
 		default:
 			buf.WriteRune(r)
+			inToken = true
 		}
 	}
 
+	if escaped || inSingle || inDouble {
+		return nil, fmt.Errorf("unterminated escape or quote")
+	}
+
 	flush()
-	return args
+	return args, nil
 }

@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -72,7 +73,7 @@ type PlexSession struct {
 }
 
 // GetPlexInfo fetches and formats Plex streaming information
-func GetPlexInfo(verbose bool) string {
+func GetPlexInfo(ctx context.Context, verbose bool) string {
 	// Check if the configuration file exists
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -143,7 +144,7 @@ func GetPlexInfo(verbose bool) string {
 				fmt.Printf("DEBUG: Processing Plex instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
-			info, err := getPlexStreamInfo(inst)
+			info, err := getPlexStreamInfo(ctx, inst)
 			if err != nil {
 				if verbose {
 					fmt.Printf("DEBUG: Error getting Plex stream info for %s, hiding entry: %v\n", inst.Name, err)
@@ -175,7 +176,7 @@ func GetPlexInfo(verbose bool) string {
 }
 
 // getPlexStreamInfo fetches streaming information from a single Plex server
-func getPlexStreamInfo(instance config.PlexInstance) (PlexStreamInfo, error) {
+func getPlexStreamInfo(ctx context.Context, instance config.PlexInstance) (PlexStreamInfo, error) {
 	result := PlexStreamInfo{
 		Name: instance.Name,
 	}
@@ -215,7 +216,7 @@ func getPlexStreamInfo(instance config.PlexInstance) (PlexStreamInfo, error) {
 	}
 
 	// Create request
-	req, err := http.NewRequest("GET", sessionURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", sessionURL, nil)
 	if err != nil {
 		return result, fmt.Errorf("failed to create request: %w", err)
 	}

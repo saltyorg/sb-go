@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,7 +41,7 @@ type SabnzbdQueue struct {
 }
 
 // GetSabnzbdInfo fetches and formats SABnzbd queue information
-func GetSabnzbdInfo(verbose bool) string {
+func GetSabnzbdInfo(ctx context.Context, verbose bool) string {
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
@@ -103,7 +104,7 @@ func GetSabnzbdInfo(verbose bool) string {
 				fmt.Printf("DEBUG: Processing SABnzbd instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
-			info, err := getSabnzbdQueueInfo(inst)
+			info, err := getSabnzbdQueueInfo(ctx, inst)
 			if err != nil {
 				if verbose {
 					fmt.Printf("DEBUG: Error getting SABnzbd info for %s, hiding entry: %v\n", inst.Name, err)
@@ -132,7 +133,7 @@ func GetSabnzbdInfo(verbose bool) string {
 }
 
 // getSabnzbdQueueInfo fetches queue information from a single SABnzbd server
-func getSabnzbdQueueInfo(instance config.AppInstance) (SabnzbdInfo, error) {
+func getSabnzbdQueueInfo(ctx context.Context, instance config.AppInstance) (SabnzbdInfo, error) {
 	result := SabnzbdInfo{
 		Name: instance.Name,
 	}
@@ -148,7 +149,7 @@ func getSabnzbdQueueInfo(instance config.AppInstance) (SabnzbdInfo, error) {
 	client := &http.Client{Timeout: timeout}
 	url := fmt.Sprintf("%s/api?mode=queue&output=json&apikey=%s", strings.TrimSuffix(instance.URL, "/"), instance.APIKey)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return result, fmt.Errorf("failed to create request: %w", err)
 	}

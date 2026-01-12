@@ -3,6 +3,7 @@ package motd
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -104,7 +105,7 @@ func generateSection(buf *strings.Builder, rule *validate.SchemaRule, indent str
 func formatValue(v any) string {
 	switch val := v.(type) {
 	case string:
-		return val
+		return strconv.Quote(val)
 	case bool:
 		return fmt.Sprintf("%v", val)
 	case int, int64, float64:

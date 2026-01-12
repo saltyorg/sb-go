@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ type EmbySessionInfo struct {
 }
 
 // GetEmbyInfo fetches and formats Emby streaming information
-func GetEmbyInfo(verbose bool) string {
+func GetEmbyInfo(ctx context.Context, verbose bool) string {
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
@@ -101,7 +102,7 @@ func GetEmbyInfo(verbose bool) string {
 				fmt.Printf("DEBUG: Processing Emby instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
-			info, err := getEmbyStreamInfo(inst)
+			info, err := getEmbyStreamInfo(ctx, inst)
 			if err != nil {
 				if verbose {
 					fmt.Printf("DEBUG: Error getting Emby stream info for %s, hiding entry: %v\n", inst.Name, err)
@@ -130,7 +131,7 @@ func GetEmbyInfo(verbose bool) string {
 }
 
 // getEmbyStreamInfo fetches streaming information from a single Emby server
-func getEmbyStreamInfo(instance config.EmbyInstance) (EmbyStreamInfo, error) {
+func getEmbyStreamInfo(ctx context.Context, instance config.EmbyInstance) (EmbyStreamInfo, error) {
 	result := EmbyStreamInfo{
 		Name: instance.Name,
 	}
@@ -146,7 +147,7 @@ func getEmbyStreamInfo(instance config.EmbyInstance) (EmbyStreamInfo, error) {
 	client := &http.Client{Timeout: timeout}
 	url := fmt.Sprintf("%s/emby/Sessions?api_key=%s", strings.TrimSuffix(instance.URL, "/"), instance.Token)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return result, fmt.Errorf("failed to create request: %w", err)
 	}

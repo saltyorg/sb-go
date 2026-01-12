@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -149,7 +151,7 @@ func GetServiceRuntime(ctx context.Context, serviceName string) (string, error) 
 	}
 
 	result, err := executor.Run(ctx, "systemctl",
-		executor.WithArgs("show", serviceUnit, "--property=ActiveEnterTimestamp", "--no-pager"),
+		executor.WithArgs("show", serviceUnit, "--property=ActiveEnterTimestampMonotonic", "--property=ActiveEnterTimestamp", "--no-pager"),
 		executor.WithOutputMode(executor.OutputModeCombined),
 	)
 	if err != nil {
@@ -157,13 +159,36 @@ func GetServiceRuntime(ctx context.Context, serviceName string) (string, error) 
 	}
 
 	output := strings.TrimSpace(string(result.Combined))
-	// Output format: ActiveEnterTimestamp=Mon 2025-11-10 10:11:29 CET
-	parts := strings.SplitN(output, "=", 2)
-	if len(parts) != 2 || parts[1] == "" {
-		return "", fmt.Errorf("no timestamp found")
+	var monotonicStr string
+	var timestampStr string
+	for _, line := range strings.Split(output, "\n") {
+		if after, ok := strings.CutPrefix(line, "ActiveEnterTimestampMonotonic="); ok {
+			monotonicStr = strings.TrimSpace(after)
+			continue
+		}
+		if after, ok := strings.CutPrefix(line, "ActiveEnterTimestamp="); ok {
+			timestampStr = strings.TrimSpace(after)
+		}
 	}
 
-	timestampStr := parts[1]
+	if monotonicStr != "" && monotonicStr != "0" && monotonicStr != "n/a" {
+		monotonicUS, err := strconv.ParseInt(monotonicStr, 10, 64)
+		if err == nil {
+			uptimeSeconds, err := readUptimeSeconds()
+			if err == nil {
+				activeSeconds := uptimeSeconds - (float64(monotonicUS) / 1_000_000.0)
+				if activeSeconds < 0 {
+					activeSeconds = 0
+				}
+				duration := time.Duration(activeSeconds * float64(time.Second))
+				return FormatDuration(duration), nil
+			}
+		}
+	}
+
+	if timestampStr == "" || timestampStr == "n/a" {
+		return "", fmt.Errorf("no timestamp found")
+	}
 	var startTime time.Time
 	formats := []string{
 		"Mon 2006-01-02 15:04:05 MST",
@@ -186,6 +211,18 @@ func GetServiceRuntime(ctx context.Context, serviceName string) (string, error) 
 
 	duration := time.Since(startTime)
 	return FormatDuration(duration), nil
+}
+
+func readUptimeSeconds() (float64, error) {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0, err
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return 0, fmt.Errorf("empty uptime data")
+	}
+	return strconv.ParseFloat(fields[0], 64)
 }
 
 // FormatDuration formats a duration into a human-readable string.

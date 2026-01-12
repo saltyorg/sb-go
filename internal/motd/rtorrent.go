@@ -28,7 +28,7 @@ type rtorrentInfo struct {
 }
 
 // GetRtorrentInfo fetches and formats rTorrent information.
-func GetRtorrentInfo(verbose bool) string {
+func GetRtorrentInfo(ctx context.Context, verbose bool) string {
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
@@ -91,7 +91,7 @@ func GetRtorrentInfo(verbose bool) string {
 				fmt.Printf("DEBUG: Processing rTorrent instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
-			info, err := getRtorrentStats(inst)
+			info, err := getRtorrentStats(ctx, inst)
 			if err != nil {
 				if verbose {
 					fmt.Printf("DEBUG: Error getting rTorrent info for %s, hiding entry: %v\n", inst.Name, err)
@@ -120,7 +120,7 @@ func GetRtorrentInfo(verbose bool) string {
 }
 
 // getRtorrentStats fetches statistics from an rTorrent instance.
-func getRtorrentStats(instance config.UserPassAppInstance) (rtorrentInfo, error) {
+func getRtorrentStats(ctx context.Context, instance config.UserPassAppInstance) (rtorrentInfo, error) {
 	result := rtorrentInfo{Name: instance.Name}
 	if result.Name == "" {
 		result.Name = "rTorrent"
@@ -132,8 +132,6 @@ func getRtorrentStats(instance config.UserPassAppInstance) (rtorrentInfo, error)
 		BasicUser: instance.User,
 		BasicPass: instance.Password,
 	}
-
-	ctx := context.Background()
 
 	// Quick connectivity check with short timeout to fail fast if unavailable
 	checkClient := rtorrent.NewClientWithOpts(clientCfg, rtorrent.WithCustomClient(&http.Client{

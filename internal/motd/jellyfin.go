@@ -26,7 +26,7 @@ type JellyfinStreamInfo struct {
 }
 
 // GetJellyfinInfo fetches and formats Jellyfin streaming information
-func GetJellyfinInfo(verbose bool) string {
+func GetJellyfinInfo(ctx context.Context, verbose bool) string {
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
@@ -89,7 +89,7 @@ func GetJellyfinInfo(verbose bool) string {
 				fmt.Printf("DEBUG: Processing Jellyfin instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
-			info, err := getJellyfinStreamInfo(inst)
+			info, err := getJellyfinStreamInfo(ctx, inst)
 			if err != nil {
 				if verbose {
 					fmt.Printf("DEBUG: Error getting Jellyfin stream info for %s, hiding entry: %v\n", inst.Name, err)
@@ -118,7 +118,7 @@ func GetJellyfinInfo(verbose bool) string {
 }
 
 // getJellyfinStreamInfo fetches streaming information from a single Jellyfin server
-func getJellyfinStreamInfo(instance config.JellyfinInstance) (JellyfinStreamInfo, error) {
+func getJellyfinStreamInfo(ctx context.Context, instance config.JellyfinInstance) (JellyfinStreamInfo, error) {
 	result := JellyfinStreamInfo{
 		Name: instance.Name,
 	}
@@ -143,7 +143,7 @@ func getJellyfinStreamInfo(instance config.JellyfinInstance) (JellyfinStreamInfo
 	client := jellyfin.NewAPIClient(apiConfig)
 
 	// Fetch active sessions
-	sessions, resp, err := client.SessionAPI.GetSessions(context.Background()).Execute()
+	sessions, resp, err := client.SessionAPI.GetSessions(ctx).Execute()
 	if resp != nil {
 		defer func() { _ = resp.Body.Close() }()
 	}

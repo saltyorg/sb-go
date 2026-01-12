@@ -337,7 +337,7 @@ func GetPlexInfoWithContext(ctx context.Context, verbose bool) string {
 				ch <- "" // Return empty on panic to hide this section
 			}
 		}()
-		ch <- GetPlexInfo(verbose)
+		ch <- GetPlexInfo(ctx, verbose)
 	}()
 
 	select {
@@ -361,7 +361,7 @@ func GetEmbyInfoWithContext(ctx context.Context, verbose bool) string {
 				ch <- "" // Return empty on panic to hide this section
 			}
 		}()
-		ch <- GetEmbyInfo(verbose)
+		ch <- GetEmbyInfo(ctx, verbose)
 	}()
 
 	select {
@@ -385,7 +385,7 @@ func GetJellyfinInfoWithContext(ctx context.Context, verbose bool) string {
 				ch <- "" // Return empty on panic to hide this section
 			}
 		}()
-		ch <- GetJellyfinInfo(verbose)
+		ch <- GetJellyfinInfo(ctx, verbose)
 	}()
 
 	select {
@@ -409,7 +409,7 @@ func GetSabnzbdInfoWithContext(ctx context.Context, verbose bool) string {
 				ch <- "" // Return empty on panic to hide this section
 			}
 		}()
-		ch <- GetSabnzbdInfo(verbose)
+		ch <- GetSabnzbdInfo(ctx, verbose)
 	}()
 
 	select {
@@ -433,7 +433,7 @@ func GetNzbgetInfoWithContext(ctx context.Context, verbose bool) string {
 				ch <- "" // Return empty on panic to hide this section
 			}
 		}()
-		ch <- GetNzbgetInfo(verbose)
+		ch <- GetNzbgetInfo(ctx, verbose)
 	}()
 
 	select {
@@ -457,7 +457,7 @@ func GetQbittorrentInfoWithContext(ctx context.Context, verbose bool) string {
 				ch <- "" // Return empty on panic to hide this section
 			}
 		}()
-		ch <- GetQbittorrentInfo(verbose)
+		ch <- GetQbittorrentInfo(ctx, verbose)
 	}()
 
 	select {
@@ -481,7 +481,7 @@ func GetRtorrentInfoWithContext(ctx context.Context, verbose bool) string {
 				ch <- "" // Return empty on panic to hide this section
 			}
 		}()
-		ch <- GetRtorrentInfo(verbose)
+		ch <- GetRtorrentInfo(ctx, verbose)
 	}()
 
 	select {

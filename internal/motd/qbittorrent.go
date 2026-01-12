@@ -28,7 +28,7 @@ type qbittorrentInfo struct {
 }
 
 // GetQbittorrentInfo fetches and formats qBittorrent information.
-func GetQbittorrentInfo(verbose bool) string {
+func GetQbittorrentInfo(ctx context.Context, verbose bool) string {
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		if verbose {
@@ -91,7 +91,7 @@ func GetQbittorrentInfo(verbose bool) string {
 				fmt.Printf("DEBUG: Processing qBittorrent instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 			}
 
-			info, err := getQbittorrentStats(inst)
+			info, err := getQbittorrentStats(ctx, inst)
 			if err != nil {
 				if verbose {
 					fmt.Printf("DEBUG: Error getting qBittorrent info for %s, hiding entry: %v\n", inst.Name, err)
@@ -120,13 +120,11 @@ func GetQbittorrentInfo(verbose bool) string {
 }
 
 // getQbittorrentStats fetches statistics using the sync endpoint.
-func getQbittorrentStats(instance config.UserPassAppInstance) (qbittorrentInfo, error) {
+func getQbittorrentStats(ctx context.Context, instance config.UserPassAppInstance) (qbittorrentInfo, error) {
 	result := qbittorrentInfo{Name: instance.Name}
 	if result.Name == "" {
 		result.Name = "qBittorrent"
 	}
-
-	ctx := context.Background()
 
 	// Create client with short timeout for quick connectivity check
 	client := qbittorrent.NewClient(qbittorrent.Config{
