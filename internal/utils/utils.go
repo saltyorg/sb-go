@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -98,13 +97,7 @@ func CheckUbuntuSupport() error {
 	if err := ubuntu.CheckSupport(supportedVersions); err != nil {
 		return fmt.Errorf("UNSUPPORTED OS - Install cancelled: %w. Supported OS versions: %s", err, strings.Join(supportedVersions, ", "))
 	}
-
-	osRelease, _ := ubuntu.ParseOSRelease("/etc/os-release")
-	versionID := osRelease["VERSION_ID"]
-	if slices.Contains(supportedVersions, versionID) {
-		return nil // Supported version found
-	}
-	return fmt.Errorf("warning: Could not determine specific support level after successful OS check")
+	return nil
 }
 
 // CheckArchitecture checks if the CPU architecture is supported.
