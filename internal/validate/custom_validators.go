@@ -114,8 +114,16 @@ var asyncAPIValidators = map[string]AsyncAPIValidator{
 
 // validateSSHKeyOrURL validates SSH public keys or URLs
 func validateSSHKeyOrURL(value any, _ map[string]any) error {
+	if value == nil {
+		return nil // Optional field
+	}
+
 	str, ok := value.(string)
-	if !ok || str == "" {
+	if !ok {
+		return fmt.Errorf("must be a string")
+	}
+
+	if str == "" {
 		return nil // Optional field
 	}
 
@@ -805,8 +813,16 @@ func validateWholeNumber(value any, _ map[string]any) error {
 
 // validateURL validates URL format and characters
 func validateURL(value any, _ map[string]any) error {
+	if value == nil {
+		return nil // Optional field
+	}
+
 	str, ok := value.(string)
-	if !ok || str == "" {
+	if !ok {
+		return fmt.Errorf("must be a string")
+	}
+
+	if str == "" {
 		return nil // Optional field
 	}
 

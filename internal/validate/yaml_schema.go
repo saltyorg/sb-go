@@ -198,6 +198,21 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 		return err
 	}
 
+	// Skip validation for optional empty values
+	if !rule.Required && isEmptyValue(value) {
+		return nil
+	}
+
+	// Format validation
+	if err := s.validateFormat(value, rule, path); err != nil {
+		return err
+	}
+
+	// Length validation
+	if err := s.validateLength(value, rule, path); err != nil {
+		return err
+	}
+
 	// Built-in type validators (run automatically based on type)
 	builtInValidators := map[string]string{
 		"ansible_bool":    "validate_ansible_bool",
@@ -468,7 +483,7 @@ func (s *Schema) validateFormat(value any, rule *SchemaRule, path string) error 
 
 	str, ok := value.(string)
 	if !ok {
-		return nil // Format only applies to strings
+		return fmt.Errorf("field '%s' must be a string", path)
 	}
 
 	logging.DebugBool(verboseMode, "validateFormat for '%s': format=%s, value=%s", path, rule.Format, str)
@@ -495,9 +510,13 @@ func (s *Schema) validateFormat(value any, rule *SchemaRule, path string) error 
 
 // validateLength validates string length constraints
 func (s *Schema) validateLength(value any, rule *SchemaRule, path string) error {
+	if rule.MinLength == 0 && rule.MaxLength == 0 {
+		return nil
+	}
+
 	str, ok := value.(string)
 	if !ok {
-		return nil // Length only applies to strings
+		return fmt.Errorf("field '%s' must be a string", path)
 	}
 
 	length := len(str)

@@ -407,6 +407,7 @@ func TestValidateURL(t *testing.T) {
 		// Invalid URLs
 		{name: "Invalid - no scheme", url: "example.com", wantError: true, errorMsg: "must be a valid URL format"},
 		{name: "Invalid - invalid characters", url: "https://example.com/<script>", wantError: true, errorMsg: "contains invalid character"}, // The validator rejects < and >
+		{name: "Invalid - non-string", url: 123, wantError: true, errorMsg: "must be a string"},
 	}
 
 	for _, tt := range tests {
@@ -499,7 +500,7 @@ func TestIsValidSSHKey(t *testing.T) {
 func TestValidateSSHKeyOrURL(t *testing.T) {
 	tests := []struct {
 		name    string
-		value   string
+		value   any
 		wantErr bool
 	}{
 		{
@@ -527,16 +528,21 @@ func TestValidateSSHKeyOrURL(t *testing.T) {
 			value:   "not-a-key",
 			wantErr: true,
 		},
+		{
+			name:    "Invalid non-string",
+			value:   123,
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateSSHKeyOrURL(tt.value, nil)
 			if tt.wantErr && err == nil {
-				t.Errorf("Expected error for value '%s', but got none", tt.value)
+				t.Errorf("Expected error for value '%v', but got none", tt.value)
 			}
 			if !tt.wantErr && err != nil {
-				t.Errorf("Expected no error for value '%s', got: %v", tt.value, err)
+				t.Errorf("Expected no error for value '%v', got: %v", tt.value, err)
 			}
 		})
 	}
