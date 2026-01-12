@@ -3,11 +3,10 @@ package validate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
-	"os/user"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -16,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/executor"
+	sbconfig "github.com/saltyorg/sb-go/internal/config"
 	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/utils"
 
@@ -450,53 +449,17 @@ func validateRcloneRemote(value any, _ map[string]any) error {
 	}
 
 	logging.DebugBool(verboseMode, "validateRcloneRemote - checking remote name: '%s'", remoteName)
-
-	// Check if rclone is installed
-	if _, err := exec.LookPath("rclone"); err != nil {
-		fmt.Printf("Warning: rclone remote validation skipped: rclone is not installed")
-		return nil
-	}
-
-	// Get the Saltbox user
-	rcloneUser, err := utils.GetSaltboxUser()
-	if err != nil {
-		fmt.Printf("Warning: rclone remote validation skipped: could not retrieve saltbox user: %v", err)
-		return nil
-	}
-
-	// Check if the user exists on the system
-	if _, err := user.Lookup(rcloneUser); err != nil {
-		fmt.Printf("Warning: rclone remote validation skipped: user '%s' does not exist", rcloneUser)
-		return nil
-	}
-
-	// Check if the rclone config file exists
-	rcloneConfigPath := fmt.Sprintf("/home/%s/.config/rclone/rclone.conf", rcloneUser)
-	if _, err := os.Stat(rcloneConfigPath); os.IsNotExist(err) {
-		fmt.Printf("Warning: rclone remote validation skipped: config file not found at %s", rcloneConfigPath)
-		return nil
-	}
-
-	// Check if the remote exists in rclone config
-	// Use context with timeout for external command execution
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	result, err := executor.Run(ctx, "sudo",
-		executor.WithArgs("-u", rcloneUser, "rclone", "config", "show"),
-		executor.WithInheritEnv(fmt.Sprintf("RCLONE_CONFIG=%s", rcloneConfigPath)),
-		executor.WithOutputMode(executor.OutputModeCombined),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to execute rclone config show: %w, output: %s", err, result.Combined)
-	}
-
-	output := result.Combined
-
-	// Search for the remote in the output
-	remoteRegex := fmt.Sprintf(`(?m)^\[%s\]$`, regexp.QuoteMeta(remoteName))
-	if matched, _ := regexp.MatchString(remoteRegex, string(output)); !matched {
-		return fmt.Errorf("rclone remote '%s' not found in configuration", remoteName)
+	if err := sbconfig.ValidateRcloneRemote(remoteName, verboseMode); err != nil {
+		switch {
+		case errors.Is(err, sbconfig.ErrRcloneNotInstalled):
+			fmt.Printf("Warning: rclone remote validation skipped: rclone is not installed")
+			return nil
+		case errors.Is(err, sbconfig.ErrSystemUserNotFound), errors.Is(err, sbconfig.ErrRcloneConfigNotFound):
+			fmt.Printf("Warning: rclone remote validation skipped: %v", err)
+			return nil
+		default:
+			return err
+		}
 	}
 
 	return nil
