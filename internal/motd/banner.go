@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/saltyorg/sb-go/internal/executor"
 )
@@ -141,6 +142,9 @@ func GenerateBanner(title, font, boxType string) string {
 	}
 
 	// Pipe toilet output to boxes
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var boxesOutput bytes.Buffer
 	boxesResult, err := executor.Run(ctx, "boxes",
 		executor.WithArgs("-d", boxType, "-a", "hc", "-p", "h8"),
@@ -169,7 +173,7 @@ func GenerateBannerFromFile(content string, toiletArgs string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	args := strings.Fields(toiletArgs)
+	args := splitShellArgs(toiletArgs)
 	result, err := executor.Run(ctx, "toilet",
 		executor.WithArgs(args...),
 		executor.WithStdin(strings.NewReader(content)),
@@ -182,4 +186,52 @@ func GenerateBannerFromFile(content string, toiletArgs string) string {
 	}
 
 	return string(result.Combined)
+}
+
+func splitShellArgs(input string) []string {
+	var args []string
+	var buf strings.Builder
+	inQuote := rune(0)
+	escaped := false
+
+	flush := func() {
+		if buf.Len() > 0 {
+			args = append(args, buf.String())
+			buf.Reset()
+		}
+	}
+
+	for _, r := range input {
+		if escaped {
+			buf.WriteRune(r)
+			escaped = false
+			continue
+		}
+
+		if r == '\\' {
+			escaped = true
+			continue
+		}
+
+		if inQuote != 0 {
+			if r == inQuote {
+				inQuote = 0
+				continue
+			}
+			buf.WriteRune(r)
+			continue
+		}
+
+		switch {
+		case r == '"' || r == '\'':
+			inQuote = r
+		case unicode.IsSpace(r):
+			flush()
+		default:
+			buf.WriteRune(r)
+		}
+	}
+
+	flush()
+	return args
 }

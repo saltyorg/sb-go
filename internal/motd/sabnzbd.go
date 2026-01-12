@@ -231,6 +231,10 @@ func formatSabnzbdSummary(info SabnzbdInfo) string {
 		return fmt.Sprintf("Paused, %s", queueSummary)
 	}
 
-	speed := ValueStyle.Render(fmt.Sprintf("%s/s", info.Speed))
+	speedText := info.Speed
+	if !strings.Contains(speedText, "/") {
+		speedText = fmt.Sprintf("%s/s", speedText)
+	}
+	speed := ValueStyle.Render(speedText)
 	return fmt.Sprintf("Downloading at %s, %s", speed, queueSummary)
 }

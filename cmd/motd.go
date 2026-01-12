@@ -148,8 +148,10 @@ func runMotdCommand(mcfg *motdConfig) error {
 		return fmt.Errorf("no information selected to display (use --all or specific flags)")
 	}
 
-	// Validate banner type if specified
-	if mcfg.bannerType != "" && mcfg.bannerType != "none" {
+	shouldRenderBanner := mcfg.bannerFile == "" && mcfg.bannerTitle != ""
+
+	// Validate banner type if specified and banner will be rendered.
+	if shouldRenderBanner && mcfg.bannerType != "" && mcfg.bannerType != "none" {
 		validType := slices.Contains(motd.AvailableBannerTypes, mcfg.bannerType)
 
 		if !validType {
@@ -170,8 +172,8 @@ func runMotdCommand(mcfg *motdConfig) error {
 		}
 	}
 
-	// Validate font if specified
-	if mcfg.bannerFont != "" && !motd.IsValidFont(mcfg.bannerFont) {
+	// Validate font if specified and banner will be rendered.
+	if shouldRenderBanner && mcfg.bannerFont != "" && !motd.IsValidFont(mcfg.bannerFont) {
 		var availableFonts strings.Builder
 		availableFonts.WriteString("\nAvailable fonts (from /usr/share/figlet):\n")
 

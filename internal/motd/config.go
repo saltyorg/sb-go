@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -108,17 +109,11 @@ func formatValue(v any) string {
 		return fmt.Sprintf("%v", val)
 	case int, int64, float64:
 		return fmt.Sprintf("%v", val)
-	case []any:
-		if len(val) == 0 {
-			return "[]"
-		}
-		return fmt.Sprintf("%v", val)
-	case map[string]any:
-		if len(val) == 0 {
-			return "{}"
-		}
-		return fmt.Sprintf("%v", val)
 	default:
+		encoded, err := json.Marshal(val)
+		if err == nil {
+			return string(encoded)
+		}
 		return fmt.Sprintf("%v", val)
 	}
 }

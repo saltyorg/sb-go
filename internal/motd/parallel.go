@@ -33,6 +33,8 @@ type MultiStringResult struct {
 	Order  int
 }
 
+const defaultProviderTimeout = 30 * time.Second
+
 // GetSystemInfo gathers all requested system information in parallel
 func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
 	var wg sync.WaitGroup
@@ -61,7 +63,8 @@ func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
 				}
 			}()
 
-			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), defaultProviderTimeout)
+			defer cancel()
 
 			// Track timing if verbose mode is enabled
 			var start time.Time

@@ -12,9 +12,8 @@ import (
 // ExecCommand executes a command and returns its output as a string
 func ExecCommand(ctx context.Context, name string, args ...string) string {
 	// Add timeout to context if not already set
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := applyTimeout(ctx, 5*time.Second)
+	if cancel != nil {
 		defer cancel()
 	}
 
@@ -26,6 +25,13 @@ func ExecCommand(ctx context.Context, name string, args ...string) string {
 		return "Not available"
 	}
 	return strings.TrimSpace(string(result.Stdout))
+}
+
+func applyTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) <= timeout {
+		return ctx, nil
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 // formatBytes converts bytes to a human-readable string (KB, MB, GB, etc.)

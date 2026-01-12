@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"sort"
@@ -43,12 +44,45 @@ func obscureIP(ip string) string {
 	return "xxx.xxx.xxx.xxx"
 }
 
+func obscureIPsInText(text string) string {
+	ipv4Regex := regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}\b`)
+	text = ipv4Regex.ReplaceAllString(text, "xxx.xxx.xxx.xxx")
+
+	ipv6Regex := regexp.MustCompile(`\b[0-9a-fA-F:]{3,}\b`)
+	return ipv6Regex.ReplaceAllStringFunc(text, func(candidate string) string {
+		trimmed := strings.Trim(candidate, "[](),;")
+		base := strings.SplitN(trimmed, "%", 2)[0]
+		if strings.Count(base, ":") < 2 {
+			return candidate
+		}
+		if net.ParseIP(base) != nil {
+			masked := "xxxx:xxxx:xxxx:xxxx"
+			if len(base) < len(trimmed) {
+				masked = masked + trimmed[len(base):]
+			}
+			return strings.Replace(candidate, trimmed, masked, 1)
+		}
+		return candidate
+	})
+}
+
+func isSkippableLastLine(line string, fields []string) bool {
+	if len(fields) == 0 {
+		return true
+	}
+	switch fields[0] {
+	case "reboot", "shutdown", "runlevel", "wtmp":
+		return true
+	}
+	return strings.Contains(line, "wtmp begins")
+}
+
 // GetDistribution returns the Ubuntu distribution version with a codename
 func GetDistribution(ctx context.Context, verbose bool) string {
 	distroInfo := ExecCommand(ctx, "lsb_release", "-ds")
 	codename := ExecCommand(ctx, "lsb_release", "-cs")
 
-	if codename != "" && distroInfo != "Not available" {
+	if codename != "" && codename != "Not available" && distroInfo != "Not available" {
 		distroInfo = distroInfo + " (" + codename + ")"
 	}
 	return distroInfo
@@ -112,13 +146,23 @@ func GetCpuAverages(ctx context.Context, verbose bool) string {
 // GetLastLogin returns the last login information
 func GetLastLogin(ctx context.Context, verbose bool) string {
 	// Try the last command to get the most recent login
-	lastOutput := ExecCommand(ctx, "last", "-1")
+	lastOutput := ExecCommand(ctx, "last", "-n", "5")
 	if lastOutput != "Not available" && lastOutput != "" {
-		// First check if "still logged in" is present
-		stillLoggedIn := strings.Contains(lastOutput, "still logged in")
+		lines := strings.Split(lastOutput, "\n")
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
 
-		fields := strings.Fields(lastOutput)
-		if len(fields) >= 5 {
+			fields := strings.Fields(trimmed)
+			if isSkippableLastLine(trimmed, fields) || len(fields) < 5 {
+				continue
+			}
+
+			// First check if "still logged in" is present
+			stillLoggedIn := strings.Contains(trimmed, "still logged in")
+
 			user := fields[0]
 			// Color the username
 			coloredUser := ValueStyle.Render(user)
@@ -219,13 +263,7 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 
 				// Obscure IP addresses in loginInfo if share mode is enabled
 				if shareMode {
-					// Simple regex to find and replace IP addresses
-					// IPv4 pattern
-					ipv4Regex := regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)
-					loginInfo = ipv4Regex.ReplaceAllString(loginInfo, "xxx.xxx.xxx.xxx")
-					// IPv6 pattern (simplified)
-					ipv6Regex := regexp.MustCompile(`\b[0-9a-fA-F:]{3,}\b`)
-					loginInfo = ipv6Regex.ReplaceAllString(loginInfo, "xxxx:xxxx:xxxx:xxxx")
+					loginInfo = obscureIPsInText(loginInfo)
 				}
 
 				// Color the login info (date/time/IP)
@@ -271,7 +309,12 @@ func GetUserSessions(ctx context.Context, verbose bool) string {
 	}
 
 	lines := strings.Split(whoOutput, "\n")
-	count := len(lines)
+	count := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
 
 	// Color the session count
 	coloredCount := ValueStyle.Render(fmt.Sprintf("%d", count))
@@ -306,8 +349,16 @@ func GetProcessCount(ctx context.Context, verbose bool) string {
 	psOutput := ExecCommand(ctx, "ps", "ax")
 	if psOutput != "Not available" {
 		lines := strings.Split(psOutput, "\n")
+		count := 0
+		for _, line := range lines {
+			if strings.TrimSpace(line) != "" {
+				count++
+			}
+		}
 		// Subtract 1 for the header line
-		count := max(len(lines)-1, 0)
+		if count > 0 {
+			count--
+		}
 		// Color the process count
 		coloredCount := ValueStyle.Render(fmt.Sprintf("%d", count))
 		return fmt.Sprintf("%s running processes", coloredCount)
@@ -583,6 +634,18 @@ func GetCpuInfo(ctx context.Context, verbose bool) string {
 	physicalIds := make(map[string]bool)
 	coreIds := make(map[string]map[string]bool) // map[physicalId]map[coreId]bool
 	cpuCoresPerSocket := 0
+	currentPhysicalID := ""
+	currentCoreID := ""
+
+	addCoreID := func(physicalID, coreID string) {
+		if physicalID == "" || coreID == "" {
+			return
+		}
+		if coreIds[physicalID] == nil {
+			coreIds[physicalID] = make(map[string]bool)
+		}
+		coreIds[physicalID][coreID] = true
+	}
 
 	for _, line := range lines {
 		// Extract CPU model name
@@ -596,6 +659,8 @@ func GetCpuInfo(ctx context.Context, verbose bool) string {
 		// Count logical processors (threads)
 		if strings.HasPrefix(line, "processor") {
 			logicalProcessors++
+			currentPhysicalID = ""
+			currentCoreID = ""
 		}
 
 		// Track physical IDs to count actual CPU sockets
@@ -603,10 +668,9 @@ func GetCpuInfo(ctx context.Context, verbose bool) string {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) >= 2 {
 				physicalId := strings.TrimSpace(parts[1])
+				currentPhysicalID = physicalId
 				physicalIds[physicalId] = true
-				if coreIds[physicalId] == nil {
-					coreIds[physicalId] = make(map[string]bool)
-				}
+				addCoreID(currentPhysicalID, currentCoreID)
 			}
 		}
 
@@ -615,12 +679,8 @@ func GetCpuInfo(ctx context.Context, verbose bool) string {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) >= 2 {
 				coreId := strings.TrimSpace(parts[1])
-				// Find the last physical ID we saw
-				for physId := range physicalIds {
-					if coreIds[physId] != nil {
-						coreIds[physId][coreId] = true
-					}
-				}
+				currentCoreID = coreId
+				addCoreID(currentPhysicalID, currentCoreID)
 			}
 		}
 
@@ -865,7 +925,10 @@ func GetDockerInfo(ctx context.Context, verbose bool) string {
 
 	// Get container list with detailed format
 	containerOutput := ExecCommand(ctx, "docker", "ps", "-a", "--format", "{{.Names}}|{{.Status}}|{{.State}}")
-	if containerOutput == "Not available" || containerOutput == "" {
+	if containerOutput == "Not available" {
+		return DefaultStyle.Render("Docker is running but container list is unavailable")
+	}
+	if containerOutput == "" {
 		return DefaultStyle.Render("Docker is running but no containers found")
 	}
 
