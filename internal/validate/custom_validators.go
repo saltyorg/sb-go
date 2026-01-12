@@ -152,7 +152,7 @@ func validatePasswordStrength(value any, _ map[string]any) error {
 
 	// Non-fatal warning for short passwords
 	if len(str) < 12 {
-		fmt.Printf("WARNING: Password is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).", len(str))
+		fmt.Fprintf(os.Stderr, "WARNING: Password is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).\n", len(str))
 	}
 
 	return nil
