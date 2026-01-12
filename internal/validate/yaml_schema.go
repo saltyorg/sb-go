@@ -5,6 +5,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strconv"
 
 	"github.com/saltyorg/sb-go/internal/logging"
 
@@ -227,6 +228,19 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 		"password":        "validate_password_strength",
 	}
 
+	switch rule.Type {
+	case "number":
+		logging.DebugBool(verboseMode, "Running built-in number validator for field '%s'", path)
+		if err := validateNumberValue(value); err != nil {
+			return fmt.Errorf("field '%s': %w", path, err)
+		}
+	case "float":
+		logging.DebugBool(verboseMode, "Running built-in float validator for field '%s'", path)
+		if err := validateFloatValue(value); err != nil {
+			return fmt.Errorf("field '%s': %w", path, err)
+		}
+	}
+
 	if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
 		logging.DebugBool(verboseMode, "Running built-in %s validator for field '%s'", rule.Type, path)
 		if validator, exists := customValidators[validatorName]; exists {
@@ -447,6 +461,9 @@ func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 	if rule.Type == "number" {
 		// "number" type accepts strings and integers, but NOT floats (for whole numbers with flexibility)
 		if valueType == "string" || valueType == "integer" {
+			if err := validateNumberValue(value); err != nil {
+				return fmt.Errorf("field '%s': %w", path, err)
+			}
 			logging.DebugBool(verboseMode, "validateType - number field accepts string/integer, allowing %s", valueType)
 			return nil
 		}
@@ -463,6 +480,9 @@ func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
 	if rule.Type == "float" {
 		// "float" type accepts strings and actual floats, but not integers (to be explicit about decimals)
 		if valueType == "string" || valueType == "float" {
+			if err := validateFloatValue(value); err != nil {
+				return fmt.Errorf("field '%s': %w", path, err)
+			}
 			logging.DebugBool(verboseMode, "validateType - float field accepts string/float, allowing %s", valueType)
 			return nil
 		}
@@ -660,4 +680,40 @@ func isEmptyValue(value any) bool {
 	}
 
 	return false
+}
+
+func validateNumberValue(value any) error {
+	switch v := value.(type) {
+	case string:
+		if _, err := strconv.Atoi(v); err != nil {
+			return fmt.Errorf("must be a whole number (integer), got: %s", v)
+		}
+		return nil
+	case int, int8, int16, int32, int64:
+		return nil
+	case uint, uint8, uint16, uint32, uint64:
+		return nil
+	case float32, float64:
+		return fmt.Errorf("must be a whole number (integer), got: %v", v)
+	default:
+		return fmt.Errorf("must be a whole number (integer), got: %T", value)
+	}
+}
+
+func validateFloatValue(value any) error {
+	switch v := value.(type) {
+	case string:
+		if _, err := strconv.ParseFloat(v, 64); err != nil {
+			return fmt.Errorf("must be a float, got: %s", v)
+		}
+		return nil
+	case float32, float64:
+		return nil
+	case int, int8, int16, int32, int64:
+		return fmt.Errorf("must be a float, got: %v", v)
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Errorf("must be a float, got: %v", v)
+	default:
+		return fmt.Errorf("must be a float, got: %T", value)
+	}
 }
