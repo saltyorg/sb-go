@@ -440,6 +440,26 @@ func TestIsValidSSHKey(t *testing.T) {
 			valid: true,
 		},
 		{
+			name:  "Valid sk-ecdsa key",
+			key:   "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNh... user@host",
+			valid: true,
+		},
+		{
+			name:  "Valid ssh-xmss key",
+			key:   "ssh-xmss@openssh.com AAAAB3NzaC1yc2EAAAADAQABAAABgQC... user@host",
+			valid: true,
+		},
+		{
+			name:  "Valid rsa-sha2-512 key",
+			key:   "rsa-sha2-512 AAAAB3NzaC1yc2EAAAADAQABAAABgQC... user@host",
+			valid: true,
+		},
+		{
+			name:  "Valid key with options",
+			key:   "command=\"echo hello world\" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host",
+			valid: true,
+		},
+		{
 			name:  "Valid ssh-ed25519 key",
 			key:   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host",
 			valid: true,
@@ -471,6 +491,52 @@ func TestIsValidSSHKey(t *testing.T) {
 			result := isValidSSHKey(tt.key)
 			if result != tt.valid {
 				t.Errorf("Expected isValidSSHKey(%s) = %v, got %v", tt.key, tt.valid, result)
+			}
+		})
+	}
+}
+
+func TestValidateSSHKeyOrURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{
+			name:    "Valid https URL",
+			value:   "https://github.com/user.keys",
+			wantErr: false,
+		},
+		{
+			name:    "Valid file URL",
+			value:   "file:///home/user/.ssh/id_ed25519.pub",
+			wantErr: false,
+		},
+		{
+			name:    "Valid multiple keys with comments",
+			value:   "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... user@host\n# comment\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC... user@host",
+			wantErr: false,
+		},
+		{
+			name:    "Invalid key",
+			value:   "ssh-rsa",
+			wantErr: true,
+		},
+		{
+			name:    "Invalid value",
+			value:   "not-a-key",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSSHKeyOrURL(tt.value, nil)
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error for value '%s', but got none", tt.value)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("Expected no error for value '%s', got: %v", tt.value, err)
 			}
 		})
 	}

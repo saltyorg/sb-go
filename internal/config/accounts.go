@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"reflect"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/logging"
+	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/cloudflare/cloudflare-go/v6"
 	"github.com/cloudflare/cloudflare-go/v6/option"
@@ -84,30 +84,13 @@ func customSSHKeyOrURLValidator(fl validator.FieldLevel) bool {
 		return true // Valid if empty (omitempty)
 	}
 
-	// Check if it's a valid URL.
-	_, err := url.ParseRequestURI(sshKeyOrURL)
-	if err == nil {
-		logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is a valid URL, returning true", sshKeyOrURL)
-		return true // It's a valid URL
-	}
-	logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is not a valid URL: %v", sshKeyOrURL, err)
-
-	// If not a URL, check if it looks like an SSH key (simplified check).
-	validKeyTypes := []string{"ssh-rsa", "ssh-dss", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-ed25519"}
-	keyParts := strings.Fields(sshKeyOrURL)
-	if len(keyParts) < 2 {
-		logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' has less than 2 parts, not a likely SSH key, returning false", sshKeyOrURL)
-		return false
-	}
-	for _, keyType := range validKeyTypes {
-		if keyParts[0] == keyType {
-			logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' starts with valid key type '%s', returning true", sshKeyOrURL, keyType)
-			return true
-		}
+	if utils.IsValidAuthorizedKeyOrURL(sshKeyOrURL) {
+		logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is a valid SSH key or URL, returning true", sshKeyOrURL)
+		return true
 	}
 
-	logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is neither a URL nor a recognizable SSH key, returning false", sshKeyOrURL)
-	return false // Neither a URL nor a recognizable SSH key
+	logging.DebugBool(verboseMode, "customSSHKeyOrURLValidator - '%s' is neither a valid SSH key nor a supported URL, returning false", sshKeyOrURL)
+	return false
 }
 
 // ValidateConfig validates the Config struct.

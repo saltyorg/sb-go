@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -122,15 +121,8 @@ func validateSSHKeyOrURL(value any, _ map[string]any) error {
 
 	logging.DebugBool(verboseMode, "validateSSHKeyOrURL called with value: '%s'", str)
 
-	// Check if it's a valid URL
-	if isValidURL(str) {
-		logging.DebugBool(verboseMode, "validateSSHKeyOrURL - value is a valid URL")
-		return nil
-	}
-
-	// Check if it's an SSH key
-	if isValidSSHKey(str) {
-		logging.DebugBool(verboseMode, "validateSSHKeyOrURL - value is a valid SSH key")
+	if utils.IsValidAuthorizedKeyOrURL(str) {
+		logging.DebugBool(verboseMode, "validateSSHKeyOrURL - value is a valid SSH key or URL")
 		return nil
 	}
 
@@ -506,14 +498,7 @@ func validateRcloneRemote(value any, _ map[string]any) error {
 
 // isValidSSHKey validates SSH public key format
 func isValidSSHKey(key string) bool {
-	validKeyTypes := []string{"ssh-rsa", "ssh-dss", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-ed25519"}
-	keyParts := strings.Fields(key)
-
-	if len(keyParts) < 2 {
-		return false
-	}
-
-	return slices.Contains(validKeyTypes, keyParts[0])
+	return utils.IsValidAuthorizedKeyLine(key)
 }
 
 // validateCloudflareCredentials performs actual Cloudflare API validation
