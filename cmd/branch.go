@@ -40,6 +40,10 @@ func changeBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
+	if err := git.EnsureRemoteFetchAllBranches(ctx, constants.SaltboxRepoPath); err != nil {
+		return err
+	}
+
 	err = git.FetchAndReset(ctx, constants.SaltboxRepoPath, branchName, saltboxUser, nil, nil, "Saltbox")
 	if err != nil {
 		return err

@@ -37,6 +37,10 @@ func changeSandboxBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
+	if err := git.EnsureRemoteFetchAllBranches(ctx, constants.SandboxRepoPath); err != nil {
+		return err
+	}
+
 	err = git.FetchAndReset(ctx, constants.SandboxRepoPath, branchName, saltboxUser, nil, nil, "Sandbox")
 	if err != nil {
 		return err

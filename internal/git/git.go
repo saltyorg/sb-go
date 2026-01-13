@@ -50,6 +50,38 @@ func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verb
 	return nil
 }
 
+// EnsureRemoteFetchAllBranches makes sure remote.origin.fetch includes all branches.
+func EnsureRemoteFetchAllBranches(ctx context.Context, repoPath string) error {
+	const fetchSpec = "+refs/heads/*:refs/remotes/origin/*"
+
+	result, err := executor.Run(ctx, "git",
+		executor.WithArgs("config", "--get-all", "remote.origin.fetch"),
+		executor.WithWorkingDir(repoPath))
+	fetchConfig := strings.TrimSpace(string(result.Combined))
+	if err != nil && fetchConfig != "" {
+		fmt.Printf("Error: failed to read remote.origin.fetch: %s\n", string(result.Combined))
+		return fmt.Errorf("failed to read remote.origin.fetch: %w", err)
+	}
+
+	if fetchConfig != "" {
+		for _, line := range strings.Split(fetchConfig, "\n") {
+			if strings.Contains(strings.TrimSpace(line), "refs/heads/*:refs/remotes/origin/*") {
+				return nil
+			}
+		}
+	}
+
+	result, err = executor.Run(ctx, "git",
+		executor.WithArgs("config", "--add", "remote.origin.fetch", fetchSpec),
+		executor.WithWorkingDir(repoPath))
+	if err != nil {
+		fmt.Printf("Error: failed to update remote.origin.fetch: %s\n", string(result.Combined))
+		return fmt.Errorf("failed to update remote.origin.fetch: %w", err)
+	}
+
+	return nil
+}
+
 // FetchAndReset performs a git fetch and reset to a specified branch.
 // The context parameter allows for cancellation of git operations.
 // The repoName parameter is used to identify the repository in user prompts.
