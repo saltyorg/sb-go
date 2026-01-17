@@ -177,8 +177,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 		}
 		return nil
 	}); err != nil {
-		// Don't fail the update if cleanup fails, just log a warning
-		_ = spinners.RunWarningSpinner(fmt.Sprintf("Warning: Failed to clean up deadsnakes packages: %v", err))
+		return fmt.Errorf("error cleaning up deadsnakes packages: %w", err)
 	}
 
 	// Ensure uv is installed
