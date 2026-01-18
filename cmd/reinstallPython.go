@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
@@ -37,6 +38,14 @@ func handleReinstallPython(ctx context.Context, verbose bool) error {
 	spinners.SetVerboseMode(verbose)
 
 	_ = spinners.RunInfoSpinner(fmt.Sprintf("Reinstalling Python %s using uv and recreating Ansible venv", constants.AnsibleVenvPythonVersion))
+
+	// Update apt cache
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache", func() error {
+		updateCache := apt.UpdatePackageLists(ctx, verbose)
+		return updateCache()
+	}); err != nil {
+		return fmt.Errorf("error updating apt cache: %w", err)
+	}
 
 	// Ensure uv is installed
 	if err := spinners.RunTaskWithSpinnerContext(ctx, "Ensuring uv is installed", func() error {
