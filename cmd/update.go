@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/saltyorg/sb-go/internal/announcements"
+	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -85,6 +86,14 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 			// Exit after successful update so the new version can be run
 			os.Exit(0)
 		}
+	}
+
+	// Update apt cache
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache", func() error {
+		updateCache := apt.UpdatePackageLists(ctx, verbose)
+		return updateCache()
+	}); err != nil {
+		return fmt.Errorf("error updating apt cache: %w", err)
 	}
 
 	// Load announcement files before updates
