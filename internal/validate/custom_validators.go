@@ -111,6 +111,20 @@ var asyncAPIValidators = map[string]AsyncAPIValidator{
 	"validate_dockerhub_config":  validateDockerhubConfigAsync,
 }
 
+func getNonEmptyString(config map[string]any, key string) (string, bool) {
+	value, ok := config[key]
+	if !ok {
+		return "", false
+	}
+
+	str, ok := value.(string)
+	if !ok || str == "" {
+		return "", false
+	}
+
+	return str, true
+}
+
 // validateSSHKeyOrURL validates SSH public keys or URLs
 func validateSSHKeyOrURL(value any, _ map[string]any) error {
 	if value == nil {
@@ -166,8 +180,8 @@ func validateCloudflareConfigSync(value any, config map[string]any) error {
 
 	logging.DebugBool(verboseMode, "validateCloudflareConfigSync called with config: %+v", cfConfig)
 
-	_, hasAPI := cfConfig["api"].(string)
-	_, hasEmail := cfConfig["email"].(string)
+	_, hasAPI := getNonEmptyString(cfConfig, "api")
+	_, hasEmail := getNonEmptyString(cfConfig, "email")
 
 	if !hasAPI && !hasEmail {
 		logging.DebugBool(verboseMode, "validateCloudflareConfigSync - both API and email missing, skipping validation")
@@ -204,8 +218,8 @@ func validateCloudflareConfigAsync(value any, config map[string]any) error {
 		return fmt.Errorf("cloudflare config must be an object")
 	}
 
-	api, hasAPI := cfConfig["api"].(string)
-	email, hasEmail := cfConfig["email"].(string)
+	api, hasAPI := getNonEmptyString(cfConfig, "api")
+	email, hasEmail := getNonEmptyString(cfConfig, "email")
 
 	if !hasAPI && !hasEmail {
 		logging.DebugBool(verboseMode, "validateCloudflareConfigAsync completed in %v (skipped - no credentials)", time.Since(startTime))
@@ -253,8 +267,8 @@ func validateDockerhubConfigSync(value any, _ map[string]any) error {
 
 	logging.DebugBool(verboseMode, "validateDockerhubConfigSync called with config: %+v", dhConfig)
 
-	_, hasUser := dhConfig["user"].(string)
-	_, hasToken := dhConfig["token"].(string)
+	_, hasUser := getNonEmptyString(dhConfig, "user")
+	_, hasToken := getNonEmptyString(dhConfig, "token")
 
 	if !hasUser && !hasToken {
 		logging.DebugBool(verboseMode, "validateDockerhubConfigSync - both user and token missing, skipping validation")
@@ -280,8 +294,8 @@ func validateDockerhubConfigAsync(value any, _ map[string]any) error {
 		return fmt.Errorf("dockerhub config must be an object")
 	}
 
-	username, hasUser := dhConfig["user"].(string)
-	token, hasToken := dhConfig["token"].(string)
+	username, hasUser := getNonEmptyString(dhConfig, "user")
+	token, hasToken := getNonEmptyString(dhConfig, "token")
 
 	if !hasUser && !hasToken {
 		logging.DebugBool(verboseMode, "validateDockerhubConfigAsync completed in %v (skipped - no credentials)", time.Since(startTime))
