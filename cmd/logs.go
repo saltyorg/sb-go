@@ -252,7 +252,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
+			signals.GetGlobalManager().Shutdown(130)
+			m.quitting = true
+			// If we're in logs view (alt screen), exit alt screen before quitting
+			if m.activeView == "logs" {
+				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
+			}
+			return m, tea.Quit
+		case "q":
 			m.quitting = true
 			// If we're in logs view (alt screen), exit alt screen before quitting
 			if m.activeView == "logs" {

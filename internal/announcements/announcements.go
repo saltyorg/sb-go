@@ -12,6 +12,7 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/ansible"
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/signals"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -264,7 +265,10 @@ func (av *announcementViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Global quit keys
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case "ctrl+c":
+			signals.GetGlobalManager().Shutdown(130)
+			return av, tea.Quit
+		case "q", "esc":
 			return av, tea.Quit
 		case "right", "l":
 			// Move to next announcement (all pre-rendered - instant!)

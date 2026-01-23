@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/signals"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -92,7 +93,10 @@ func (m *restoreModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
+			signals.GetGlobalManager().Shutdown(130)
+			return m, tea.Quit
+		case "esc":
 			return m, tea.Quit
 
 		// Set focus to next input

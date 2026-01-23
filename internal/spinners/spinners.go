@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/saltyorg/sb-go/internal/signals"
 	"github.com/saltyorg/sb-go/internal/styles"
 	"github.com/saltyorg/sb-go/internal/tty"
 
@@ -124,10 +125,13 @@ func runTaskWithSpinnerContext(ctx context.Context, opts SpinnerOptions, taskFun
 		return fmt.Errorf("failed to run spinner: %w", err)
 	}
 
-	// Get the task error from the channel
-	taskErr := <-errCh
-
-	return taskErr
+	// Avoid blocking on task completion if the context was canceled (e.g., Ctrl+C).
+	select {
+	case taskErr := <-errCh:
+		return taskErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // RunInfoSpinner prints an informational message.
@@ -195,6 +199,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
+			signals.GetGlobalManager().Shutdown(130)
 			m.interrupt = true
 			m.interruptReason = "interrupted"
 			return m, tea.Quit

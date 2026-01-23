@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/saltyorg/sb-go/internal/announcements"
-	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/ansible"
+	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/fact"

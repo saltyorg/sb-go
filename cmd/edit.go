@@ -10,6 +10,7 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/signals"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -48,7 +49,11 @@ func (m ConfigSelectorModel) Init() tea.Cmd {
 func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
+		if msg.String() == "ctrl+c" {
+			signals.GetGlobalManager().Shutdown(130)
+			return m, tea.Quit
+		}
+		if msg.String() == "q" {
 			return m, tea.Quit
 		}
 

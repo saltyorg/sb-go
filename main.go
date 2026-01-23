@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +22,10 @@ import (
 // Unlike the default handler, this respects \n characters in error messages
 // and renders each line separately for better readability.
 func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
+	if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "signal: interrupt") {
+		err = fmt.Errorf("interrupted by user (Ctrl+C)")
+	}
+
 	// Print error header (already styled by Fang)
 	fmt.Fprintf(w, "%s\n", styles.ErrorHeader.String())
 
