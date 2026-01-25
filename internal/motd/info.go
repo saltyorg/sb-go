@@ -148,8 +148,8 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 	// Try the last command to get the most recent login
 	lastOutput := ExecCommand(ctx, "last", "-n", "5")
 	if lastOutput != "Not available" && lastOutput != "" {
-		lines := strings.Split(lastOutput, "\n")
-		for _, line := range lines {
+		lines := strings.SplitSeq(lastOutput, "\n")
+		for line := range lines {
 			trimmed := strings.TrimSpace(line)
 			if trimmed == "" {
 				continue

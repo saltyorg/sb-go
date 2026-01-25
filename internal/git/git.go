@@ -64,7 +64,7 @@ func EnsureRemoteFetchAllBranches(ctx context.Context, repoPath string) error {
 	}
 
 	if fetchConfig != "" {
-		for _, line := range strings.Split(fetchConfig, "\n") {
+		for line := range strings.SplitSeq(fetchConfig, "\n") {
 			if strings.Contains(strings.TrimSpace(line), "refs/heads/*:refs/remotes/origin/*") {
 				return nil
 			}

@@ -161,7 +161,7 @@ func GetServiceRuntime(ctx context.Context, serviceName string) (string, error) 
 	output := strings.TrimSpace(string(result.Combined))
 	var monotonicStr string
 	var timestampStr string
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		if after, ok := strings.CutPrefix(line, "ActiveEnterTimestampMonotonic="); ok {
 			monotonicStr = strings.TrimSpace(after)
 			continue
