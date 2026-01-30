@@ -8,6 +8,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/cache"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/git"
+	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/spf13/cobra"
@@ -30,7 +31,11 @@ func init() {
 }
 
 func changeSandboxBranch(ctx context.Context, branchName string) error {
-	fmt.Println("Switching Sandbox repository branch...")
+	spinners.SetVerboseMode(false)
+
+	if err := spinners.RunInfoSpinner("Switching Sandbox repository branch..."); err != nil {
+		return err
+	}
 
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
@@ -46,17 +51,20 @@ func changeSandboxBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
-	fmt.Println("Updating Sandbox tags cache.")
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
 		return fmt.Errorf("error creating cache: %w", err)
 	}
 
-	_, err = ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
-	if err != nil {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating Sandbox tags cache", func() error {
+		_, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
+		return err
+	}); err != nil {
 		return err
 	}
 
-	fmt.Printf("Sandbox repository branch switched to %s.\n", branchName)
+	if err := spinners.RunInfoSpinner(fmt.Sprintf("Sandbox repository branch switched to %s.", branchName)); err != nil {
+		return err
+	}
 	return nil
 }

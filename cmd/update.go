@@ -247,12 +247,14 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	saltboxTagsExist := saltboxCacheExists && saltboxCache["tags"] != nil
 
 	if oldCommitHash != newCommitHash || !saltboxCacheExists || !saltboxTagsExist {
-		if err := spinners.RunInfoSpinner("Updating Saltbox tags cache."); err != nil {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating Saltbox tags cache", func() error {
+			if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache, 0); err != nil {
+				handleInterruptError(err)
+				return fmt.Errorf("error running and caching ansible tags: %w", err)
+			}
+			return nil
+		}); err != nil {
 			return err
-		}
-		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", ansibleCache, 0); err != nil {
-			handleInterruptError(err)
-			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}
 
@@ -301,12 +303,14 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 	sandboxTagsExist := sandboxCacheExists && sandboxCache["tags"] != nil
 
 	if oldCommitHash != newCommitHash || !sandboxCacheExists || !sandboxTagsExist {
-		if err := spinners.RunInfoSpinner("Updating Sandbox tags cache."); err != nil {
+		if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating Sandbox tags cache", func() error {
+			if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache, 0); err != nil {
+				handleInterruptError(err)
+				return fmt.Errorf("error running and caching ansible tags: %w", err)
+			}
+			return nil
+		}); err != nil {
 			return err
-		}
-		if _, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", ansibleCache, 0); err != nil {
-			handleInterruptError(err)
-			return fmt.Errorf("error running and caching ansible tags: %w", err)
 		}
 	}
 

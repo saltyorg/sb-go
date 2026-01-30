@@ -9,6 +9,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/git"
+	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
 	"github.com/saltyorg/sb-go/internal/venv"
 
@@ -33,7 +34,11 @@ func init() {
 }
 
 func changeBranch(ctx context.Context, branchName string) error {
-	fmt.Println("Switching Saltbox repository branch...")
+	spinners.SetVerboseMode(false)
+
+	if err := spinners.RunInfoSpinner("Switching Saltbox repository branch..."); err != nil {
+		return err
+	}
 
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
@@ -59,17 +64,20 @@ func changeBranch(ctx context.Context, branchName string) error {
 		return fmt.Errorf("error managing Ansible venv: %w", err)
 	}
 
-	fmt.Println("Updating Saltbox tags cache.")
 	cacheInstance, err := cache.NewCache()
 	if err != nil {
 		return fmt.Errorf("error creating cache: %w", err)
 	}
 
-	_, err = ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
-	if err != nil {
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating Saltbox tags cache", func() error {
+		_, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
+		return err
+	}); err != nil {
 		return err
 	}
 
-	fmt.Printf("Saltbox repository branch switched to %s.\n", branchName)
+	if err := spinners.RunInfoSpinner(fmt.Sprintf("Saltbox repository branch switched to %s.", branchName)); err != nil {
+		return err
+	}
 	return nil
 }
