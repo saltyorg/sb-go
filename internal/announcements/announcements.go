@@ -92,10 +92,7 @@ func announcementViewportDimensions() (viewportWidth, viewportHeight, contentWid
 			width = w
 		}
 
-		availableHeight := h - announcementHelpLines
-		if availableHeight < 1 {
-			availableHeight = 1
-		}
+		availableHeight := max(h-announcementHelpLines, 1)
 		if availableHeight < height {
 			height = availableHeight
 		}
@@ -109,10 +106,7 @@ func announcementViewportDimensions() (viewportWidth, viewportHeight, contentWid
 	}
 
 	frameWidth := announcementViewportStyle.GetHorizontalFrameSize()
-	contentWidth = width - frameWidth
-	if contentWidth < 1 {
-		contentWidth = 1
-	}
+	contentWidth = max(width-frameWidth, 1)
 
 	return width, height, contentWidth
 }
