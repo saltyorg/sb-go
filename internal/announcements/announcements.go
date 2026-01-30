@@ -18,6 +18,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -60,6 +61,8 @@ type announcementViewer struct {
 	ready           bool
 	err             error
 	renderer        *glamour.TermRenderer // Stored for potential future use
+	viewportWidth   int
+	viewportHeight  int
 }
 
 type announcementItem struct {
@@ -68,6 +71,51 @@ type announcementItem struct {
 }
 
 var helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Render
+
+const (
+	announcementViewportDefaultWidth  = 96
+	announcementViewportDefaultHeight = 26
+	announcementHelpLines             = 2
+)
+
+var announcementViewportStyle = lipgloss.NewStyle().
+	BorderStyle(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("62")).
+	PaddingRight(2)
+
+func announcementViewportDimensions() (viewportWidth, viewportHeight, contentWidth int) {
+	width := announcementViewportDefaultWidth
+	height := announcementViewportDefaultHeight
+
+	if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+		if w > 0 && w < width {
+			width = w
+		}
+
+		availableHeight := h - announcementHelpLines
+		if availableHeight < 1 {
+			availableHeight = 1
+		}
+		if availableHeight < height {
+			height = availableHeight
+		}
+	}
+
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
+	}
+
+	frameWidth := announcementViewportStyle.GetHorizontalFrameSize()
+	contentWidth = width - frameWidth
+	if contentWidth < 1 {
+		contentWidth = 1
+	}
+
+	return width, height, contentWidth
+}
 
 // LoadAllAnnouncementFiles loads announcements from both Saltbox and Sandbox repositories
 // Returns saltboxFile, sandboxFile, error
@@ -221,7 +269,7 @@ func GetAnnouncementFilePath(repoPath string) string {
 }
 
 // newAnnouncementViewer creates a new announcement viewer
-func newAnnouncementViewer(announcements []announcementItem) *announcementViewer {
+func newAnnouncementViewer(announcements []announcementItem, viewportWidth, viewportHeight int) *announcementViewer {
 	return &announcementViewer{
 		viewport:        viewport.New(0, 0), // Will be sized on first WindowSizeMsg
 		currentIndex:    0,
@@ -229,6 +277,8 @@ func newAnnouncementViewer(announcements []announcementItem) *announcementViewer
 		renderedContent: make(map[int]string),
 		ready:           false,
 		renderer:        nil,
+		viewportWidth:   viewportWidth,
+		viewportHeight:  viewportHeight,
 	}
 }
 
@@ -241,15 +291,9 @@ func (av *announcementViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		if !av.ready {
-			// First time setup with fixed dimensions (original 78x20)
-			const width = 78
-			const height = 20
-
-			av.viewport = viewport.New(width, height)
-			av.viewport.Style = lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.Color("62")).
-				PaddingRight(2)
+			// First time setup with fixed dimensions (defaults clamp to terminal size)
+			av.viewport = viewport.New(av.viewportWidth, av.viewportHeight)
+			av.viewport.Style = announcementViewportStyle
 			av.ready = true
 
 			// Display the first pre-rendered announcement immediately
@@ -364,9 +408,10 @@ func DisplayAnnouncements(diffs []*AnnouncementDiff) error {
 	// Pre-render all announcements BEFORE starting Bubbletea
 	// This avoids any async complexity and matches the fast plain-text version
 	renderedContent := make(map[int]string)
+	viewportWidth, viewportHeight, contentWidth := announcementViewportDimensions()
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle("dark"),
-		glamour.WithWordWrap(78), // Use a reasonable default width
+		glamour.WithWordWrap(contentWidth),
 		glamour.WithPreservedNewLines(),
 	)
 	if err != nil {
@@ -391,7 +436,7 @@ func DisplayAnnouncements(diffs []*AnnouncementDiff) error {
 	}
 
 	// Create viewer with pre-rendered content
-	viewer := newAnnouncementViewer(allAnnouncements)
+	viewer := newAnnouncementViewer(allAnnouncements, viewportWidth, viewportHeight)
 	viewer.renderedContent = renderedContent
 	viewer.renderer = renderer // Store for potential resizes
 
