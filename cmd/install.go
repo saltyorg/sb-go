@@ -319,7 +319,14 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 	var suggestions []suggestion
 
 	// Ensure the cache exists and is populated.
-	validTags := getValidTags(ctx, repoPath, cacheInstance, verbosity)
+	validTags, err := getValidTags(ctx, repoPath, cacheInstance, verbosity)
+	if err != nil {
+		if repoPath == constants.SaltboxRepoPath {
+			return nil, err
+		}
+		logging.Debug(verbosity, "Error getting tags for %s: %v", repoPath, err)
+		validTags = []string{}
+	}
 
 	logging.Debug(verbosity, "Valid tags for %s (after getValidTags): %v", repoPath, validTags)
 	if repoPath == constants.SaltboxRepoPath && len(validTags) == 0 {
@@ -330,7 +337,14 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 	if repoPath == constants.SandboxRepoPath {
 		otherRepoPath = constants.SaltboxRepoPath
 	}
-	otherValidTags := getValidTags(ctx, otherRepoPath, cacheInstance, verbosity)
+	otherValidTags, err := getValidTags(ctx, otherRepoPath, cacheInstance, verbosity)
+	if err != nil {
+		if otherRepoPath == constants.SaltboxRepoPath {
+			return nil, err
+		}
+		logging.Debug(verbosity, "Error getting tags for %s: %v", otherRepoPath, err)
+		otherValidTags = []string{}
+	}
 	logging.Debug(verbosity, "Valid tags for other repo %s (after getValidTags): %v", otherRepoPath, otherValidTags)
 	if otherRepoPath == constants.SaltboxRepoPath && len(otherValidTags) == 0 {
 		return nil, fmt.Errorf("saltbox install appears broken: tags cache missing or empty")
@@ -434,7 +448,7 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 }
 
 // getValidTags retrieves valid tags from the cache, handling potential errors, and updates the cache if needed
-func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cache, verbosity int) []string {
+func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cache, verbosity int) ([]string, error) {
 	playbookPath := ""
 	switch repoPath {
 	case constants.SaltboxRepoPath:
@@ -442,7 +456,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 	case constants.SandboxRepoPath:
 		playbookPath = constants.SandboxPlaybookPath()
 	default:
-		return []string{} // Unknown repo path, return empty slice
+		return []string{}, fmt.Errorf("unknown repo path: %s", repoPath)
 	}
 
 	// Check if the cache exists and is *complete* *before* attempting to update.
@@ -469,7 +483,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 						}
 						// If we got here, the cache is valid. Return
 						logging.Debug(verbosity, "Cache valid. Returning %v", cachedTagsStrings)
-						return cachedTagsStrings
+						return cachedTagsStrings, nil
 					} else {
 						logging.Debug(verbosity, "Cache is invalid type for %s", repoPath)
 					}
@@ -496,6 +510,7 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 	if err != nil {
 		handleInterruptError(err)
 		logging.Debug(verbosity, "Error updating cache for %s: %v", repoPath, err)
+		return []string{}, fmt.Errorf("failed to update tags cache for %s: %w", repoPath, err)
 	}
 
 	// Retrieve again
@@ -504,19 +519,19 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 	// If *still* not ok, then return empty.
 	if !ok {
 		logging.Debug(verbosity, "Cache still not ok after update for %s", repoPath)
-		return []string{}
+		return []string{}, fmt.Errorf("tags cache missing after update for %s", repoPath)
 	}
 	cachedTagsInterface, ok := repoCache["tags"]
 	if !ok {
 		logging.Debug(verbosity, "'tags' key missing after update for %s", repoPath)
-		return []string{}
+		return []string{}, fmt.Errorf("tags cache missing after update for %s", repoPath)
 	}
 
 	// Handle both []string (freshly cached) and []any (loaded from JSON)
 	switch tags := cachedTagsInterface.(type) {
 	case []string:
 		logging.Debug(verbosity, "Returning tags after update ([]string): %v", tags)
-		return tags
+		return tags, nil
 	case []any:
 		cachedTagsStrings := make([]string, 0, len(tags))
 		for _, tag := range tags {
@@ -525,10 +540,10 @@ func getValidTags(ctx context.Context, repoPath string, cacheInstance *cache.Cac
 			}
 		}
 		logging.Debug(verbosity, "Returning tags after update ([]any): %v", cachedTagsStrings)
-		return cachedTagsStrings
+		return cachedTagsStrings, nil
 	default:
 		logging.Debug(verbosity, "Cache is invalid type after update for %s. Expected []string or []any, got %T", repoPath, cachedTagsInterface)
-		return []string{}
+		return []string{}, fmt.Errorf("tags cache has invalid type for %s", repoPath)
 	}
 }
 

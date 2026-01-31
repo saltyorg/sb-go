@@ -257,7 +257,10 @@ func TestGetValidTags_Integration(t *testing.T) {
 			}
 
 			// Call the actual function
-			tags := getValidTags(ctx, tt.repoPath, c, 0)
+			tags, err := getValidTags(ctx, tt.repoPath, c, 0)
+			if err != nil {
+				t.Fatalf("getValidTags() returned error: %v", err)
+			}
 
 			if tt.expectEmpty && len(tags) != 0 {
 				t.Errorf("Expected empty tags, got %v", tags)
