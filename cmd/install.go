@@ -182,11 +182,19 @@ func handleInstall(cmd *cobra.Command, tags []string, extraVars []string, skipTa
 		var allSuggestions []suggestion
 
 		if len(saltboxTags) > 0 {
-			allSuggestions = append(allSuggestions, validateAndSuggest(ctx, constants.SaltboxRepoPath, saltboxTags, "", "sandbox-", cacheInstance, verbosity)...)
+			suggestions, err := validateAndSuggest(ctx, constants.SaltboxRepoPath, saltboxTags, "", "sandbox-", cacheInstance, verbosity)
+			if err != nil {
+				return err
+			}
+			allSuggestions = append(allSuggestions, suggestions...)
 		}
 
 		if len(sandboxTags) > 0 {
-			allSuggestions = append(allSuggestions, validateAndSuggest(ctx, constants.SandboxRepoPath, sandboxTags, "sandbox-", "", cacheInstance, verbosity)...)
+			suggestions, err := validateAndSuggest(ctx, constants.SandboxRepoPath, sandboxTags, "sandbox-", "", cacheInstance, verbosity)
+			if err != nil {
+				return err
+			}
+			allSuggestions = append(allSuggestions, suggestions...)
 		}
 
 		if len(allSuggestions) > 0 {
@@ -307,13 +315,16 @@ func formatSuggestions(suggestions []suggestion) string {
 	return strings.TrimSuffix(result.String(), "\n")
 }
 
-func validateAndSuggest(ctx context.Context, repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) []suggestion {
+func validateAndSuggest(ctx context.Context, repoPath string, providedTags []string, currentPrefix, otherPrefix string, cacheInstance *cache.Cache, verbosity int) ([]suggestion, error) {
 	var suggestions []suggestion
 
 	// Ensure the cache exists and is populated.
 	validTags := getValidTags(ctx, repoPath, cacheInstance, verbosity)
 
 	logging.Debug(verbosity, "Valid tags for %s (after getValidTags): %v", repoPath, validTags)
+	if repoPath == constants.SaltboxRepoPath && len(validTags) == 0 {
+		return nil, fmt.Errorf("saltbox install appears broken: tags cache missing or empty")
+	}
 
 	otherRepoPath := constants.SandboxRepoPath
 	if repoPath == constants.SandboxRepoPath {
@@ -321,6 +332,9 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 	}
 	otherValidTags := getValidTags(ctx, otherRepoPath, cacheInstance, verbosity)
 	logging.Debug(verbosity, "Valid tags for other repo %s (after getValidTags): %v", otherRepoPath, otherValidTags)
+	if otherRepoPath == constants.SaltboxRepoPath && len(otherValidTags) == 0 {
+		return nil, fmt.Errorf("saltbox install appears broken: tags cache missing or empty")
+	}
 
 	repoName := "Saltbox"
 	otherRepoName := "Sandbox"
@@ -416,7 +430,7 @@ func validateAndSuggest(ctx context.Context, repoPath string, providedTags []str
 	sort.Slice(suggestions, func(i, j int) bool {
 		return suggestions[i].inputTag < suggestions[j].inputTag
 	})
-	return suggestions
+	return suggestions, nil
 }
 
 // getValidTags retrieves valid tags from the cache, handling potential errors, and updates the cache if needed

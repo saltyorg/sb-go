@@ -397,7 +397,10 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 			})
 
 			// Call the actual function
-			suggestions := validateAndSuggest(ctx, tt.repoPath, tt.providedTags, tt.currentPrefix, tt.otherPrefix, c, 0)
+			suggestions, err := validateAndSuggest(ctx, tt.repoPath, tt.providedTags, tt.currentPrefix, tt.otherPrefix, c, 0)
+			if err != nil {
+				t.Fatalf("validateAndSuggest() returned error: %v", err)
+			}
 
 			if len(suggestions) != tt.expectedSuggCount {
 				t.Errorf("validateAndSuggest() returned %d suggestions, expected %d. Suggestions: %v",
