@@ -87,7 +87,7 @@ func AllSaltboxConfigs(verbose bool) error {
 }
 
 // validateDuplicateKeys checks a YAML file for duplicate keys
-func validateDuplicateKeys(configPath, name string) error {
+func validateDuplicateKeys(node *yaml.Node, name string) error {
 	successMessage := fmt.Sprintf("Validated %s (no duplicates)", name)
 	failureMessage := fmt.Sprintf("Failed to validate %s (no duplicates)", name)
 
@@ -96,7 +96,7 @@ func validateDuplicateKeys(configPath, name string) error {
 		StopMessage:     successMessage,
 		StopFailMessage: failureMessage,
 	}, func() error {
-		return checkDuplicateKeys(configPath)
+		return checkDuplicateKeys(node)
 	})
 
 	if validationError != nil {
@@ -106,22 +106,25 @@ func validateDuplicateKeys(configPath, name string) error {
 	return nil
 }
 
-// checkDuplicateKeys reads a YAML file and detects duplicate keys
-func checkDuplicateKeys(filePath string) error {
-	// Read the file
+// parseYAMLFile reads and parses a YAML file to ensure syntax validity.
+func parseYAMLFile(filePath string) ([]byte, *yaml.Node, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("error reading file: %w", err)
+		return nil, nil, fmt.Errorf("error reading file: %w", err)
 	}
 
-	// Parse YAML into a Node tree which preserves duplicate keys
 	var node yaml.Node
 	if err := yaml.Unmarshal(data, &node); err != nil {
-		return fmt.Errorf("error parsing YAML: %w", err)
+		return nil, nil, fmt.Errorf("invalid YAML in %s: %w", filePath, err)
 	}
 
+	return data, &node, nil
+}
+
+// checkDuplicateKeys detects duplicate keys from a parsed YAML node tree.
+func checkDuplicateKeys(node *yaml.Node) error {
 	// Check for duplicates recursively
-	duplicates := findDuplicateKeys(&node, "")
+	duplicates := findDuplicateKeys(node, "")
 	if len(duplicates) > 0 {
 		var errorMsg strings.Builder
 		errorMsg.WriteString("duplicate keys found:")
@@ -194,9 +197,15 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 		return fmt.Errorf("required config file not found: %s", job.configPath)
 	}
 
+	// Validate YAML syntax before any other validation steps.
+	configFile, yamlNode, err := parseYAMLFile(job.configPath)
+	if err != nil {
+		return err
+	}
+
 	// If this is a duplicate-only check, skip schema validation
 	if job.duplicatesOnly {
-		return validateDuplicateKeys(job.configPath, job.name)
+		return validateDuplicateKeys(yamlNode, job.name)
 	}
 
 	// Check if schema file exists
@@ -215,7 +224,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 		StopMessage:     successMessage,
 		StopFailMessage: failureMessage,
 	}, func() error {
-		return validateConfigWithSchema(job.configPath, schemaPath)
+		return validateConfigWithSchema(configFile, job.configPath, schemaPath)
 	})
 
 	if validationError != nil {
@@ -226,15 +235,9 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 }
 
 // validateConfigWithSchema validates a config file against its YAML schema
-func validateConfigWithSchema(configPath, schemaPath string) error {
+func validateConfigWithSchema(configFile []byte, configPath, schemaPath string) error {
 	startTime := time.Now()
 	logging.DebugBool(verboseMode, "validateConfigWithSchema called with config=%s, schema=%s at %v", configPath, schemaPath, startTime)
-
-	// Load the config file
-	configFile, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("error reading config file (%s): %w", configPath, err)
-	}
 
 	// Load into generic map for structure checking
 	var inputMap map[string]any
