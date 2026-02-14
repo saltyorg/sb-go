@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -199,6 +200,10 @@ func getRtorrentStats(ctx context.Context, instance config.UserPassAppInstance) 
 
 // formatRtorrentOutput formats the rTorrent information for display.
 func formatRtorrentOutput(infos []rtorrentInfo) string {
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
+
 	if len(infos) == 1 {
 		return formatRtorrentSummary(infos[0])
 	}

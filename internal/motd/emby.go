@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -197,6 +198,10 @@ func getEmbyStreamInfo(ctx context.Context, instance config.EmbyInstance) (EmbyS
 // formatEmbyOutput formats the Emby streaming information for display
 func formatEmbyOutput(infos []EmbyStreamInfo) string {
 	var output strings.Builder
+
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
 
 	if len(infos) == 1 {
 		info := infos[0]

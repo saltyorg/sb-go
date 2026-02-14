@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -236,6 +237,10 @@ func getNzbgetQueueInfo(ctx context.Context, instance config.UserPassAppInstance
 
 // formatNzbgetOutput formats the NZBGet information for display
 func formatNzbgetOutput(infos []NzbgetInfo) string {
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
+
 	if len(infos) == 1 {
 		return formatNzbgetSummary(infos[0])
 	}

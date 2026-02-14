@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -185,6 +186,10 @@ func getSabnzbdQueueInfo(ctx context.Context, instance config.AppInstance) (Sabn
 
 // formatSabnzbdOutput formats the SABnzbd information for display
 func formatSabnzbdOutput(infos []SabnzbdInfo) string {
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
+
 	if len(infos) == 1 {
 		return formatSabnzbdSummary(infos[0])
 	}

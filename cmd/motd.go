@@ -43,6 +43,7 @@ type motdConfig struct {
 	bannerFile           string
 	bannerFileToiletArgs string
 	bannerFont           string
+	bannerFontExplicit   bool
 	bannerTitle          string
 	bannerType           string
 	verbosity            int
@@ -86,6 +87,7 @@ last login, user sessions, process information, and system update status based o
 		config.bannerFile, _ = cmd.Flags().GetString("banner-file")
 		config.bannerFileToiletArgs, _ = cmd.Flags().GetString("banner-file-toilet")
 		config.bannerFont, _ = cmd.Flags().GetString("font")
+		config.bannerFontExplicit = cmd.Flags().Changed("font")
 		config.bannerTitle, _ = cmd.Flags().GetString("title")
 		config.bannerType, _ = cmd.Flags().GetString("type")
 		config.verbosity, _ = cmd.Flags().GetCount("verbose")
@@ -173,7 +175,7 @@ func runMotdCommand(mcfg *motdConfig) error {
 	}
 
 	// Validate font if specified and banner will be rendered.
-	if shouldRenderBanner && mcfg.bannerFont != "" && !motd.IsValidFont(mcfg.bannerFont) {
+	if shouldRenderBanner && mcfg.bannerFont != "" && mcfg.bannerFontExplicit && !motd.IsValidFont(mcfg.bannerFont) {
 		var availableFonts strings.Builder
 		availableFonts.WriteString("\nAvailable fonts (from /usr/share/figlet):\n")
 

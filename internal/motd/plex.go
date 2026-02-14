@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -331,6 +332,10 @@ func formatPlexStreamSummary(info PlexStreamInfo) string {
 // formatPlexOutput formats the Plex streaming information for display
 func formatPlexOutput(infos []PlexStreamInfo) string {
 	var output strings.Builder
+
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
 
 	// If there's only one Plex instance, we can omit the name for cleaner output
 	if len(infos) == 1 {

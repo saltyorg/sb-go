@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -182,6 +183,10 @@ func getJellyfinStreamInfo(ctx context.Context, instance config.JellyfinInstance
 // formatJellyfinOutput formats the Jellyfin streaming information for display
 func formatJellyfinOutput(infos []JellyfinStreamInfo) string {
 	var output strings.Builder
+
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
 
 	// If there's only one instance, omit the name for cleaner output
 	if len(infos) == 1 {

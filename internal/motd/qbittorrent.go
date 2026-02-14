@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -182,6 +183,10 @@ func getQbittorrentStats(ctx context.Context, instance config.UserPassAppInstanc
 
 // formatQbittorrentOutput formats the qBittorrent information for display.
 func formatQbittorrentOutput(infos []qbittorrentInfo) string {
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
+
 	if len(infos) == 1 {
 		return formatQbittorrentSummary(infos[0])
 	}
