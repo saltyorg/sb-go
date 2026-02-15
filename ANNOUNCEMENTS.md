@@ -17,7 +17,7 @@ implementation in `internal/announcements`.
 Place the file at the root of the repo:
 
 - `/srv/git/saltbox/announcements.yml`
-- `/srv/git/sandbox/announcements.yml`
+- `/opt/sandbox/announcements.yml`
 
 (These are the default paths; `sb-go` uses the repo root plus
 `announcements.yml`.)
