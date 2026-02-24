@@ -7,7 +7,7 @@ require (
 	github.com/agnivade/levenshtein v1.2.1
 	github.com/aquasecurity/table v1.11.0
 	github.com/autobrr/go-qbittorrent v1.14.0
-	github.com/charmbracelet/bubbles v1.0.0
+	github.com/charmbracelet/bubbles/v2 v2.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/fang v0.4.4
 	github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e
