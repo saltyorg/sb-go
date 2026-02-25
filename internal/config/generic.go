@@ -110,8 +110,8 @@ func checkExtraFieldsInternal(inputMap map[string]any, config any, context strin
 	for key := range inputMap {
 		logging.DebugBool(verboseMode, "Checking for extra field: %s", key)
 		found := false
-		for i := 0; i < configType.NumField(); i++ {
-			field := configType.Field(i)
+		for field := range configType.Fields() {
+			field := field
 			yamlTag := field.Tag.Get("yaml")
 			yamlKey := strings.Split(yamlTag, ",")[0]
 			if yamlKey == key {
