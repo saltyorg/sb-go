@@ -46,6 +46,8 @@ github.com/charmbracelet/fang v0.4.4 h1:G4qKxF6or/eTPgmAolwPuRNyuci3hTUGGX1rj1Yk
 github.com/charmbracelet/fang v0.4.4/go.mod h1:P5/DNb9DddQ0Z0dbc0P3ol4/ix5Po7Ofr2KMBfAqoCo=
 github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e h1:tIg7WfjipE9Qyc9KE8S64a1QpR1HTNGugets4yVI6HI=
 github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e/go.mod h1:DSdohgOBkMr2ZQNhw4LZxSGpx3SvpeujNoXrQyH2hxo=
+github.com/charmbracelet/glamour v0.10.1-0.20251124104326-69661fd54231 h1:UTxhlq0yZf/KJR0wWpf39qEiBqobZel0CkoUNa4Q5ys=
+github.com/charmbracelet/glamour v0.10.1-0.20251124104326-69661fd54231/go.mod h1:DSdohgOBkMr2ZQNhw4LZxSGpx3SvpeujNoXrQyH2hxo=
 github.com/charmbracelet/harmonica v0.2.0 h1:8NxJWRWg/bzKqqEaaeFNipOu77YR5t8aSwG4pgaUBiQ=
 github.com/charmbracelet/harmonica v0.2.0/go.mod h1:KSri/1RMQOZLbw7AHqgcBycp8pgJnQMYYT8QZRqZ1Ao=
 github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834 h1:ZR7e0ro+SZZiIZD7msJyA+NjkCNNavuiPBLgerbOziE=
