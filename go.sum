@@ -58,6 +58,8 @@ github.com/charmbracelet/x/cellbuf v0.0.15 h1:ur3pZy0o6z/R7EylET877CBxaiE1Sp1GMx
 github.com/charmbracelet/x/cellbuf v0.0.15/go.mod h1:J1YVbR7MUuEGIFPCaaZ96KDl5NoS0DAWkskup+mOY+Q=
 github.com/charmbracelet/x/exp/charmtone v0.0.0-20260209194814-eeb2896ac759 h1:U0li+kYsNefPhJPP9SfwQJNbQ58iXWRtidnj1Rqf//g=
 github.com/charmbracelet/x/exp/charmtone v0.0.0-20260209194814-eeb2896ac759/go.mod h1:nsExn0DGyX0lh9LwLHTn2Gg+hafdzfSXnC+QmEJTZFY=
+github.com/charmbracelet/x/exp/charmtone v0.0.0-20260225200202-61df8bc4b903 h1:QKMgigHt5QxrmLPYiy2rqeupaUk3LwKwJCBVr52KPTI=
+github.com/charmbracelet/x/exp/charmtone v0.0.0-20260225200202-61df8bc4b903/go.mod h1:nsExn0DGyX0lh9LwLHTn2Gg+hafdzfSXnC+QmEJTZFY=
 github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f h1:pk6gmGpCE7F3FcjaOEKYriCvpmIN4+6OS/RD0vm4uIA=
 github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f/go.mod h1:IfZAMTHB6XkZSeXUqriemErjAWCCzT0LwjKFYCZyw0I=
 github.com/charmbracelet/x/exp/slice v0.0.0-20260209194814-eeb2896ac759 h1:96wFGlst+IDv3dIf5q29nw470wJYB3YAgemiciLZcG0=
