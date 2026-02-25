@@ -11,7 +11,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/fang v0.4.4
 	github.com/charmbracelet/glamour v0.10.1-0.20251013092624-0af1a2d9bc9e
-	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
+	github.com/charmbracelet/lipgloss/v2 v2.0.0
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260225200202-61df8bc4b903
 	github.com/cloudflare/cloudflare-go/v6 v6.7.0
 	github.com/creativeprojects/go-selfupdate v1.5.2
