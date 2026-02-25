@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/saltyorg/sb-go/internal/logging"
 
@@ -14,16 +15,18 @@ import (
 
 // SchemaRule represents a validation rule for a field
 type SchemaRule struct {
-	Type            string                 `yaml:"type"`
-	Required        bool                   `yaml:"required"`
-	Format          string                 `yaml:"format"`
-	MinLength       int                    `yaml:"min_length"`
-	MaxLength       int                    `yaml:"max_length"`
-	NotEquals       any                    `yaml:"not_equals"`
-	RequiredWith    []string               `yaml:"required_with"`
-	CustomValidator string                 `yaml:"custom_validator"`
-	Properties      map[string]*SchemaRule `yaml:"properties"`
-	Items           *SchemaRule            `yaml:"items"` // For array validation
+	Type             string                 `yaml:"type"`
+	Required         bool                   `yaml:"required"`
+	Format           string                 `yaml:"format"`
+	MinLength        int                    `yaml:"min_length"`
+	MaxLength        int                    `yaml:"max_length"`
+	NotEquals        any                    `yaml:"not_equals"`
+	RequiredWith     []string               `yaml:"required_with"`
+	RequiredWhenTrue []string               `yaml:"required_when_true"`
+	ValidateWhenTrue []string               `yaml:"validate_when_true"`
+	CustomValidator  string                 `yaml:"custom_validator"`
+	Properties       map[string]*SchemaRule `yaml:"properties"`
+	Items            *SchemaRule            `yaml:"items"` // For array validation
 	// Fields for example config generation
 	Description string `yaml:"description"` // Comment to display above the section
 	Example     any    `yaml:"example"`     // Example value for this field
@@ -93,15 +96,20 @@ func (s *Schema) validateObject(obj map[string]any, rules map[string]*SchemaRule
 	for fieldName, rule := range rules {
 		fieldPath := appendPath(path, fieldName)
 		value, exists := obj[fieldName]
+		isRequired := s.isFieldRequired(rule, obj)
 
-		logging.DebugBool(verboseMode, "Checking field '%s', exists: %t, required: %t", fieldPath, exists, rule.Required)
+		logging.DebugBool(verboseMode, "Checking field '%s', exists: %t, required: %t", fieldPath, exists, isRequired)
 
-		if rule.Required && !exists {
+		if isRequired && !exists {
 			return fmt.Errorf("field '%s' is required", fieldPath)
 		}
 
 		if !exists {
 			continue // Optional field not present
+		}
+
+		if !s.shouldValidateField(rule, obj) {
+			continue
 		}
 
 		if err := s.validateField(value, rule, fieldPath, obj); err != nil {
@@ -134,12 +142,17 @@ func (s *Schema) validateObjectStructure(obj map[string]any, rules map[string]*S
 	for fieldName, rule := range rules {
 		fieldPath := appendPath(path, fieldName)
 		value, exists := obj[fieldName]
+		isRequired := s.isFieldRequired(rule, obj)
 
-		if rule.Required && !exists {
+		if isRequired && !exists {
 			return fmt.Errorf("field '%s' is required", fieldPath)
 		}
 
-		if exists && rule.Type == "object" && rule.Properties != nil {
+		if !exists || !s.shouldValidateField(rule, obj) {
+			continue
+		}
+
+		if rule.Type == "object" && rule.Properties != nil {
 			if objMap, ok := value.(map[string]any); ok {
 				if err := s.validateObjectStructure(objMap, rule.Properties, fieldPath); err != nil {
 					return err
@@ -159,15 +172,20 @@ func (s *Schema) validateObjectWithTypeFlexibility(obj map[string]any, rules map
 	for fieldName, rule := range rules {
 		fieldPath := appendPath(path, fieldName)
 		value, exists := obj[fieldName]
+		isRequired := s.isFieldRequired(rule, obj)
 
-		logging.DebugBool(verboseMode, "Checking field '%s', exists: %t, required: %t", fieldPath, exists, rule.Required)
+		logging.DebugBool(verboseMode, "Checking field '%s', exists: %t, required: %t", fieldPath, exists, isRequired)
 
-		if rule.Required && !exists {
+		if isRequired && !exists {
 			return fmt.Errorf("field '%s' is required", fieldPath)
 		}
 
 		if !exists {
 			continue // Optional field not present
+		}
+
+		if !s.shouldValidateField(rule, obj) {
+			continue
 		}
 
 		if err := s.validateFieldWithTypeFlexibility(value, rule, fieldPath, obj, asyncCtx); err != nil {
@@ -593,6 +611,66 @@ func (s *Schema) validateRequiredWith(value any, rule *SchemaRule, path string, 
 	}
 
 	return nil
+}
+
+func (s *Schema) isFieldRequired(rule *SchemaRule, parentConfig map[string]any) bool {
+	if rule.Required {
+		return true
+	}
+
+	if len(rule.RequiredWhenTrue) == 0 {
+		return false
+	}
+
+	for _, fieldName := range rule.RequiredWhenTrue {
+		rawValue, exists := parentConfig[fieldName]
+		if !exists {
+			continue
+		}
+
+		boolValue, validBool := parseAnsibleBool(rawValue)
+		if validBool && boolValue {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *Schema) shouldValidateField(rule *SchemaRule, parentConfig map[string]any) bool {
+	if len(rule.ValidateWhenTrue) == 0 {
+		return true
+	}
+
+	for _, fieldName := range rule.ValidateWhenTrue {
+		rawValue, exists := parentConfig[fieldName]
+		if !exists {
+			continue
+		}
+
+		boolValue, validBool := parseAnsibleBool(rawValue)
+		if validBool && boolValue {
+			return true
+		}
+	}
+
+	return false
+}
+
+func parseAnsibleBool(value any) (bool, bool) {
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "yes", "true", "on", "1":
+			return true, true
+		case "no", "false", "off", "0":
+			return false, true
+		}
+	}
+
+	return false, false
 }
 
 // Helper functions
