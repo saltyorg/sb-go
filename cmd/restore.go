@@ -19,9 +19,9 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/signals"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -56,17 +56,15 @@ func initialRestoreModel() *restoreModel {
 	var t textinput.Model
 	for i := range m.inputs {
 		t = textinput.New()
-		t.Cursor.Style = cursorStyle
 		t.CharLimit = 64
-		t.Width = 32
+		t.SetWidth(32)
+		configureRestoreInputStyles(&t)
 
 		switch i {
 		case 0:
 			t.Placeholder = "Restore service username"
 			t.Prompt = "Username: "
 			t.Focus()
-			t.PromptStyle = focusedStyle
-			t.TextStyle = focusedStyle
 		case 1:
 			t.Placeholder = "Restore service password"
 			t.Prompt = "Password: "
@@ -85,13 +83,23 @@ func initialRestoreModel() *restoreModel {
 	return m
 }
 
+func configureRestoreInputStyles(t *textinput.Model) {
+	s := t.Styles()
+	s.Focused.Prompt = focusedStyle
+	s.Focused.Text = focusedStyle
+	s.Blurred.Prompt = noStyle
+	s.Blurred.Text = noStyle
+	s.Cursor.Color = cursorStyle.GetForeground()
+	t.SetStyles(s)
+}
+
 func (m *restoreModel) Init() tea.Cmd {
 	return textinput.Blink
 }
 
 func (m *restoreModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c":
 			signals.GetGlobalManager().Shutdown(130)
@@ -139,14 +147,10 @@ func (m *restoreModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if i == m.focusIndex {
 					// Set focused state
 					cmds[i] = m.inputs[i].Focus()
-					m.inputs[i].PromptStyle = focusedStyle
-					m.inputs[i].TextStyle = focusedStyle
 					continue
 				}
 				// Remove the focused state
 				m.inputs[i].Blur()
-				m.inputs[i].PromptStyle = noStyle
-				m.inputs[i].TextStyle = noStyle
 			}
 
 			return m, tea.Batch(cmds...)
@@ -176,7 +180,7 @@ func (m *restoreModel) updateInputs(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *restoreModel) View() string {
+func (m *restoreModel) View() tea.View {
 	var b strings.Builder
 
 	for i := range m.inputs {
@@ -198,7 +202,9 @@ func (m *restoreModel) View() string {
 		b.WriteRune('\n')
 	}
 	//Remove the cursor mode section
-	return b.String()
+	v := tea.NewView(b.String())
+	v.AltScreen = true
+	return v
 }
 
 // restoreCmd represents the restore command
@@ -209,7 +215,7 @@ var restoreCmd = &cobra.Command{
 The restore URL defaults to "crs.saltbox.dev".  A password will be prompted for twice.`,
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p := tea.NewProgram(initialRestoreModel(), tea.WithOutput(os.Stdout), tea.WithAltScreen())
+		p := tea.NewProgram(initialRestoreModel(), tea.WithOutput(os.Stdout))
 
 		m, err := p.Run()
 		if err != nil {

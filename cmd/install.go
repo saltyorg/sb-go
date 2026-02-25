@@ -16,8 +16,8 @@ import (
 	"github.com/saltyorg/sb-go/internal/styles"
 	"github.com/saltyorg/sb-go/internal/utils"
 
+	"charm.land/lipgloss/v2"
 	"github.com/agnivade/levenshtein"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/spf13/cobra"
 )

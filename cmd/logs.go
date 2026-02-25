@@ -13,13 +13,13 @@ import (
 	"github.com/saltyorg/sb-go/internal/styles"
 	"github.com/saltyorg/sb-go/internal/systemd"
 
-	"github.com/charmbracelet/bubbles/help"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -224,28 +224,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		helpHeight := lipgloss.Height(m.help.View(m.keys))
 
 		if m.activeView == "list" {
-			// Inline list view - use full width, compact height
+			// Full-height list view
 			m.list.SetWidth(msg.Width)
-			m.list.SetHeight(15) // Compact height for inline display
+			m.list.SetHeight(msg.Height - helpHeight)
 		} else {
 			// Logs view - viewport uses full screen in alt screen mode
 			if m.viewportInitialized {
 				// Store current position before resize
-				m.viewportYPosition = m.viewport.YOffset
+				m.viewportYPosition = m.viewport.YOffset()
 
-				m.viewport.Width = msg.Width
-				m.viewport.Height = msg.Height - helpHeight
+				m.viewport.SetWidth(msg.Width)
+				m.viewport.SetHeight(msg.Height - helpHeight)
 
 				// Restore scroll position after resize
-				m.viewport.YOffset = min(m.viewportYPosition, max(0, m.viewport.TotalLineCount()-m.viewport.Height))
+				m.viewport.SetYOffset(min(m.viewportYPosition, max(0, m.viewport.TotalLineCount()-m.viewport.Height())))
 			}
 		}
 
-		m.help.Width = msg.Width
+		m.help.SetWidth(msg.Width)
 
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Don't process navigation keys if loading
 		if m.loading && msg.String() != "q" && msg.String() != "ctrl+c" {
 			return m, nil
@@ -255,17 +255,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			signals.GetGlobalManager().Shutdown(130)
 			m.quitting = true
-			// If we're in logs view (alt screen), exit alt screen before quitting
-			if m.activeView == "logs" {
-				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
-			}
 			return m, tea.Quit
 		case "q":
 			m.quitting = true
-			// If we're in logs view (alt screen), exit alt screen before quitting
-			if m.activeView == "logs" {
-				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
-			}
 			return m, tea.Quit
 
 		case "enter":
@@ -278,7 +270,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !m.viewportInitialized {
 						helpHeight := lipgloss.Height(m.help.View(m.keys))
 						// Use full terminal width and height for fullscreen viewport
-						m.viewport = viewport.New(m.width, m.height-helpHeight)
+						m.viewport = viewport.New(viewport.WithWidth(m.width), viewport.WithHeight(m.height-helpHeight))
 						m.viewport.Style = lipgloss.NewStyle().Padding(1, 2)
 						m.viewportInitialized = true
 					}
@@ -297,15 +289,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.followMode = false
 						// Create new log buffer with target size of 10 pages
 						m.logBuf = newLogBuffer(m.selectedService, prefetchPagesAhead*logPageSize)
-						// Enter alt screen and fetch logs
-						return m, tea.Batch(tea.EnterAltScreen, fetchLogs(m.selectedService, false, "", false))
+						return m, fetchLogs(m.selectedService, false, "", false)
 					} else {
 						// Make sure we re-apply the current log content with boundaries
 						if m.logBuf != nil {
 							m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 						}
-						// Enter alt screen to view existing logs
-						return m, tea.EnterAltScreen
+						return m, nil
 					}
 				}
 			}
@@ -314,8 +304,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeView == "logs" && !m.loading {
 				m.activeView = "list"
 				m.err = nil // Clear any errors when going back
-				// Exit alt screen and return to inline list view
-				return m, tea.ExitAltScreen
+				return m, nil
 			}
 
 		case "pgup", "u":
@@ -325,7 +314,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Fetch more older logs if we're at the top of viewport and have more to load
 			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
-				atTop := m.viewport.YOffset <= 0
+				atTop := m.viewport.YOffset() <= 0
 				if atTop && m.logBuf.beforeCursor != "" && m.logBuf.hasMoreBefore {
 					m.loading = true
 					m.err = nil
@@ -341,7 +330,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Only fetch more logs if we're at the bottom of viewport and have more to load
 			if m.activeView == "logs" && !m.loading && m.logBuf != nil {
-				atBottom := m.viewport.YOffset >= m.viewport.TotalLineCount()-m.viewport.Height
+				atBottom := m.viewport.YOffset() >= m.viewport.TotalLineCount()-m.viewport.Height()
 				if atBottom && m.logBuf.afterCursor != "" && m.logBuf.hasMoreAfter {
 					m.loading = true
 					m.err = nil
@@ -371,7 +360,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// If in follow mode, scroll back to bottom after refresh
 				if m.followMode {
 					m.viewport.GotoBottom()
-					m.viewportYPosition = m.viewport.YOffset
+					m.viewportYPosition = m.viewport.YOffset()
 				}
 			}
 
@@ -383,7 +372,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Enable follow mode - scroll to bottom and start background fetcher
 					m.viewport.SetContent(m.logBuf.GetContentFormatted(m.showTimestampHost, m.followMode))
 					m.viewport.GotoBottom()
-					m.viewportYPosition = m.viewport.YOffset
+					m.viewportYPosition = m.viewport.YOffset()
 					cmds = append(cmds, m.logBuf.StartFollow())
 				} else {
 					// Disable follow mode - stop background fetcher
@@ -440,7 +429,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					oldLen := len(m.logBuf.entries)
 
 					// Save current viewport position before updating content
-					savedYOffset := m.viewport.YOffset
+					savedYOffset := m.viewport.YOffset()
 
 					// Use firstCursor (oldest entry) to continue fetching even older logs
 					prefetchCmd := m.logBuf.PrependOlder(msg.entries, msg.firstCursor, msg.hasMore)
@@ -462,8 +451,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					// ALWAYS adjust viewport position when prepending to prevent scroll jumping
 					// This keeps the user's view stable regardless of prefetch or user action
-					m.viewport.YOffset = min(savedYOffset+linesAdded, m.viewport.TotalLineCount()-m.viewport.Height)
-					m.viewportYPosition = m.viewport.YOffset
+					m.viewport.SetYOffset(min(savedYOffset+linesAdded, m.viewport.TotalLineCount()-m.viewport.Height()))
+					m.viewportYPosition = m.viewport.YOffset()
 
 					// Check if logBuffer wants to prefetch more
 					if prefetchCmd != nil {
@@ -477,7 +466,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						// Update viewport and position at bottom
 						m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 						m.viewport.GotoBottom()
-						m.viewportYPosition = m.viewport.YOffset
+						m.viewportYPosition = m.viewport.YOffset()
 
 						// Start prefetching if logBuffer wants to
 						if prefetchCmd != nil {
@@ -493,7 +482,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if !msg.isPrefetch || m.followMode {
 							// User-initiated or follow mode: go to bottom
 							m.viewport.GotoBottom()
-							m.viewportYPosition = m.viewport.YOffset
+							m.viewportYPosition = m.viewport.YOffset()
 						}
 						// For prefetch: viewport stays where it is
 
@@ -532,7 +521,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	} else if m.activeView == "logs" && !m.loading {
 		// Handle viewport navigation when showing logs
-		oldYOffset := m.viewport.YOffset
+		oldYOffset := m.viewport.YOffset()
 		// Only allow viewport updates if not in follow mode (disable arrow up/down in follow mode)
 		if !m.followMode {
 			m.viewport, cmd = m.viewport.Update(msg)
@@ -540,14 +529,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Track position changes
-		m.viewportYPosition = m.viewport.YOffset
+		m.viewportYPosition = m.viewport.YOffset()
 
 		// Check if viewport position changed and we need to prefetch or trim
-		if m.logBuf != nil && oldYOffset != m.viewport.YOffset {
+		if m.logBuf != nil && oldYOffset != m.viewport.YOffset() {
 			// Check if we need to prefetch more logs based on viewport position
 			prefetchCmds := m.logBuf.CheckPrefetchNeeds(
-				m.viewport.YOffset,
-				m.viewport.Height,
+				m.viewport.YOffset(),
+				m.viewport.Height(),
 				m.viewport.TotalLineCount(),
 			)
 			if len(prefetchCmds) > 0 {
@@ -555,13 +544,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Trim buffer if it's too large
-			linesTrimmed := m.logBuf.TrimBuffer(m.viewport.YOffset, m.viewport.Height)
+			linesTrimmed := m.logBuf.TrimBuffer(m.viewport.YOffset(), m.viewport.Height())
 			if linesTrimmed > 0 {
 				// Update viewport content after trimming
 				m.viewport.SetContent(m.logBuf.GetContent(m.followMode))
 				// Adjust viewport position to account for trimmed lines
-				m.viewport.YOffset = max(0, m.viewport.YOffset-linesTrimmed)
-				m.viewportYPosition = m.viewport.YOffset
+				m.viewport.SetYOffset(max(0, m.viewport.YOffset()-linesTrimmed))
+				m.viewportYPosition = m.viewport.YOffset()
 			}
 		}
 	}
@@ -569,10 +558,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func (m model) View() tea.View {
 	// If quitting, return empty string to clean up viewport
 	if m.quitting {
-		return ""
+		return tea.NewView("")
 	}
 
 	// Get context-aware help based on active view
@@ -587,7 +576,7 @@ func (m model) View() string {
 
 	if m.activeView == "list" {
 		// Inline list view - render list with help at bottom
-		return lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpView)
+		return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpView))
 	}
 
 	// Fullscreen logs view (in alt screen)
@@ -624,7 +613,9 @@ func (m model) View() string {
 			Render(promptMsg)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, logsContent, helpView)
+	v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, logsContent, helpView))
+	v.AltScreen = true
+	return v
 }
 
 // formatLogEntriesWithBoundaries formats log entries with boundary indicators inline
@@ -1120,12 +1111,11 @@ func handleLogs() error {
 		}
 	}
 
-	// Create a list with styling for inline display
+	// Create a list and size it from WindowSizeMsg
 	listDelegate := list.NewDefaultDelegate()
 	listDelegate.ShowDescription = false
 
-	// Start with compact size for inline display
-	listModel := list.New(items, listDelegate, 80, 15)
+	listModel := list.New(items, listDelegate, 0, 0)
 	listModel.Title = "Systemd Services"
 	listModel.Styles.Title = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).UnsetBackground()
 	listModel.SetShowStatusBar(false)

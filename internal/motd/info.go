@@ -12,8 +12,8 @@ import (
 	"strings"
 	timepkg "time"
 
-	"github.com/charmbracelet/bubbles/progress"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/progress"
+	"charm.land/lipgloss/v2"
 )
 
 // shareMode controls whether to obscure sensitive information like IP addresses
@@ -1112,30 +1112,30 @@ func GetDiskInfo(ctx context.Context, verbose bool) string {
 		if usagePercent < 80 {
 			// 0-79%: Low usage (good)
 			prog = progress.New(
-				progress.WithColorProfile(lipgloss.ColorProfile()),
-				progress.WithSolidFill(ProgressBarLow),
+				progress.WithColors(lipgloss.Color(ProgressBarLow)),
+				progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
 				progress.WithoutPercentage(),
 			)
 			percentStyle = ValueStyle
 		} else if usagePercent < 90 {
 			// 80-89%: High usage (warning)
 			prog = progress.New(
-				progress.WithColorProfile(lipgloss.ColorProfile()),
-				progress.WithSolidFill(ProgressBarHigh),
+				progress.WithColors(lipgloss.Color(ProgressBarHigh)),
+				progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
 				progress.WithoutPercentage(),
 			)
 			percentStyle = WarningStyle
 		} else {
 			// 90-100%: Critical usage (danger)
 			prog = progress.New(
-				progress.WithColorProfile(lipgloss.ColorProfile()),
-				progress.WithSolidFill(ProgressBarCritical),
+				progress.WithColors(lipgloss.Color(ProgressBarCritical)),
+				progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
 				progress.WithoutPercentage(),
 			)
 			percentStyle = ErrorStyle
 		}
 
-		prog.Width = barWidth
+		prog.SetWidth(barWidth)
 		completeBar := prog.ViewAs(float64(usagePercent) / 100.0)
 
 		// Add to partition slice

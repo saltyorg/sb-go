@@ -13,9 +13,9 @@ import (
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 	"github.com/saltyorg/sb-go/internal/utils"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/fang"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 )
 
 // customErrorHandler handles error formatting with proper line break support.
@@ -75,28 +75,33 @@ func main() {
 	// Force truecolor for consistent styling across all commands (process-local only)
 	// Can be overridden by setting SB_COLOR_PROFILE environment variable
 	// Valid values: truecolor, ansi256, ansi, ascii
+	var profile colorprofile.Profile
 	if colorProfile := os.Getenv("SB_COLOR_PROFILE"); colorProfile != "" {
 		switch colorProfile {
 		case "truecolor":
 			_ = os.Setenv("COLORTERM", "truecolor")
-			lipgloss.SetColorProfile(termenv.TrueColor)
+			profile = colorprofile.TrueColor
 		case "ansi256":
 			_ = os.Setenv("COLORTERM", "256color")
-			lipgloss.SetColorProfile(termenv.ANSI256)
+			profile = colorprofile.ANSI256
 		case "ansi":
-			lipgloss.SetColorProfile(termenv.ANSI)
+			_ = os.Unsetenv("COLORTERM")
+			profile = colorprofile.ANSI
 		case "ascii":
-			lipgloss.SetColorProfile(termenv.Ascii)
+			_ = os.Unsetenv("COLORTERM")
+			profile = colorprofile.ASCII
 		default:
 			// Invalid value, use default (truecolor)
 			_ = os.Setenv("COLORTERM", "truecolor")
-			lipgloss.SetColorProfile(termenv.TrueColor)
+			profile = colorprofile.TrueColor
 		}
 	} else {
 		// Default to truecolor if not set
 		_ = os.Setenv("COLORTERM", "truecolor")
-		lipgloss.SetColorProfile(termenv.TrueColor)
+		profile = colorprofile.TrueColor
 	}
+	lipgloss.Writer = colorprofile.NewWriter(os.Stdout, os.Environ())
+	lipgloss.Writer.Profile = profile
 
 	// Initialize global signal manager and get context for the application
 	sigManager := signals.GetGlobalManager()

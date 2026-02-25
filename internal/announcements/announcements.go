@@ -14,10 +14,10 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
@@ -265,7 +265,7 @@ func GetAnnouncementFilePath(repoPath string) string {
 // newAnnouncementViewer creates a new announcement viewer
 func newAnnouncementViewer(announcements []announcementItem, viewportWidth, viewportHeight int) *announcementViewer {
 	return &announcementViewer{
-		viewport:        viewport.New(0, 0), // Will be sized on first WindowSizeMsg
+		viewport:        viewport.New(viewport.WithWidth(0), viewport.WithHeight(0)), // Will be sized on first WindowSizeMsg
 		currentIndex:    0,
 		announcements:   announcements,
 		renderedContent: make(map[int]string),
@@ -286,7 +286,7 @@ func (av *announcementViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		if !av.ready {
 			// First time setup with fixed dimensions (defaults clamp to terminal size)
-			av.viewport = viewport.New(av.viewportWidth, av.viewportHeight)
+			av.viewport = viewport.New(viewport.WithWidth(av.viewportWidth), viewport.WithHeight(av.viewportHeight))
 			av.viewport.Style = announcementViewportStyle
 			av.ready = true
 
@@ -299,7 +299,7 @@ func (av *announcementViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Ignore window resizes - we keep the fixed 78x20 dimensions
 		return av, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// Global quit keys
 		switch msg.String() {
 		case "ctrl+c", "q", "esc":
@@ -339,17 +339,21 @@ func (av *announcementViewer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (av *announcementViewer) View() string {
+func (av *announcementViewer) View() tea.View {
+	var content string
+
 	if av.err != nil {
-		return fmt.Sprintf("Error rendering announcement: %v\n", av.err)
+		content = fmt.Sprintf("Error rendering announcement: %v\n", av.err)
+	} else if !av.ready {
+		content = "Initializing..."
+	} else {
+		// Compose view using pre-rendered viewport content
+		content = av.viewport.View() + av.helpView()
 	}
 
-	if !av.ready {
-		return "Initializing..."
-	}
-
-	// Compose view using pre-rendered viewport content
-	return av.viewport.View() + av.helpView()
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
 }
 
 func (av *announcementViewer) helpView() string {
@@ -437,7 +441,6 @@ func DisplayAnnouncements(diffs []*AnnouncementDiff) error {
 	// Run with alt screen - use stdin/stdout explicitly to avoid TTY issues
 	p := tea.NewProgram(
 		viewer,
-		tea.WithAltScreen(),
 		tea.WithInput(os.Stdin),
 		tea.WithOutput(os.Stdout),
 	)

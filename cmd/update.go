@@ -21,7 +21,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/validate"
 	"github.com/saltyorg/sb-go/internal/venv"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 

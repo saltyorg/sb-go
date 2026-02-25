@@ -8,9 +8,9 @@ import (
 	"github.com/saltyorg/sb-go/internal/styles"
 	"github.com/saltyorg/sb-go/internal/tty"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // GlobalSpinnerStyle holds the default style for the spinner itself.
@@ -196,7 +196,7 @@ func (m spinnerModel) Init() tea.Cmd {
 
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c":
 			signals.GetGlobalManager().Shutdown(130)
@@ -224,20 +224,20 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m spinnerModel) View() string {
+func (m spinnerModel) View() tea.View {
 	if m.interrupt {
-		return getStyle(m.opts.StopFailColor).Render("● " + m.interruptReason + "\n")
+		return tea.NewView(getStyle(m.opts.StopFailColor).Render("● " + m.interruptReason + "\n"))
 	}
 	if m.finished {
 		if m.taskErr != nil {
-			return getStyle(m.opts.StopFailColor).Render(fmt.Sprintf("● %s: Failed\n", m.opts.StopFailMessage))
+			return tea.NewView(getStyle(m.opts.StopFailColor).Render(fmt.Sprintf("● %s: Failed\n", m.opts.StopFailMessage)))
 		}
-		return getStyle(m.opts.StopColor).Render(fmt.Sprintf("● %s\n", m.opts.StopMessage))
+		return tea.NewView(getStyle(m.opts.StopColor).Render(fmt.Sprintf("● %s\n", m.opts.StopMessage)))
 	}
 
 	// Apply style from opts.Color to the task name.
 	styledTaskName := getStyle(m.opts.Color).Render(m.opts.TaskName)
-	return fmt.Sprintf("%s %s", m.spinner.View(), styledTaskName)
+	return tea.NewView(fmt.Sprintf("%s %s", m.spinner.View(), styledTaskName))
 }
 
 // Helper function to map color names to styles (still needed for stop/fail colors).

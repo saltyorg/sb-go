@@ -12,9 +12,9 @@ import (
 	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/signals"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -48,7 +48,7 @@ func (m ConfigSelectorModel) Init() tea.Cmd {
 
 func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			signals.GetGlobalManager().Shutdown(130)
 			return m, tea.Quit
@@ -76,8 +76,10 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m ConfigSelectorModel) View() string {
-	return "\nSelect a Saltbox configuration file to edit:\n\n" + m.list.View()
+func (m ConfigSelectorModel) View() tea.View {
+	v := tea.NewView("\nSelect a Saltbox configuration file to edit:\n\n" + m.list.View())
+	v.AltScreen = true
+	return v
 }
 
 func openEditor(path string) error {
@@ -175,7 +177,7 @@ func runBubbleTeaList() error {
 	m.list.SetShowPagination(false)
 
 	// Get terminal dimensions
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running bubbletea program: %w", err)
 	}
