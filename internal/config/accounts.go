@@ -162,7 +162,6 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 		logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s'", key)
 		found := false
 		for field := range configType.Fields() {
-			field := field
 			yamlTag := field.Tag.Get("yaml")
 			logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 			// Handle inline YAML tags
@@ -185,7 +184,6 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'user' section", key)
 			found := false
 			for field := range userType.Fields() {
-				field := field
 				yamlTag := field.Tag.Get("yaml")
 				logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with user field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 				if yamlTag == key || (strings.Contains(yamlTag, ",") && strings.Split(yamlTag, ",")[0] == key) {
@@ -221,7 +219,6 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'cloudflare' section", key)
 			found := false
 			for field := range cfType.Fields() {
-				field := field
 				yamlTag := field.Tag.Get("yaml")
 				logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with cloudflare field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 				if yamlTag == key || (strings.Contains(yamlTag, ",") && strings.Split(yamlTag, ",")[0] == key) {
@@ -243,7 +240,6 @@ func ValidateConfig(config *Config, inputMap map[string]any) error {
 			logging.DebugBool(verboseMode, "ValidateConfig - checking key '%s' in 'dockerhub' section", key)
 			found := false
 			for field := range dhType.Fields() {
-				field := field
 				yamlTag := field.Tag.Get("yaml")
 				logging.DebugBool(verboseMode, "ValidateConfig - comparing key '%s' with dockerhub field '%s' (YAML tag: '%s')", key, field.Name, yamlTag)
 				if yamlTag == key || (strings.Contains(yamlTag, ",") && strings.Split(yamlTag, ",")[0] == key) {
