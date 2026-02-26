@@ -198,8 +198,7 @@ type dockerLogsModel struct {
 	viewportInitialized bool
 	loading             bool
 	err                 error
-	viewportYPosition   int // Store viewport scroll position
-	quitting            bool
+	viewportYPosition   int  // Store viewport scroll position
 	showTimestampStream bool // Toggle for showing timestamp and stream columns
 	followMode          bool // Follow mode enabled
 	dockerClient        *client.Client
@@ -251,14 +250,12 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			signals.GetGlobalManager().Shutdown(130)
-			m.quitting = true
 			// Clean up follow mode
 			if m.followMode && m.logBuf != nil {
 				m.logBuf.StopFollow()
 			}
 			return m, tea.Quit
 		case "q":
-			m.quitting = true
 			// Clean up follow mode
 			if m.followMode && m.logBuf != nil {
 				m.logBuf.StopFollow()
@@ -568,11 +565,6 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m dockerLogsModel) View() tea.View {
-	// If quitting, return empty string to clean up viewport
-	if m.quitting {
-		return tea.NewView("")
-	}
-
 	// Get context-aware help based on active view
 	var helpView string
 	if m.activeView == "list" {
@@ -585,7 +577,9 @@ func (m dockerLogsModel) View() tea.View {
 
 	if m.activeView == "list" {
 		// Inline list view - render list with help at bottom
-		return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpView))
+		v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpView))
+		v.AltScreen = true
+		return v
 	}
 
 	// Fullscreen logs view (in alt screen)
@@ -1193,7 +1187,7 @@ func handleDockerLogs() error {
 		dockerClient:        cli,
 	}
 
-	// Run the program with the initial model.
+	// Run the program with alt screen controlled declaratively in View().
 	p := tea.NewProgram(initialModel)
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running docker logs UI: %w", err)
