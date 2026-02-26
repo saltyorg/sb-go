@@ -202,8 +202,7 @@ type model struct {
 	viewportInitialized bool
 	loading             bool
 	err                 error
-	viewportYPosition   int // Store viewport scroll position
-	quitting            bool
+	viewportYPosition   int  // Store viewport scroll position
 	showTimestampHost   bool // Toggle for showing timestamp and hostname columns
 	followMode          bool // Follow mode enabled
 }
@@ -254,10 +253,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			signals.GetGlobalManager().Shutdown(130)
-			m.quitting = true
 			return m, tea.Quit
 		case "q":
-			m.quitting = true
 			return m, tea.Quit
 
 		case "enter":
@@ -559,11 +556,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() tea.View {
-	// If quitting, return empty string to clean up viewport
-	if m.quitting {
-		return tea.NewView("")
-	}
-
 	// Get context-aware help based on active view
 	var helpView string
 	if m.activeView == "list" {
@@ -576,7 +568,9 @@ func (m model) View() tea.View {
 
 	if m.activeView == "list" {
 		// Inline list view - render list with help at bottom
-		return tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpView))
+		v := tea.NewView(lipgloss.JoinVertical(lipgloss.Left, m.list.View(), helpView))
+		v.AltScreen = true
+		return v
 	}
 
 	// Fullscreen logs view (in alt screen)
@@ -1145,8 +1139,7 @@ func handleLogs() error {
 		showTimestampHost:   true, // Show timestamp/host by default
 	}
 
-	// Run the program with the initial model
-	// Start in normal terminal mode (inline), only use alt screen when viewing logs
+	// Run the program with alt screen controlled declaratively in View().
 	p := tea.NewProgram(initialModel)
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running logs UI: %w", err)
