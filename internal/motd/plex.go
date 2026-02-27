@@ -133,11 +133,15 @@ func GetPlexInfo(ctx context.Context, verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.PlexInstance) {
 			defer wg.Done()
+			instanceName := providerInstanceName(inst.Name, "Plex")
 			defer func() {
 				if r := recover(); r != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "PANIC in Plex stream info fetch (instance %d): %v\n", idx, r)
 					}
+					mu.Lock()
+					streamInfos = append(streamInfos, PlexStreamInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+					mu.Unlock()
 				}
 			}()
 
@@ -148,8 +152,11 @@ func GetPlexInfo(ctx context.Context, verbose bool) string {
 			info, err := getPlexStreamInfo(ctx, inst)
 			if err != nil {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting Plex stream info for %s, hiding entry: %v\n", inst.Name, err)
+					fmt.Printf("DEBUG: Error getting Plex stream info for %s, recording error: %v\n", inst.Name, err)
 				}
+				mu.Lock()
+				streamInfos = append(streamInfos, PlexStreamInfo{Name: instanceName, Error: err})
+				mu.Unlock()
 				return
 			}
 
@@ -309,6 +316,10 @@ func buildPlexStreamTypeBreakdown(info PlexStreamInfo) []string {
 
 // formatPlexStreamSummary formats a single Plex stream info into a summary string
 func formatPlexStreamSummary(info PlexStreamInfo) string {
+	if info.Error != nil {
+		return ErrorStyle.Render(formatProviderError(info.Error))
+	}
+
 	if info.ActiveStreams == 0 {
 		return "No active streams"
 	}

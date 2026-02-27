@@ -80,11 +80,15 @@ func GetRtorrentInfo(ctx context.Context, verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.UserPassAppInstance) {
 			defer wg.Done()
+			instanceName := providerInstanceName(inst.Name, "rTorrent")
 			defer func() {
 				if r := recover(); r != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "PANIC in rTorrent stats fetch (instance %d): %v\n", idx, r)
 					}
+					mu.Lock()
+					queueInfos = append(queueInfos, rtorrentInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+					mu.Unlock()
 				}
 			}()
 
@@ -95,8 +99,11 @@ func GetRtorrentInfo(ctx context.Context, verbose bool) string {
 			info, err := getRtorrentStats(ctx, inst)
 			if err != nil {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting rTorrent info for %s, hiding entry: %v\n", inst.Name, err)
+					fmt.Printf("DEBUG: Error getting rTorrent info for %s, recording error: %v\n", inst.Name, err)
 				}
+				mu.Lock()
+				queueInfos = append(queueInfos, rtorrentInfo{Name: instanceName, Error: err})
+				mu.Unlock()
 				return
 			}
 
@@ -144,7 +151,7 @@ func getRtorrentStats(ctx context.Context, instance config.UserPassAppInstance) 
 
 	// Use user-configured timeout or default for data fetch
 	timeout := instance.Timeout
-	if timeout == 0 {
+	if timeout <= 0 {
 		timeout = 20
 	}
 	client := rtorrent.NewClientWithOpts(clientCfg, rtorrent.WithCustomClient(&http.Client{
@@ -233,6 +240,10 @@ func formatRtorrentOutput(infos []rtorrentInfo) string {
 
 // formatRtorrentSummary is a helper to format the summary for a single instance.
 func formatRtorrentSummary(info rtorrentInfo) string {
+	if info.Error != nil {
+		return ErrorStyle.Render(formatProviderError(info.Error))
+	}
+
 	if info.DownloadingCount == 0 && info.SeedingCount == 0 && info.StoppedCount == 0 && info.ErrorCount == 0 {
 		return "No torrents present"
 	}

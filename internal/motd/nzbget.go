@@ -105,11 +105,15 @@ func GetNzbgetInfo(ctx context.Context, verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.UserPassAppInstance) {
 			defer wg.Done()
+			instanceName := providerInstanceName(inst.Name, "NZBGet")
 			defer func() {
 				if r := recover(); r != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "PANIC in NZBGet queue info fetch (instance %d): %v\n", idx, r)
 					}
+					mu.Lock()
+					queueInfos = append(queueInfos, NzbgetInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+					mu.Unlock()
 				}
 			}()
 
@@ -120,8 +124,11 @@ func GetNzbgetInfo(ctx context.Context, verbose bool) string {
 			info, err := getNzbgetQueueInfo(ctx, inst)
 			if err != nil {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting NZBGet info for %s, hiding entry: %v\n", inst.Name, err)
+					fmt.Printf("DEBUG: Error getting NZBGet info for %s, recording error: %v\n", inst.Name, err)
 				}
+				mu.Lock()
+				queueInfos = append(queueInfos, NzbgetInfo{Name: instanceName, Error: err})
+				mu.Unlock()
 				return
 			}
 
@@ -270,6 +277,10 @@ func formatNzbgetOutput(infos []NzbgetInfo) string {
 
 // formatNzbgetSummary is a helper to format the summary for a single instance
 func formatNzbgetSummary(info NzbgetInfo) string {
+	if info.Error != nil {
+		return ErrorStyle.Render(formatProviderError(info.Error))
+	}
+
 	if info.QueueCount == 0 {
 		return "Queue is empty"
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // GetDistributionWithContext provides distribution info with context/timeout support
@@ -302,240 +303,67 @@ func GetDiskInfoWithContext(ctx context.Context, verbose bool) string {
 
 // GetQueueInfoWithContext provides queue info with context/timeout support
 func GetQueueInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
+	return runSectionProvider(ctx, verbose, "Queue info", GetQueueInfo)
+}
 
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in queue info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
+func runSectionProvider(ctx context.Context, verbose bool, name string, provider func(context.Context, bool) string) (out string) {
+	defer func() {
+		if r := recover(); r != nil {
+			if verbose {
+				fmt.Fprintf(os.Stderr, "Panic in %s provider: %v\n", strings.ToLower(name), r)
 			}
-		}()
-		ch <- GetQueueInfo(verbose)
+			out = ErrorStyle.Render(fmt.Sprintf("%s provider panic: %v", name, r))
+		}
 	}()
 
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
+	out = provider(ctx, verbose)
+	if out == "" && ctx.Err() != nil {
+		return ErrorStyle.Render(fmt.Sprintf("%s request ended early: %v", name, ctx.Err()))
 	}
+	return out
 }
 
 // GetPlexInfoWithContext provides Plex info with context/timeout support
 func GetPlexInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in Plex info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetPlexInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "Plex info", GetPlexInfo)
 }
 
 // GetEmbyInfoWithContext provides Emby info with context/timeout support
 func GetEmbyInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in Emby info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetEmbyInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "Emby info", GetEmbyInfo)
 }
 
 // GetJellyfinInfoWithContext provides Jellyfin info with context/timeout support
 func GetJellyfinInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in Jellyfin info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetJellyfinInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "Jellyfin info", GetJellyfinInfo)
 }
 
 // GetSabnzbdInfoWithContext provides Sabnzbd info with context/timeout support
 func GetSabnzbdInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in Sabnzbd info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetSabnzbdInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "SABnzbd info", GetSabnzbdInfo)
 }
 
 // GetNzbgetInfoWithContext provides NZBGet info with context/timeout support
 func GetNzbgetInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in NZBGet info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetNzbgetInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "NZBGet info", GetNzbgetInfo)
 }
 
 // GetQbittorrentInfoWithContext provides qBittorrent info with context/timeout support
 func GetQbittorrentInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in qBittorrent info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetQbittorrentInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "qBittorrent info", GetQbittorrentInfo)
 }
 
 // GetRtorrentInfoWithContext provides rTorrent info with context/timeout support
 func GetRtorrentInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in rTorrent info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetRtorrentInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "rTorrent info", GetRtorrentInfo)
 }
 
 // GetTraefikInfoWithContext provides Traefik router status info with context/timeout support
 func GetTraefikInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in Traefik info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetTraefikInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "Traefik info", GetTraefikInfo)
 }
 
 // GetSystemdServicesInfoWithContext provides systemd services info with context/timeout support
 func GetSystemdServicesInfoWithContext(ctx context.Context, verbose bool) string {
-	ch := make(chan string, 1)
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				if verbose {
-					fmt.Fprintf(os.Stderr, "Panic in systemd services info provider: %v\n", r)
-				}
-				ch <- "" // Return empty on panic to hide this section
-			}
-		}()
-		ch <- GetSystemdServicesInfo(ctx, verbose)
-	}()
-
-	select {
-	case result := <-ch:
-		return result
-	case <-ctx.Done():
-		return "" // Return an empty string on timeout to hide this section
-	}
+	return runSectionProvider(ctx, verbose, "Systemd services info", GetSystemdServicesInfo)
 }

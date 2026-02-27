@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	timepkg "time"
 
 	"charm.land/bubbles/v2/progress"
@@ -17,11 +18,11 @@ import (
 )
 
 // shareMode controls whether to obscure sensitive information like IP addresses
-var shareMode bool
+var shareMode atomic.Bool
 
 // SetShareMode sets the share mode for obscuring sensitive information
 func SetShareMode(enabled bool) {
-	shareMode = enabled
+	shareMode.Store(enabled)
 }
 
 // obscureIP returns an obscured version of an IP address for sharing
@@ -183,7 +184,7 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 			}
 
 			// Obscure IP if share mode is enabled
-			if shareMode {
+			if shareMode.Load() {
 				fromIP = obscureIP(fromIP)
 			}
 
@@ -262,7 +263,7 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 				loginInfo := strings.Join(fields[3:], " ")
 
 				// Obscure IP addresses in loginInfo if share mode is enabled
-				if shareMode {
+				if shareMode.Load() {
 					loginInfo = obscureIPsInText(loginInfo)
 				}
 
@@ -1208,9 +1209,9 @@ func GetTraefikInfo(ctx context.Context, verbose bool) string {
 
 	// Parse JSON properly
 	type Router struct {
-		Name   string   `json:"name"`
-		Status string   `json:"status"`
-		Error  []string `json:"error,omitempty"`
+		Name   string          `json:"name"`
+		Status string          `json:"status"`
+		Error  json.RawMessage `json:"error,omitempty"`
 	}
 
 	var routers []Router
@@ -1227,10 +1228,10 @@ func GetTraefikInfo(ctx context.Context, verbose bool) string {
 	healthyRouters := 0
 
 	for _, router := range routers {
-		if len(router.Error) > 0 {
+		if errMsg := extractTraefikRouterError(router.Error); errMsg != "" {
 			problemRouters = append(problemRouters, fmt.Sprintf("%s: %s",
 				DefaultStyle.Render(router.Name),
-				ErrorStyle.Render(router.Error[0])))
+				ErrorStyle.Render(errMsg)))
 		} else if router.Status == "disabled" {
 			problemRouters = append(problemRouters, fmt.Sprintf("%s: %s",
 				DefaultStyle.Render(router.Name),
@@ -1263,4 +1264,43 @@ func GetTraefikInfo(ctx context.Context, verbose bool) string {
 	}
 
 	return output.String()
+}
+
+func extractTraefikRouterError(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return ""
+	}
+
+	var single string
+	if err := json.Unmarshal(raw, &single); err == nil {
+		return strings.TrimSpace(single)
+	}
+
+	var many []string
+	if err := json.Unmarshal(raw, &many); err == nil {
+		for _, msg := range many {
+			if s := strings.TrimSpace(msg); s != "" {
+				return s
+			}
+		}
+		return ""
+	}
+
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err == nil {
+		if msg, ok := obj["message"].(string); ok {
+			return strings.TrimSpace(msg)
+		}
+		fallback, marshalErr := json.Marshal(obj)
+		if marshalErr == nil {
+			return strings.TrimSpace(string(fallback))
+		}
+	}
+
+	return strings.Trim(trimmed, `"`)
 }

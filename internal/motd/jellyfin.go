@@ -24,6 +24,7 @@ type JellyfinStreamInfo struct {
 	DirectStream  int
 	Remux         int
 	Transcode     int
+	Error         error
 }
 
 // GetJellyfinInfo fetches and formats Jellyfin streaming information
@@ -78,11 +79,15 @@ func GetJellyfinInfo(ctx context.Context, verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.JellyfinInstance) {
 			defer wg.Done()
+			instanceName := providerInstanceName(inst.Name, "Jellyfin")
 			defer func() {
 				if r := recover(); r != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "PANIC in Jellyfin stream info fetch (instance %d): %v\n", idx, r)
 					}
+					mu.Lock()
+					streamInfos = append(streamInfos, JellyfinStreamInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+					mu.Unlock()
 				}
 			}()
 
@@ -93,8 +98,11 @@ func GetJellyfinInfo(ctx context.Context, verbose bool) string {
 			info, err := getJellyfinStreamInfo(ctx, inst)
 			if err != nil {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting Jellyfin stream info for %s, hiding entry: %v\n", inst.Name, err)
+					fmt.Printf("DEBUG: Error getting Jellyfin stream info for %s, recording error: %v\n", inst.Name, err)
 				}
+				mu.Lock()
+				streamInfos = append(streamInfos, JellyfinStreamInfo{Name: instanceName, Error: err})
+				mu.Unlock()
 				return
 			}
 
@@ -191,6 +199,10 @@ func formatJellyfinOutput(infos []JellyfinStreamInfo) string {
 	// If there's only one instance, omit the name for cleaner output
 	if len(infos) == 1 {
 		info := infos[0]
+		if info.Error != nil {
+			output.WriteString(ErrorStyle.Render(formatProviderError(info.Error)))
+			return output.String()
+		}
 
 		if info.ActiveStreams == 0 {
 			output.WriteString("No active streams")
@@ -247,6 +259,11 @@ func formatJellyfinOutput(infos []JellyfinStreamInfo) string {
 		namePadding := maxNameLen - len(info.Name)
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
 		appNameColored := AppNameStyle.Render(paddedName)
+
+		if info.Error != nil {
+			output.WriteString(fmt.Sprintf("%s%s", appNameColored, ErrorStyle.Render(formatProviderError(info.Error))))
+			continue
+		}
 
 		if info.ActiveStreams == 0 {
 			output.WriteString(fmt.Sprintf("%sNo active streams", appNameColored))

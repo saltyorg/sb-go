@@ -80,11 +80,15 @@ func GetQbittorrentInfo(ctx context.Context, verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.UserPassAppInstance) {
 			defer wg.Done()
+			instanceName := providerInstanceName(inst.Name, "qBittorrent")
 			defer func() {
 				if r := recover(); r != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "PANIC in qBittorrent stats fetch (instance %d): %v\n", idx, r)
 					}
+					mu.Lock()
+					queueInfos = append(queueInfos, qbittorrentInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+					mu.Unlock()
 				}
 			}()
 
@@ -95,8 +99,11 @@ func GetQbittorrentInfo(ctx context.Context, verbose bool) string {
 			info, err := getQbittorrentStats(ctx, inst)
 			if err != nil {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting qBittorrent info for %s, hiding entry: %v\n", inst.Name, err)
+					fmt.Printf("DEBUG: Error getting qBittorrent info for %s, recording error: %v\n", inst.Name, err)
 				}
+				mu.Lock()
+				queueInfos = append(queueInfos, qbittorrentInfo{Name: instanceName, Error: err})
+				mu.Unlock()
 				return
 			}
 
@@ -127,25 +134,24 @@ func getQbittorrentStats(ctx context.Context, instance config.UserPassAppInstanc
 		result.Name = "qBittorrent"
 	}
 
-	// Create client with short timeout for quick connectivity check
+	// Keep login as a strict fast-fail connectivity check.
 	client := qbittorrent.NewClient(qbittorrent.Config{
 		Host:     instance.URL,
 		Username: instance.User,
 		Password: instance.Password,
-		Timeout:  1, // 1 second for connectivity check
+		Timeout:  1,
 	})
 	if err := client.LoginCtx(ctx); err != nil {
 		return result, fmt.Errorf("failed to login to qbittorrent: %w", err)
 	}
 
-	// Swap to longer timeout for data fetch (preserves session cookies)
 	timeout := instance.Timeout
-	if timeout == 0 {
+	if timeout <= 0 {
 		timeout = 20
 	}
-	client = client.WithHTTPClient(&http.Client{
-		Timeout: time.Duration(timeout) * time.Second,
-	})
+
+	// Preserve session cookies but ensure the HTTP client's timeout matches configuration.
+	client = client.WithHTTPClient(&http.Client{Timeout: time.Duration(timeout) * time.Second})
 
 	// Fetch all data
 	mainData, err := client.SyncMainDataCtx(ctx, 0) // rid=0 to get a full update
@@ -216,6 +222,10 @@ func formatQbittorrentOutput(infos []qbittorrentInfo) string {
 
 // formatQbittorrentSummary is a helper to format the summary for a single instance.
 func formatQbittorrentSummary(info qbittorrentInfo) string {
+	if info.Error != nil {
+		return ErrorStyle.Render(formatProviderError(info.Error))
+	}
+
 	// Check if there are any torrents in any category before proceeding.
 	if info.DownloadingCount == 0 && info.SeedingCount == 0 && info.StoppedCount == 0 && info.ErrorCount == 0 {
 		return "No torrents present"

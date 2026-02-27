@@ -93,11 +93,15 @@ func GetSabnzbdInfo(ctx context.Context, verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.AppInstance) {
 			defer wg.Done()
+			instanceName := providerInstanceName(inst.Name, "SABnzbd")
 			defer func() {
 				if r := recover(); r != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "PANIC in SABnzbd queue info fetch (instance %d): %v\n", idx, r)
 					}
+					mu.Lock()
+					queueInfos = append(queueInfos, SabnzbdInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+					mu.Unlock()
 				}
 			}()
 
@@ -108,8 +112,11 @@ func GetSabnzbdInfo(ctx context.Context, verbose bool) string {
 			info, err := getSabnzbdQueueInfo(ctx, inst)
 			if err != nil {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting SABnzbd info for %s, hiding entry: %v\n", inst.Name, err)
+					fmt.Printf("DEBUG: Error getting SABnzbd info for %s, recording error: %v\n", inst.Name, err)
 				}
+				mu.Lock()
+				queueInfos = append(queueInfos, SabnzbdInfo{Name: instanceName, Error: err})
+				mu.Unlock()
 				return
 			}
 
@@ -219,6 +226,10 @@ func formatSabnzbdOutput(infos []SabnzbdInfo) string {
 
 // formatSabnzbdSummary is a helper to format the summary for a single instance
 func formatSabnzbdSummary(info SabnzbdInfo) string {
+	if info.Error != nil {
+		return ErrorStyle.Render(formatProviderError(info.Error))
+	}
+
 	if info.QueueCount == 0 {
 		return "Queue is empty"
 	}

@@ -46,10 +46,7 @@ func GetSystemdServicesInfo(ctx context.Context, verbose bool) string {
 
 	services, err := systemd.GetFilteredServices(ctx, filters)
 	if err != nil {
-		if verbose {
-			return DefaultStyle.Render(fmt.Sprintf("Error getting services: %v", err))
-		}
-		return ""
+		return ErrorStyle.Render(formatProviderError(fmt.Errorf("error getting services: %w", err)))
 	}
 
 	if len(services) == 0 {

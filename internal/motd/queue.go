@@ -1,6 +1,7 @@
 package motd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -31,7 +32,7 @@ type QueueInfo struct {
 }
 
 // GetQueueInfo fetches queue information from configured applications
-func GetQueueInfo(verbose bool) string {
+func GetQueueInfo(ctx context.Context, verbose bool) string {
 	// Check if the configuration file exists
 	configPath := constants.SaltboxMOTDConfigPath
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -102,11 +103,15 @@ func GetQueueInfo(verbose bool) string {
 			wg.Add(1)
 			go func(idx int, inst config.AppInstance) {
 				defer wg.Done()
+				instanceName := providerInstanceName(inst.Name, "Sonarr")
 				defer func() {
 					if r := recover(); r != nil {
 						if verbose {
 							fmt.Fprintf(os.Stderr, "PANIC in Sonarr queue fetch (instance %d): %v\n", idx, r)
 						}
+						mu.Lock()
+						allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+						mu.Unlock()
 					}
 				}()
 
@@ -114,11 +119,14 @@ func GetQueueInfo(verbose bool) string {
 					fmt.Printf("DEBUG: Processing Sonarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 				}
 
-				queue, err := getSonarrQueueDetailed(inst, verbose)
+				queue, err := getSonarrQueueDetailed(ctx, inst, verbose)
 				if err != nil {
 					if verbose {
-						fmt.Printf("DEBUG: Error getting detailed Sonarr queue for instance %d, hiding entry: %v\n", idx, err)
+						fmt.Printf("DEBUG: Error getting detailed Sonarr queue for instance %d, recording error: %v\n", idx, err)
 					}
+					mu.Lock()
+					allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: err})
+					mu.Unlock()
 					return
 				}
 
@@ -152,11 +160,15 @@ func GetQueueInfo(verbose bool) string {
 			wg.Add(1)
 			go func(idx int, inst config.AppInstance) {
 				defer wg.Done()
+				instanceName := providerInstanceName(inst.Name, "Radarr")
 				defer func() {
 					if r := recover(); r != nil {
 						if verbose {
 							fmt.Fprintf(os.Stderr, "PANIC in Radarr queue fetch (instance %d): %v\n", idx, r)
 						}
+						mu.Lock()
+						allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+						mu.Unlock()
 					}
 				}()
 
@@ -164,11 +176,14 @@ func GetQueueInfo(verbose bool) string {
 					fmt.Printf("DEBUG: Processing Radarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 				}
 
-				queue, err := getRadarrQueueDetailed(inst, verbose)
+				queue, err := getRadarrQueueDetailed(ctx, inst, verbose)
 				if err != nil {
 					if verbose {
-						fmt.Printf("DEBUG: Error getting detailed Radarr queue for instance %d, hiding entry: %v\n", idx, err)
+						fmt.Printf("DEBUG: Error getting detailed Radarr queue for instance %d, recording error: %v\n", idx, err)
 					}
+					mu.Lock()
+					allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: err})
+					mu.Unlock()
 					return
 				}
 
@@ -202,11 +217,15 @@ func GetQueueInfo(verbose bool) string {
 			wg.Add(1)
 			go func(idx int, inst config.AppInstance) {
 				defer wg.Done()
+				instanceName := providerInstanceName(inst.Name, "Lidarr")
 				defer func() {
 					if r := recover(); r != nil {
 						if verbose {
 							fmt.Fprintf(os.Stderr, "PANIC in Lidarr queue fetch (instance %d): %v\n", idx, r)
 						}
+						mu.Lock()
+						allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+						mu.Unlock()
 					}
 				}()
 
@@ -214,11 +233,14 @@ func GetQueueInfo(verbose bool) string {
 					fmt.Printf("DEBUG: Processing Lidarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 				}
 
-				queue, err := getLidarrQueueDetailed(inst, verbose)
+				queue, err := getLidarrQueueDetailed(ctx, inst, verbose)
 				if err != nil {
 					if verbose {
-						fmt.Printf("DEBUG: Error getting detailed Lidarr queue for instance %d, hiding entry: %v\n", idx, err)
+						fmt.Printf("DEBUG: Error getting detailed Lidarr queue for instance %d, recording error: %v\n", idx, err)
 					}
+					mu.Lock()
+					allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: err})
+					mu.Unlock()
 					return
 				}
 
@@ -252,11 +274,15 @@ func GetQueueInfo(verbose bool) string {
 			wg.Add(1)
 			go func(idx int, inst config.AppInstance) {
 				defer wg.Done()
+				instanceName := providerInstanceName(inst.Name, "Readarr")
 				defer func() {
 					if r := recover(); r != nil {
 						if verbose {
 							fmt.Fprintf(os.Stderr, "PANIC in Readarr queue fetch (instance %d): %v\n", idx, r)
 						}
+						mu.Lock()
+						allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+						mu.Unlock()
 					}
 				}()
 
@@ -264,11 +290,14 @@ func GetQueueInfo(verbose bool) string {
 					fmt.Printf("DEBUG: Processing Readarr instance %d: %s, URL: %s\n", idx, inst.Name, inst.URL)
 				}
 
-				queue, err := getReadarrQueueDetailed(inst, verbose)
+				queue, err := getReadarrQueueDetailed(ctx, inst, verbose)
 				if err != nil {
 					if verbose {
-						fmt.Printf("DEBUG: Error getting detailed Readarr queue for instance %d, hiding entry: %v\n", idx, err)
+						fmt.Printf("DEBUG: Error getting detailed Readarr queue for instance %d, recording error: %v\n", idx, err)
 					}
+					mu.Lock()
+					allQueues = append(allQueues, QueueInfo{Name: instanceName, Error: err})
+					mu.Unlock()
 					return
 				}
 
@@ -312,16 +341,16 @@ func GetQueueInfo(verbose bool) string {
 }
 
 // getSonarrQueueDetailed gets the detailed queue for a Sonarr instance
-func getSonarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInfo, error) {
+func getSonarrQueueDetailed(ctx context.Context, instance config.AppInstance, verbose bool) (QueueInfo, error) {
 	if verbose {
 		fmt.Printf("DEBUG: Creating Sonarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	// Set timeout, defaulting to 1 second
-	timeout := 1 * time.Second
-	if instance.Timeout > 0 {
-		timeout = time.Duration(instance.Timeout) * time.Second
+	if ctx.Err() != nil {
+		return QueueInfo{}, ctx.Err()
 	}
+
+	timeout := timeoutFromContext(ctx, instance.Timeout, 1*time.Second)
 
 	// Create a starr.Config with a custom timeout
 	c := starr.New(instance.APIKey, instance.URL, timeout)
@@ -345,7 +374,7 @@ func getSonarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 		if verbose {
 			fmt.Printf("DEBUG: Received nil queue from Sonarr API\n")
 		}
-		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
+		return QueueInfo{Name: providerInstanceName(instance.Name, "Sonarr"), Items: []QueueItem{}}, nil
 	}
 
 	if verbose {
@@ -353,7 +382,7 @@ func getSonarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 	}
 
 	info := QueueInfo{
-		Name:  instance.Name,
+		Name:  providerInstanceName(instance.Name, "Sonarr"),
 		Items: make([]QueueItem, len(queue.Records)),
 	}
 	for i, record := range queue.Records {
@@ -364,15 +393,16 @@ func getSonarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 }
 
 // getRadarrQueueDetailed gets the detailed queue for a Radarr instance
-func getRadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInfo, error) {
+func getRadarrQueueDetailed(ctx context.Context, instance config.AppInstance, verbose bool) (QueueInfo, error) {
 	if verbose {
 		fmt.Printf("DEBUG: Creating Radarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	timeout := 1 * time.Second
-	if instance.Timeout > 0 {
-		timeout = time.Duration(instance.Timeout) * time.Second
+	if ctx.Err() != nil {
+		return QueueInfo{}, ctx.Err()
 	}
+
+	timeout := timeoutFromContext(ctx, instance.Timeout, 1*time.Second)
 
 	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := radarr.New(c)
@@ -395,7 +425,7 @@ func getRadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 		if verbose {
 			fmt.Printf("DEBUG: Received nil queue from Radarr API\n")
 		}
-		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
+		return QueueInfo{Name: providerInstanceName(instance.Name, "Radarr"), Items: []QueueItem{}}, nil
 	}
 
 	if verbose {
@@ -403,7 +433,7 @@ func getRadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 	}
 
 	info := QueueInfo{
-		Name:  instance.Name,
+		Name:  providerInstanceName(instance.Name, "Radarr"),
 		Items: make([]QueueItem, len(queue.Records)),
 	}
 	for i, record := range queue.Records {
@@ -414,15 +444,16 @@ func getRadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 }
 
 // getLidarrQueueDetailed gets the detailed queue for a Lidarr instance
-func getLidarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInfo, error) {
+func getLidarrQueueDetailed(ctx context.Context, instance config.AppInstance, verbose bool) (QueueInfo, error) {
 	if verbose {
 		fmt.Printf("DEBUG: Creating Lidarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	timeout := 1 * time.Second
-	if instance.Timeout > 0 {
-		timeout = time.Duration(instance.Timeout) * time.Second
+	if ctx.Err() != nil {
+		return QueueInfo{}, ctx.Err()
 	}
+
+	timeout := timeoutFromContext(ctx, instance.Timeout, 1*time.Second)
 
 	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := lidarr.New(c)
@@ -445,7 +476,7 @@ func getLidarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 		if verbose {
 			fmt.Printf("DEBUG: Received nil queue from Lidarr API\n")
 		}
-		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
+		return QueueInfo{Name: providerInstanceName(instance.Name, "Lidarr"), Items: []QueueItem{}}, nil
 	}
 
 	if verbose {
@@ -453,7 +484,7 @@ func getLidarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 	}
 
 	info := QueueInfo{
-		Name:  instance.Name,
+		Name:  providerInstanceName(instance.Name, "Lidarr"),
 		Items: make([]QueueItem, len(queue.Records)),
 	}
 	for i, record := range queue.Records {
@@ -464,15 +495,16 @@ func getLidarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInf
 }
 
 // getReadarrQueueDetailed gets the detailed queue for a Readarr instance
-func getReadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueInfo, error) {
+func getReadarrQueueDetailed(ctx context.Context, instance config.AppInstance, verbose bool) (QueueInfo, error) {
 	if verbose {
 		fmt.Printf("DEBUG: Creating Readarr client for %s (%s)\n", instance.Name, instance.URL)
 	}
 
-	timeout := 1 * time.Second
-	if instance.Timeout > 0 {
-		timeout = time.Duration(instance.Timeout) * time.Second
+	if ctx.Err() != nil {
+		return QueueInfo{}, ctx.Err()
 	}
+
+	timeout := timeoutFromContext(ctx, instance.Timeout, 1*time.Second)
 
 	c := starr.New(instance.APIKey, instance.URL, timeout)
 	client := readarr.New(c)
@@ -495,7 +527,7 @@ func getReadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueIn
 		if verbose {
 			fmt.Printf("DEBUG: Received nil queue from Readarr API\n")
 		}
-		return QueueInfo{Name: instance.Name, Items: []QueueItem{}}, nil
+		return QueueInfo{Name: providerInstanceName(instance.Name, "Readarr"), Items: []QueueItem{}}, nil
 	}
 
 	if verbose {
@@ -503,7 +535,7 @@ func getReadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueIn
 	}
 
 	info := QueueInfo{
-		Name:  instance.Name,
+		Name:  providerInstanceName(instance.Name, "Readarr"),
 		Items: make([]QueueItem, len(queue.Records)),
 	}
 	for i, record := range queue.Records {
@@ -511,6 +543,48 @@ func getReadarrQueueDetailed(instance config.AppInstance, verbose bool) (QueueIn
 	}
 
 	return info, nil
+}
+
+func timeoutFromContext(ctx context.Context, configuredSeconds int, fallback time.Duration) time.Duration {
+	timeout := fallback
+	if configuredSeconds > 0 {
+		timeout = time.Duration(configuredSeconds) * time.Second
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return 1 * time.Millisecond
+		}
+		if remaining < timeout {
+			timeout = remaining
+		}
+	}
+
+	if timeout <= 0 {
+		return fallback
+	}
+	return timeout
+}
+
+func providerInstanceName(name, fallback string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
+}
+
+func formatProviderError(err error) string {
+	if err == nil {
+		return "instance error"
+	}
+	msg := strings.TrimSpace(err.Error())
+	if msg == "" {
+		return "instance error"
+	}
+	msg = strings.SplitN(msg, "\n", 2)[0]
+	return fmt.Sprintf("Error: %s", msg)
 }
 
 // formatDetailedQueueOutput formats the detailed queue information for display
@@ -547,6 +621,16 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 			fmt.Printf("DEBUG: Formatting detailed output for %s with %d items\n", appName, len(queue.Items))
 		}
 
+		// Align the queue summary text
+		namePadding := maxNameLen - len(appName)
+		paddedName := fmt.Sprintf("%s:%s", appName, strings.Repeat(" ", namePadding+1))
+		appNameColored := AppNameStyle.Render(paddedName)
+
+		if queue.Error != nil {
+			output.WriteString(fmt.Sprintf("%s%s", appNameColored, ErrorStyle.Render(formatProviderError(queue.Error))))
+			continue
+		}
+
 		statusCounts := make(map[string]int)
 		for _, item := range queue.Items {
 			statusCounts[item.Status]++
@@ -576,12 +660,6 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 		if len(statusParts) > 0 {
 			queueSummary += fmt.Sprintf(", %s", strings.Join(statusParts, ", "))
 		}
-
-		// Align the queue summary text
-		namePadding := maxNameLen - len(appName)
-		paddedName := fmt.Sprintf("%s:%s", appName, strings.Repeat(" ", namePadding+1))
-
-		appNameColored := AppNameStyle.Render(paddedName)
 		output.WriteString(fmt.Sprintf("%s%s", appNameColored, queueSummary))
 	}
 

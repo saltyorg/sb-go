@@ -23,6 +23,7 @@ type EmbyStreamInfo struct {
 	DirectPlay    int
 	DirectStream  int
 	Transcode     int
+	Error         error
 }
 
 // EmbySessionInfo represents a single session from the Emby API
@@ -91,11 +92,15 @@ func GetEmbyInfo(ctx context.Context, verbose bool) string {
 		wg.Add(1)
 		go func(idx int, inst config.EmbyInstance) {
 			defer wg.Done()
+			instanceName := providerInstanceName(inst.Name, "Emby")
 			defer func() {
 				if r := recover(); r != nil {
 					if verbose {
 						fmt.Fprintf(os.Stderr, "PANIC in Emby stream info fetch (instance %d): %v\n", idx, r)
 					}
+					mu.Lock()
+					streamInfos = append(streamInfos, EmbyStreamInfo{Name: instanceName, Error: fmt.Errorf("panic: %v", r)})
+					mu.Unlock()
 				}
 			}()
 
@@ -106,8 +111,11 @@ func GetEmbyInfo(ctx context.Context, verbose bool) string {
 			info, err := getEmbyStreamInfo(ctx, inst)
 			if err != nil {
 				if verbose {
-					fmt.Printf("DEBUG: Error getting Emby stream info for %s, hiding entry: %v\n", inst.Name, err)
+					fmt.Printf("DEBUG: Error getting Emby stream info for %s, recording error: %v\n", inst.Name, err)
 				}
+				mu.Lock()
+				streamInfos = append(streamInfos, EmbyStreamInfo{Name: instanceName, Error: err})
+				mu.Unlock()
 				return
 			}
 
@@ -205,6 +213,9 @@ func formatEmbyOutput(infos []EmbyStreamInfo) string {
 
 	if len(infos) == 1 {
 		info := infos[0]
+		if info.Error != nil {
+			return ErrorStyle.Render(formatProviderError(info.Error))
+		}
 		if info.ActiveStreams == 0 {
 			return "No active streams"
 		}
@@ -226,6 +237,11 @@ func formatEmbyOutput(infos []EmbyStreamInfo) string {
 		paddedName := fmt.Sprintf("%s:%s", info.Name, strings.Repeat(" ", namePadding+1))
 		appNameColored := AppNameStyle.Render(paddedName)
 
+		if info.Error != nil {
+			output.WriteString(fmt.Sprintf("%s%s", appNameColored, ErrorStyle.Render(formatProviderError(info.Error))))
+			continue
+		}
+
 		if info.ActiveStreams == 0 {
 			output.WriteString(fmt.Sprintf("%sNo active streams", appNameColored))
 			continue
@@ -238,6 +254,10 @@ func formatEmbyOutput(infos []EmbyStreamInfo) string {
 
 // formatStreamSummary is a helper to format the stream count details
 func formatStreamSummary(info EmbyStreamInfo) string {
+	if info.Error != nil {
+		return ErrorStyle.Render(formatProviderError(info.Error))
+	}
+
 	streamOrStreams := "stream"
 	if info.ActiveStreams != 1 {
 		streamOrStreams = "streams"
