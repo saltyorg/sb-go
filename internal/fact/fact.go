@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
@@ -179,53 +180,86 @@ func checkIfUpdateNeeded(targetPath, latestVersion string, alwaysUpdate bool) (b
 	return true, nil
 }
 
-// fetchLatestReleaseInfo fetches the latest release information from GitHub
-func fetchLatestReleaseInfo(apiURL string) (string, int64, error) {
+type latestReleaseInfo struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name string `json:"name"`
+		Size int64  `json:"size"`
+	} `json:"assets"`
+}
+
+// fetchLatestReleaseInfoFromURL fetches the latest release metadata from a single URL.
+func fetchLatestReleaseInfoFromURL(client *http.Client, apiURL string) (string, int64, error) {
+	response, err := client.Get(apiURL)
+	if err != nil {
+		return "", 0, fmt.Errorf("error fetching latest release info: %w", err)
+	}
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			fmt.Println("Error closing response body:", err)
+		}
+	}()
+
+	if response.StatusCode != http.StatusOK {
+		return "", 0, fmt.Errorf("unexpected status code: %d", response.StatusCode)
+	}
+
+	var latestRelease latestReleaseInfo
+	if err := json.NewDecoder(response.Body).Decode(&latestRelease); err != nil {
+		return "", 0, fmt.Errorf("failed to parse release info: %w", err)
+	}
+	if strings.TrimSpace(latestRelease.TagName) == "" {
+		return "", 0, fmt.Errorf("release tag_name is missing")
+	}
+
+	// Find the saltbox-facts asset and get its size.
+	for _, asset := range latestRelease.Assets {
+		if asset.Name == "saltbox-facts" {
+			if asset.Size <= 0 {
+				return "", 0, fmt.Errorf("saltbox-facts asset has invalid size: %d", asset.Size)
+			}
+			return latestRelease.TagName, asset.Size, nil
+		}
+	}
+
+	return "", 0, fmt.Errorf("saltbox-facts asset not found in release")
+}
+
+// fetchLatestReleaseInfo fetches latest release info through SVM first, then falls back to direct GitHub API.
+func fetchLatestReleaseInfo(proxyURL, githubURL string, verbose bool) (string, int64, error) {
 	var latestVersion string
 	var expectedSize int64
+	var fallbackNotified bool
 
 	err := spinners.RunTaskWithSpinnerContext(context.Background(), "Fetching latest saltbox.fact release info", func() error {
 		return retryWithBackoff(func() error {
 			client := &http.Client{
 				Timeout: 30 * time.Second,
 			}
-			response, err := client.Get(apiURL)
-			if err != nil {
-				return fmt.Errorf("error fetching latest release info: %w", err)
+
+			version, size, proxyErr := fetchLatestReleaseInfoFromURL(client, proxyURL)
+			if proxyErr == nil {
+				latestVersion = version
+				expectedSize = size
+				return nil
 			}
-			defer func() {
-				if err := response.Body.Close(); err != nil {
-					fmt.Println("Error closing response body:", err)
+
+			if !fallbackNotified {
+				if verbose {
+					fmt.Printf("SVM proxy unavailable or unusable (%v); falling back to direct GitHub API\n", proxyErr)
+				} else {
+					_ = spinners.RunWarningSpinner("SVM proxy unavailable or unusable; using direct GitHub API")
 				}
-			}()
-
-			if response.StatusCode != http.StatusOK {
-				return fmt.Errorf("unexpected status code: %d", response.StatusCode)
+				fallbackNotified = true
 			}
 
-			var latestRelease struct {
-				TagName string `json:"tag_name"`
-				Assets  []struct {
-					Name string `json:"name"`
-					Size int64  `json:"size"`
-				} `json:"assets"`
-			}
-			if err := json.NewDecoder(response.Body).Decode(&latestRelease); err != nil {
-				return fmt.Errorf("failed to parse release info: %w", err)
-			}
-			latestVersion = latestRelease.TagName
-
-			// Find the saltbox-facts asset and get its size
-			for _, asset := range latestRelease.Assets {
-				if asset.Name == "saltbox-facts" {
-					expectedSize = asset.Size
-					break
-				}
-			}
-			if expectedSize == 0 {
-				return fmt.Errorf("saltbox-facts asset not found in release")
+			version, size, githubErr := fetchLatestReleaseInfoFromURL(client, githubURL)
+			if githubErr != nil {
+				return fmt.Errorf("proxy request failed: %w; fallback GitHub API request failed: %w", proxyErr, githubErr)
 			}
 
+			latestVersion = version
+			expectedSize = size
 			return nil
 		}, 3, 1*time.Second) // 3 retries with 1-second base delay
 	})
@@ -237,10 +271,11 @@ func fetchLatestReleaseInfo(apiURL string) (string, int64, error) {
 func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 	downloadURL := "https://github.com/saltyorg/ansible-facts/releases/latest/download/saltbox-facts"
 	targetPath := "/srv/git/saltbox/ansible_facts.d/saltbox.fact"
-	apiURL := "https://svm.saltbox.dev/version?url=https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
+	githubURL := "https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
+	proxyURL := fmt.Sprintf("%s?url=%s", constants.SVMVersionProxyURL, githubURL)
 
 	// Fetch the latest release info from GitHub with retry logic
-	latestVersion, expectedSize, err := fetchLatestReleaseInfo(apiURL)
+	latestVersion, expectedSize, err := fetchLatestReleaseInfo(proxyURL, githubURL, verbose)
 	if err != nil {
 		return err
 	}

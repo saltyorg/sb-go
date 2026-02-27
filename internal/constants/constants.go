@@ -29,6 +29,7 @@ const (
 	SupportedUbuntuReleases           = "22.04,24.04"
 	DockerControllerServiceFile       = "/etc/systemd/system/saltbox_managed_docker_controller.service"
 	DockerControllerAPIURL            = "http://127.0.0.1:3377"
+	SVMVersionProxyURL                = "https://svm.saltbox.dev/version"
 )
 
 // These paths are configurable based on server_appdata_path from inventory.

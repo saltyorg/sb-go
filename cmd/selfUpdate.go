@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/runtime"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
@@ -110,7 +112,13 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 	}
 
 	// Create the Saltbox proxy source
-	proxySource := NewSaltboxProxySource("https://svm.saltbox.dev/version")
+	proxySource, err := NewSaltboxProxySource(constants.SVMVersionProxyURL, verbose)
+	if err != nil {
+		if verbose {
+			fmt.Printf("Debug: Error creating source: %v\n", err)
+		}
+		return false, fmt.Errorf("error creating release source: %w", err)
+	}
 
 	// First, check if an update is available without applying it
 	updater, err := selfupdate.NewUpdater(selfupdate.Config{
@@ -192,16 +200,26 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 type SaltboxProxySource struct {
 	proxyBaseURL string
 	httpClient   *http.Client
+	githubSource selfupdate.Source
+	verbose      bool
+	warnOnce     sync.Once
 }
 
 // NewSaltboxProxySource creates a new Saltbox proxy source
-func NewSaltboxProxySource(proxyBaseURL string) *SaltboxProxySource {
+func NewSaltboxProxySource(proxyBaseURL string, verbose bool) (*SaltboxProxySource, error) {
+	githubSource, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GitHub source: %w", err)
+	}
+
 	return &SaltboxProxySource{
 		proxyBaseURL: proxyBaseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-	}
+		githubSource: githubSource,
+		verbose:      verbose,
+	}, nil
 }
 
 // githubRelease represents the GitHub API release response
@@ -224,8 +242,41 @@ type githubAsset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-// ListReleases fetches releases through the Saltbox proxy
+// ListReleases fetches releases through the Saltbox proxy, then falls back to direct GitHub API if needed.
 func (s *SaltboxProxySource) ListReleases(ctx context.Context, repository selfupdate.Repository) ([]selfupdate.SourceRelease, error) {
+	proxyReleases, proxyErr := s.listReleasesFromProxy(ctx, repository)
+	if proxyErr == nil {
+		if usabilityErr := releaseListUsabilityError(proxyReleases); usabilityErr == nil {
+			return proxyReleases, nil
+		} else {
+			proxyErr = fmt.Errorf("proxy response unusable: %w", usabilityErr)
+		}
+	}
+
+	s.notifyFallback(proxyErr)
+
+	githubReleases, fallbackErr := s.githubSource.ListReleases(ctx, repository)
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("%w; fallback GitHub API request failed: %w", proxyErr, fallbackErr)
+	}
+	if usabilityErr := releaseListUsabilityError(githubReleases); usabilityErr != nil {
+		return nil, fmt.Errorf("%w; fallback GitHub API response unusable: %w", proxyErr, usabilityErr)
+	}
+
+	return githubReleases, nil
+}
+
+func (s *SaltboxProxySource) notifyFallback(reason error) {
+	s.warnOnce.Do(func() {
+		if s.verbose {
+			fmt.Printf("Debug: SVM proxy unavailable or unusable (%v); falling back to direct GitHub API\n", reason)
+			return
+		}
+		_ = spinners.RunWarningSpinner("SVM proxy unavailable or unusable; using direct GitHub API")
+	})
+}
+
+func (s *SaltboxProxySource) listReleasesFromProxy(ctx context.Context, repository selfupdate.Repository) ([]selfupdate.SourceRelease, error) {
 	// Get repository owner and name
 	owner, name, err := repository.GetSlug()
 	if err != nil {
@@ -268,6 +319,32 @@ func (s *SaltboxProxySource) ListReleases(ctx context.Context, repository selfup
 	}
 
 	return releases, nil
+}
+
+func releaseListUsabilityError(releases []selfupdate.SourceRelease) error {
+	if len(releases) == 0 {
+		return fmt.Errorf("no releases found")
+	}
+
+	for _, release := range releases {
+		if release == nil {
+			continue
+		}
+		if strings.TrimSpace(release.GetTagName()) == "" {
+			continue
+		}
+		for _, asset := range release.GetAssets() {
+			if asset == nil {
+				continue
+			}
+			if strings.TrimSpace(asset.GetBrowserDownloadURL()) == "" {
+				continue
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no release entries with tag_name and downloadable asset URLs")
 }
 
 // DownloadReleaseAsset downloads the actual release asset
