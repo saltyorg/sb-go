@@ -114,3 +114,5 @@ require (
 	golang.org/x/time v0.14.0 // indirect
 	gopkg.in/validator.v2 v2.0.1 // indirect
 )
+
+replace charm.land/bubbletea/v2 => github.com/saltydk/bubbletea/v2 v2.0.0-20260305132635-286495f42a19
