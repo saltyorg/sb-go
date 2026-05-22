@@ -12,7 +12,7 @@ import (
 
 func TestMainPackageStructure(t *testing.T) {
 	t.Run("verify supported versions", func(t *testing.T) {
-		supportedVersions := []string{"20.04", "22.04", "24.04"}
+		supportedVersions := []string{"20.04", "22.04", "24.04", "26.04"}
 
 		if len(supportedVersions) == 0 {
 			t.Error("Supported versions should not be empty")
@@ -229,11 +229,11 @@ func TestUbuntuVersionValidation(t *testing.T) {
 		{
 			name:    "Ubuntu 26.04",
 			version: "26.04",
-			valid:   false,
+			valid:   true,
 		},
 	}
 
-	supportedVersions := []string{"20.04", "22.04", "24.04"}
+	supportedVersions := []string{"20.04", "22.04", "24.04", "26.04"}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -337,7 +337,7 @@ func TestMainFlowStructure(t *testing.T) {
 			_ = args // Would be used in relaunch
 		} else {
 			// Root - would proceed with normal execution
-			supportedVersions := []string{"20.04", "22.04", "24.04"}
+			supportedVersions := []string{"20.04", "22.04", "24.04", "26.04"}
 			if len(supportedVersions) == 0 {
 				t.Error("Supported versions should be defined")
 			}

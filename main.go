@@ -65,7 +65,7 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	supportedVersions := []string{"20.04", "22.04", "24.04"}
+	supportedVersions := []string{"20.04", "22.04", "24.04", "26.04"}
 
 	if err := ubuntu.CheckSupport(supportedVersions); err != nil {
 		fmt.Println(err)
