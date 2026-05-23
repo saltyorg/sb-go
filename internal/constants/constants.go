@@ -26,7 +26,7 @@ const (
 	AnsibleRequirementsPath           = "/srv/git/saltbox/requirements/requirements-saltbox.txt"
 	AnsibleVenvPythonVersion          = "3.12"
 	PythonInstallDir                  = "/srv/python"
-	SupportedUbuntuReleases           = "22.04,24.04"
+	SupportedUbuntuReleases           = "22.04,24.04,26.04"
 	DockerControllerServiceFile       = "/etc/systemd/system/saltbox_managed_docker_controller.service"
 	DockerControllerAPIURL            = "http://127.0.0.1:3377"
 	SVMVersionProxyURL                = "https://svm.saltbox.dev/version"
