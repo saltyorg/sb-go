@@ -11,7 +11,7 @@ require (
 	github.com/aquasecurity/table v1.11.0
 	github.com/autobrr/go-qbittorrent v1.14.0
 	github.com/charmbracelet/colorprofile v0.4.3
-	github.com/charmbracelet/fang v1.0.0
+	github.com/charmbracelet/fang/v2 v2.0.1
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260311145557-c83711a11ffa
 	github.com/cloudflare/cloudflare-go/v6 v6.8.0
