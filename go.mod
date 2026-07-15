@@ -26,7 +26,7 @@ require (
 	github.com/sj14/jellyfin-go v0.4.2
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.52.0
-	golang.org/x/net v0.54.0
+	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0
 	golang.org/x/term v0.43.0
