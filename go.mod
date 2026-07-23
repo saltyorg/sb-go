@@ -15,7 +15,8 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260720091843-3eef36eaaa28
-	github.com/cloudflare/cloudflare-go/v6 v6.10.0
+	github.com/cloudflare/cloudflare-go/v7 v7.7.0
+	github.com/creack/pty v1.1.24
 	github.com/creativeprojects/go-selfupdate v1.6.0
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/mattn/go-isatty v0.0.23
@@ -58,7 +59,6 @@ require (
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/davidmz/go-pageant v1.0.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect

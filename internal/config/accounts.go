@@ -12,9 +12,9 @@ import (
 	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/utils"
 
-	"github.com/cloudflare/cloudflare-go/v6"
-	"github.com/cloudflare/cloudflare-go/v6/option"
-	"github.com/cloudflare/cloudflare-go/v6/zones"
+	"github.com/cloudflare/cloudflare-go/v7"
+	"github.com/cloudflare/cloudflare-go/v7/option"
+	"github.com/cloudflare/cloudflare-go/v7/zones"
 	"github.com/go-playground/validator/v10"
 	"golang.org/x/net/publicsuffix"
 	"gopkg.in/yaml.v3"
@@ -303,7 +303,7 @@ func getRootDomain(fqdn string) (string, error) {
 
 // validateCloudflare checks Cloudflare API credentials, domain ownership, and SSL/TLS settings.
 func validateCloudflare(apiKey, email, domain string) error {
-	logging.DebugBool(verboseMode, "validateCloudflare called with apiKey: '%s', email: '%s', domain: '%s'", apiKey, email, domain)
+	logging.DebugBool(verboseMode, "validateCloudflare called with email: '%s', domain: '%s'", email, domain)
 	// Create a new Cloudflare API client.
 	api := cloudflare.NewClient(
 		option.WithAPIKey(apiKey),
