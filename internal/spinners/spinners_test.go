@@ -172,8 +172,8 @@ func TestSpinnerModelCollapsesSuccessfulChildren(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("collapsible child produced a persistent print command")
 	}
-	if strings.Contains(model.View().Content, "child done") {
-		t.Fatalf("collapsible child remained in the live progress: %q", model.View().Content)
+	if !strings.Contains(model.View().Content, "child done") {
+		t.Fatalf("completed child disappeared before the root task completed: %q", model.View().Content)
 	}
 
 	updated, _ = model.Update(successMsg{})
@@ -199,6 +199,64 @@ func TestSpinnerModelKeepsFailedChildContext(t *testing.T) {
 
 	if view := model.View().Content; !strings.Contains(view, "child failed") {
 		t.Fatalf("failed child context was collapsed: %q", view)
+	}
+}
+
+func TestSpinnerModelCollapsesHierarchyOnlyAfterEachParentCompletes(t *testing.T) {
+	root := withDefaults(SpinnerOptions{
+		TaskName:         "Restarting containers",
+		StopMessage:      "Containers restarted",
+		CollapseChildren: true,
+	})
+	stop := withDefaults(SpinnerOptions{
+		TaskName:         "Stopping containers",
+		StopMessage:      "Stopped containers",
+		CollapseChildren: true,
+	})
+	request := withDefaults(SpinnerOptions{
+		TaskName:    "Requesting stop job",
+		StopMessage: "Requested stop job",
+	})
+	wait := withDefaults(SpinnerOptions{TaskName: "Waiting for stop job"})
+	start := withDefaults(SpinnerOptions{TaskName: "Starting containers"})
+	model := newSpinnerModel(root, func() error { return nil })
+
+	updated, _ := model.Update(pushTaskMsg{id: 1, opts: stop})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(pushTaskMsg{id: 2, opts: request})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(popTaskMsg{id: 2, opts: request})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(pushTaskMsg{id: 3, opts: wait})
+	model = updated.(spinnerModel)
+	view := model.View().Content
+	if !strings.Contains(view, "Requested stop job") || !strings.Contains(view, "Waiting for stop job") {
+		t.Fatalf("live stop hierarchy was not preserved: %q", view)
+	}
+
+	updated, _ = model.Update(popTaskMsg{id: 3, opts: wait})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(popTaskMsg{id: 1, opts: stop})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(pushTaskMsg{id: 4, opts: start})
+	model = updated.(spinnerModel)
+	view = model.View().Content
+	if !strings.Contains(view, "Stopped containers") || !strings.Contains(view, "Starting containers") {
+		t.Fatalf("completed stop task did not remain during restart: %q", view)
+	}
+	if strings.Contains(view, "Requested stop job") || strings.Contains(view, "Waiting for stop job") {
+		t.Fatalf("stop implementation details remained after stop completed: %q", view)
+	}
+
+	updated, _ = model.Update(popTaskMsg{id: 4, opts: start})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(successMsg{})
+	model = updated.(spinnerModel)
+	view = model.View().Content
+	if !strings.Contains(view, "Containers restarted") ||
+		strings.Contains(view, "Stopped containers") ||
+		strings.Contains(view, "Starting containers") {
+		t.Fatalf("completed root hierarchy was not collapsed: %q", view)
 	}
 }
 
@@ -282,6 +340,84 @@ func TestSpinnerModelRetainsGrandchildrenUnderParent(t *testing.T) {
 	if view := model.View().Content; !strings.Contains(view, "Root validated") ||
 		!strings.Contains(view, "Validated accounts.yml") {
 		t.Fatalf("retained final result was not rendered in the viewport: %q", view)
+	}
+}
+
+func TestSpinnerModelCollapsesSuccessfulGrandchildUnderRetainedParent(t *testing.T) {
+	root := withDefaults(SpinnerOptions{TaskName: "root", RetainChildren: true})
+	parent := withDefaults(SpinnerOptions{
+		TaskName:         "Stopping containers",
+		StopMessage:      "Stopped containers",
+		CollapseChildren: true,
+	})
+	wait := withDefaults(SpinnerOptions{
+		TaskName:        "Waiting for stop job",
+		StopMessage:     "Stop job completed",
+		StopFailMessage: "Stop job",
+	})
+	model := newSpinnerModel(root, func() error { return nil })
+
+	updated, _ := model.Update(pushTaskMsg{id: 1, opts: parent})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(pushTaskMsg{id: 2, opts: wait})
+	model = updated.(spinnerModel)
+	if view := model.View().Content; !strings.Contains(view, "Waiting for stop job") {
+		t.Fatalf("active grandchild was not displayed: %q", view)
+	}
+
+	updated, _ = model.Update(popTaskMsg{id: 2, opts: wait})
+	model = updated.(spinnerModel)
+	if view := model.View().Content; !strings.Contains(view, "Stop job completed") {
+		t.Fatalf("completed grandchild disappeared before its parent completed: %q", view)
+	}
+
+	next := withDefaults(SpinnerOptions{TaskName: "Waiting for another job"})
+	updated, _ = model.Update(pushTaskMsg{id: 3, opts: next})
+	model = updated.(spinnerModel)
+	view := model.View().Content
+	completedAt := strings.Index(view, "Stop job completed")
+	nextAt := strings.Index(view, "Waiting for another job")
+	if completedAt < 0 || nextAt < 0 || completedAt > nextAt {
+		t.Fatalf("completed child rendered after its later active sibling: %q", view)
+	}
+	updated, _ = model.Update(popTaskMsg{id: 3, opts: next})
+	model = updated.(spinnerModel)
+
+	updated, _ = model.Update(popTaskMsg{id: 1, opts: parent})
+	model = updated.(spinnerModel)
+	if len(model.retained) != 1 || model.retained[0].id != 1 {
+		t.Fatalf("retained tasks = %#v, want only the parent", model.retained)
+	}
+	if view := model.View().Content; strings.Contains(view, "Stop job completed") {
+		t.Fatalf("successful grandchild remained after its parent completed: %q", view)
+	}
+}
+
+func TestSpinnerModelRetainsFailedGrandchildUnderRetainedParent(t *testing.T) {
+	root := withDefaults(SpinnerOptions{TaskName: "root", RetainChildren: true})
+	parent := withDefaults(SpinnerOptions{
+		TaskName:         "Stopping containers",
+		StopFailMessage:  "Stop containers",
+		CollapseChildren: true,
+	})
+	wait := withDefaults(SpinnerOptions{
+		TaskName:        "Waiting for stop job",
+		StopFailMessage: "Stop job",
+	})
+	model := newSpinnerModel(root, func() error { return nil })
+	waitErr := errors.New("poll failed")
+
+	updated, _ := model.Update(pushTaskMsg{id: 1, opts: parent})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(pushTaskMsg{id: 2, opts: wait})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(popTaskMsg{id: 2, opts: wait, err: waitErr})
+	model = updated.(spinnerModel)
+	updated, _ = model.Update(popTaskMsg{id: 1, opts: parent, err: waitErr})
+	model = updated.(spinnerModel)
+
+	if len(model.retained) != 2 || model.retained[0].id != 2 || model.retained[1].id != 1 {
+		t.Fatalf("failed hierarchy was not retained: %#v", model.retained)
 	}
 }
 

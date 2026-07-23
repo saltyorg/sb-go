@@ -546,6 +546,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case popTaskMsg:
 		depth := 1
 		var parentID uint64
+		parentOpts := m.tasks[0].opts
 		var output string
 		for i := len(m.tasks) - 1; i > 0; i-- {
 			if m.tasks[i].id == msg.id {
@@ -554,6 +555,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for j := i - 1; j >= 0; j-- {
 					if m.tasks[j].depth < depth {
 						parentID = m.tasks[j].id
+						parentOpts = m.tasks[j].opts
 						break
 					}
 				}
@@ -561,9 +563,53 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		if m.tasks[0].opts.CollapseChildren {
-			if msg.err != nil {
-				m.completed = append(m.completed, completedTask{id: msg.id, opts: msg.opts, err: msg.err, depth: depth, output: output})
+		if msg.opts.CollapseChildren {
+			// When a collapsing child finishes, discard its successful staged
+			// children and retain failed ones for diagnostic context before the
+			// child itself is staged beneath its parent.
+			remaining := m.pending[:0]
+			for _, task := range m.pending {
+				if task.parentID != msg.id {
+					remaining = append(remaining, task)
+					continue
+				}
+				if task.err != nil {
+					if m.tasks[0].opts.RetainChildren {
+						m.retained = append(m.retained, task)
+					} else {
+						m.completed = append(m.completed, task)
+					}
+				}
+			}
+			m.pending = remaining
+		}
+		if parentOpts.CollapseChildren {
+			// A collapsing parent keeps successful children visible until the
+			// parent itself finishes. This preserves the live progression
+			// without retaining implementation details afterward.
+			if msg.err == nil {
+				m.pending = append(m.pending, completedTask{
+					id:       msg.id,
+					opts:     msg.opts,
+					err:      msg.err,
+					depth:    depth,
+					parentID: parentID,
+					output:   output,
+				})
+				return m, nil
+			}
+			task := completedTask{
+				id:       msg.id,
+				opts:     msg.opts,
+				err:      msg.err,
+				depth:    depth,
+				parentID: parentID,
+				output:   output,
+			}
+			if m.tasks[0].opts.RetainChildren {
+				m.retained = append(m.retained, task)
+			} else {
+				m.completed = append(m.completed, task)
 			}
 			return m, nil
 		}
@@ -645,6 +691,20 @@ func (m spinnerModel) View() tea.View {
 	if root.RetainChildren {
 		lines = append(lines, m.retainedOutput(false))
 	}
+	renderedPending := make([]bool, len(m.pending))
+	appendPendingChildren := func(parentID uint64) {
+		for i, task := range m.pending {
+			if task.parentID != parentID {
+				continue
+			}
+			message, color := task.opts.StopMessage, task.opts.StopColor
+			if task.err != nil {
+				message, color = task.opts.StopFailMessage+": Failed", task.opts.StopFailColor
+			}
+			lines = append(lines, strings.Repeat("  ", task.depth)+getStyle(color).Render("● "+message))
+			renderedPending[i] = true
+		}
+	}
 	for i, task := range m.tasks {
 		if i == 0 {
 			if root.RetainChildren {
@@ -656,6 +716,7 @@ func (m spinnerModel) View() tea.View {
 				lines = append(lines, getStyle(task.opts.Color).Render("● "+task.opts.TaskName))
 			}
 			lines = appendLiveTaskOutput(lines, 1, task.output.String())
+			appendPendingChildren(task.id)
 			continue
 		}
 		prefix := strings.Repeat("  ", task.depth)
@@ -672,6 +733,7 @@ func (m spinnerModel) View() tea.View {
 			lines = append(lines, prefix+getStyle(task.opts.Color).Render("● "+task.opts.TaskName))
 		}
 		lines = appendLiveTaskOutput(lines, task.depth+1, task.output.String())
+		appendPendingChildren(task.id)
 	}
 	for _, task := range m.completed {
 		message, color := task.opts.StopMessage, task.opts.StopColor
@@ -680,7 +742,10 @@ func (m spinnerModel) View() tea.View {
 		}
 		lines = append(lines, strings.Repeat("  ", task.depth)+getStyle(color).Render("● "+message))
 	}
-	for _, task := range m.pending {
+	for i, task := range m.pending {
+		if renderedPending[i] {
+			continue
+		}
 		message, color := task.opts.StopMessage, task.opts.StopColor
 		if task.err != nil {
 			message, color = task.opts.StopFailMessage+": Failed", task.opts.StopFailColor

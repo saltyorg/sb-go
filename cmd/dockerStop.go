@@ -66,48 +66,34 @@ func runDockerStop(ctx context.Context, verbose bool, ignoreContainers []string)
 		return fmt.Errorf("error: %v", err)
 	}
 
-	// Create a stop container task
-	stopContainersTask := func() error {
-		if verbose && len(ignoreContainers) > 0 {
-			_ = spinners.RunInfoSpinner(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
-		}
-
-		client := &http.Client{Timeout: 10 * time.Second}
-		jobResp, err := requestDockerJob(ctx, constants.DockerControllerAPIURL+"/stop", ignoreContainers, client)
-		if err != nil {
-			return fmt.Errorf("failed to stop containers: %w", err)
-		}
-
-		if verbose {
-			_ = spinners.RunInfoSpinner(fmt.Sprintf("Stopping containers. Job ID: %s", jobResp.JobID))
-		}
-
-		// Wait for job completion
-		var success bool
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Waiting for Docker stop job", func() error {
-			var err error
-			success, err = waitForJobCompletion(ctx, jobResp.JobID)
-			return err
-		}); err != nil {
-			return fmt.Errorf("error while stopping containers: %w", err)
-		}
-
-		if !success {
-			return fmt.Errorf("failed to stop containers")
-		}
-
-		return nil
+	if verbose && len(ignoreContainers) > 0 {
+		_ = spinners.RunInfoSpinner(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
 	}
 
-	// Run spinner for stopping containers
-	stopOpts := spinners.SpinnerOptions{
-		TaskName:        "Requesting Docker container stop",
-		StopMessage:     "Docker stop job completed",
-		StopFailMessage: "Docker stop job",
+	client := &http.Client{Timeout: 10 * time.Second}
+	var jobResp JobResponse
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Requesting Docker stop job", func() error {
+		var err error
+		jobResp, err = requestDockerJob(ctx, constants.DockerControllerAPIURL+"/stop", ignoreContainers, client)
+		return err
+	}); err != nil {
+		return fmt.Errorf("failed to stop containers: %w", err)
 	}
 
-	if err := spinners.RunTaskWithSpinnerCustomContext(ctx, stopOpts, stopContainersTask); err != nil {
-		return fmt.Errorf("error: %v", err)
+	if verbose {
+		_ = spinners.RunInfoSpinner(fmt.Sprintf("Stopping containers. Job ID: %s", jobResp.JobID))
+	}
+
+	var success bool
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Waiting for Docker stop job", func() error {
+		var err error
+		success, err = waitForJobCompletion(ctx, jobResp.JobID)
+		return err
+	}); err != nil {
+		return fmt.Errorf("error while stopping containers: %w", err)
+	}
+	if !success {
+		return fmt.Errorf("failed to stop containers")
 	}
 
 	return nil

@@ -64,44 +64,30 @@ func runDockerStart(ctx context.Context, verbose bool) error {
 		return fmt.Errorf("error: %v", err)
 	}
 
-	// Create a start container task
-	startContainersTask := func() error {
-		client := &http.Client{Timeout: 10 * time.Second}
-		jobResp, err := requestDockerJob(ctx, constants.DockerControllerAPIURL+"/start", nil, client)
-		if err != nil {
-			return fmt.Errorf("failed to start containers: %w", err)
-		}
-
-		if verbose {
-			_ = spinners.RunInfoSpinner(fmt.Sprintf("Starting containers. Job ID: %s", jobResp.JobID))
-		}
-
-		// Wait for job completion
-		var success bool
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Waiting for Docker start job", func() error {
-			var err error
-			success, err = waitForJobCompletion(ctx, jobResp.JobID)
-			return err
-		}); err != nil {
-			return fmt.Errorf("error while starting containers: %w", err)
-		}
-
-		if !success {
-			return fmt.Errorf("failed to start containers")
-		}
-
-		return nil
+	client := &http.Client{Timeout: 10 * time.Second}
+	var jobResp JobResponse
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Requesting Docker start job", func() error {
+		var err error
+		jobResp, err = requestDockerJob(ctx, constants.DockerControllerAPIURL+"/start", nil, client)
+		return err
+	}); err != nil {
+		return fmt.Errorf("failed to start containers: %w", err)
 	}
 
-	// Run spinner for starting containers
-	startOpts := spinners.SpinnerOptions{
-		TaskName:        "Requesting Docker container start",
-		StopMessage:     "Docker start job completed",
-		StopFailMessage: "Docker start job",
+	if verbose {
+		_ = spinners.RunInfoSpinner(fmt.Sprintf("Starting containers. Job ID: %s", jobResp.JobID))
 	}
 
-	if err := spinners.RunTaskWithSpinnerCustomContext(ctx, startOpts, startContainersTask); err != nil {
-		return fmt.Errorf("error: %v", err)
+	var success bool
+	if err := spinners.RunTaskWithSpinnerContext(ctx, "Waiting for Docker start job", func() error {
+		var err error
+		success, err = waitForJobCompletion(ctx, jobResp.JobID)
+		return err
+	}); err != nil {
+		return fmt.Errorf("error while starting containers: %w", err)
+	}
+	if !success {
+		return fmt.Errorf("failed to start containers")
 	}
 
 	return nil
