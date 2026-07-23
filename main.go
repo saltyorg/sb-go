@@ -13,9 +13,9 @@ import (
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 	"github.com/saltyorg/sb-go/internal/utils"
 
+	"charm.land/fang/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
-	"github.com/charmbracelet/fang"
 )
 
 // customErrorHandler handles error formatting with proper line break support.
