@@ -19,6 +19,34 @@ import (
 // The context parameter allows for cancellation of long-running operations.
 // The verbose parameter is passed to the global spinner mode - when true, spinners print text instead of animating.
 func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser string, verbose bool) error {
+	return runManagedAnsibleVenv(ctx, forceRecreate, saltboxUser, verbose, false)
+}
+
+// ManageAnsibleVenvDetailed manages the environment while retaining completed
+// child tasks in the live hierarchy. It is intended for dedicated venv commands.
+func ManageAnsibleVenvDetailed(ctx context.Context, forceRecreate bool, saltboxUser string, verbose bool) error {
+	return runManagedAnsibleVenv(ctx, forceRecreate, saltboxUser, verbose, true)
+}
+
+func runManagedAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser string, verbose, retainChildren bool) error {
+	action := "Preparing Ansible virtual environment"
+	stopMessage := "Ansible virtual environment ready"
+	if forceRecreate {
+		action = "Recreating Ansible virtual environment"
+		stopMessage = "Ansible virtual environment recreated"
+	}
+	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+		TaskName:         action,
+		StopMessage:      stopMessage,
+		StopFailMessage:  "Ansible virtual environment",
+		CollapseChildren: !retainChildren,
+		RetainChildren:   retainChildren,
+	}, func() error {
+		return manageAnsibleVenv(ctx, forceRecreate, saltboxUser, verbose)
+	})
+}
+
+func manageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser string, verbose bool) error {
 	ansibleVenvPath := constants.AnsibleVenvPath
 	venvPythonPath := constants.AnsibleVenvPythonPath()
 	pythonMissing := false
@@ -34,22 +62,8 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 
 	recreate := forceRecreate || pythonMissing
 
-	if forceRecreate {
-		if err := spinners.RunInfoSpinner("Recreate flag set, forcing recreation of Ansible venv"); err != nil {
-			return err
-		}
-	} else if pythonMissing {
+	if !forceRecreate && pythonMissing {
 		if err := spinners.RunWarningSpinner(fmt.Sprintf("Python %s not detected in venv, recreation required", constants.AnsibleVenvPythonVersion)); err != nil {
-			return err
-		}
-	}
-
-	if recreate {
-		if err := spinners.RunInfoSpinner("Recreating Ansible venv"); err != nil {
-			return err
-		}
-	} else {
-		if err := spinners.RunInfoSpinner("Updating Ansible venv"); err != nil {
 			return err
 		}
 	}
@@ -73,22 +87,22 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 	}
 
 	// Upgrade pip
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Upgrading pip", func() error {
-		return upgradePip(ctx, ansibleVenvPath, verbose)
+	if err := spinners.RunTaskWithSpinnerOutputContext(ctx, "Upgrading pip", func(stdout, stderr io.Writer) error {
+		return upgradePip(ctx, ansibleVenvPath, verbose, stdout, stderr)
 	}); err != nil {
 		return fmt.Errorf("error upgrading pip: %w", err)
 	}
 
 	// Install libpq-dev dependency
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing libpq-dev", func() error {
-		return apt.InstallPackage(ctx, []string{"libpq-dev"}, verbose)()
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Installing libpq-dev", func(taskCtx context.Context) error {
+		return apt.InstallPackage(taskCtx, []string{"libpq-dev"}, verbose)()
 	}); err != nil {
 		return fmt.Errorf("error installing libpq-dev: %w", err)
 	}
 
 	// Install requirements
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing pip requirements", func() error {
-		return installRequirements(ctx, ansibleVenvPath, verbose)
+	if err := spinners.RunTaskWithSpinnerOutputContext(ctx, "Installing pip requirements", func(stdout, stderr io.Writer) error {
+		return installRequirements(ctx, ansibleVenvPath, verbose, stdout, stderr)
 	}); err != nil {
 		return fmt.Errorf("error installing pip requirements: %w", err)
 	}
@@ -105,16 +119,6 @@ func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 		return setOwnership(ctx, ansibleVenvPath, saltboxUser, verbose)
 	}); err != nil {
 		return fmt.Errorf("error setting ownership: %w", err)
-	}
-
-	if recreate {
-		if err := spinners.RunInfoSpinner("Done recreating Ansible venv"); err != nil {
-			return err
-		}
-	} else {
-		if err := spinners.RunInfoSpinner("Done updating Ansible venv"); err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -190,7 +194,9 @@ func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
 // createVirtualEnv creates the virtual environment using uv.
 func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool) error {
 	// Ensure uv is installed
-	if err := uv.DownloadAndInstallUV(ctx, verbose); err != nil {
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Ensuring uv is installed", func(taskCtx context.Context) error {
+		return uv.DownloadAndInstallUV(taskCtx, verbose)
+	}); err != nil {
 		return fmt.Errorf("error installing uv: %w", err)
 	}
 
@@ -200,7 +206,9 @@ func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool)
 	}
 
 	// Install Python using uv
-	if err := uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose); err != nil {
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion), func(taskCtx context.Context) error {
+		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
+	}); err != nil {
 		return fmt.Errorf("error installing python: %w", err)
 	}
 
@@ -211,7 +219,9 @@ func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool)
 
 	// Create venv using uv
 	venvPath := filepath.Join(ansibleVenvPath, "venv")
-	if err := uv.CreateVenv(ctx, venvPath, constants.AnsibleVenvPythonVersion, verbose); err != nil {
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Creating virtual environment files", func(taskCtx context.Context) error {
+		return uv.CreateVenv(taskCtx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
+	}); err != nil {
 		return fmt.Errorf("error creating venv: %w", err)
 	}
 
@@ -219,21 +229,21 @@ func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool)
 }
 
 // upgradePip upgrades pip, setuptools, and wheel.
-func upgradePip(ctx context.Context, ansibleVenvPath string, verbose bool) error {
+func upgradePip(ctx context.Context, ansibleVenvPath string, verbose bool, stdout, stderr io.Writer) error {
 	pythonPath := filepath.Join(ansibleVenvPath, "venv", "bin", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion))
 	command := []string{pythonPath, "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--upgrade", "pip", "setuptools", "wheel"}
 	env := os.Environ() // Inherit current environment
 
-	return runCommand(ctx, command, env, verbose)
+	return runCommand(ctx, command, env, verbose, stdout, stderr)
 }
 
 // installRequirements installs the requirements.
-func installRequirements(ctx context.Context, ansibleVenvPath string, verbose bool) error {
+func installRequirements(ctx context.Context, ansibleVenvPath string, verbose bool, stdout, stderr io.Writer) error {
 	pythonPath := filepath.Join(ansibleVenvPath, "venv", "bin", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion))
 	command := []string{pythonPath, "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--upgrade", "--requirement", constants.AnsibleRequirementsPath}
 	env := os.Environ()
 
-	return runCommand(ctx, command, env, verbose)
+	return runCommand(ctx, command, env, verbose, stdout, stderr)
 }
 
 // copyBinaries copies the binaries in a robust and error-checked way.
@@ -328,12 +338,18 @@ func setOwnership(ctx context.Context, ansibleVenvPath, saltboxUser string, verb
 	command := []string{"chown", "-R", fmt.Sprintf("%s:%s", saltboxUser, saltboxUser), ansibleVenvPath}
 	env := os.Environ()
 
-	return runCommand(ctx, command, env, verbose)
+	return runCommand(ctx, command, env, verbose, nil, nil)
 }
 
 // runCommand runs a command with the given environment.
 // The verbose parameter controls executor output mode (stream vs discard).
-func runCommand(ctx context.Context, command []string, env []string, verbose bool) error {
-	return executor.RunVerbose(ctx, command[0], command[1:], verbose,
-		executor.WithEnv(env))
+func runCommand(ctx context.Context, command []string, env []string, verbose bool, stdout, stderr io.Writer) error {
+	options := []executor.Option{executor.WithEnv(env)}
+	if stdout != nil {
+		options = append(options, executor.WithStdout(stdout), executor.WithPseudoTerminal())
+	}
+	if stderr != nil {
+		options = append(options, executor.WithStderr(stderr))
+	}
+	return executor.RunVerbose(ctx, command[0], command[1:], verbose, options...)
 }

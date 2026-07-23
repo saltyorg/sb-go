@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/setup"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
@@ -41,6 +43,27 @@ var setupCmd = &cobra.Command{
 			}
 		}
 
+		selectedBranch := branch
+		if _, err := os.Stat(constants.SaltboxRepoPath + "/.git"); err == nil {
+			selectedBranch, err = git.ResolveUpdateBranch(ctx, constants.SaltboxRepoPath, branch, nil, "Saltbox")
+			if err != nil {
+				return err
+			}
+		}
+
+		return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+			TaskName:         "Installing Saltbox",
+			StopMessage:      "Saltbox installation completed",
+			StopFailMessage:  "Saltbox installation",
+			CollapseChildren: true,
+		}, func() error {
+			return runSetup(ctx, verbose, selectedBranch)
+		})
+	},
+}
+
+func runSetup(ctx context.Context, verbose bool, branch string) error {
+	if err := runSetupPhase(ctx, "Checking system compatibility", func() error {
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking Ubuntu version", func() error {
 			return utils.CheckUbuntuSupport()
 		}); err != nil {
@@ -64,51 +87,70 @@ var setupCmd = &cobra.Command{
 		}); err != nil {
 			return err
 		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
-		// Perform initial setup tasks
+	if err := runSetupPhase(ctx, "Installing system prerequisites", func() error {
 		if err := setup.InitialSetup(ctx, verbose); err != nil {
 			return fmt.Errorf("error during initial setup: %w", err)
 		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
-		// Configure the locale
+	if err := runSetupPhase(ctx, "Configuring system locale", func() error {
 		if err := setup.ConfigureLocale(ctx); err != nil {
 			return fmt.Errorf("error configuring locale: %w", err)
 		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
-		// Setup Python venv
+	if err := runSetupPhase(ctx, "Installing Python runtime", func() error {
 		if err := setup.PythonVenv(ctx, verbose); err != nil {
 			return fmt.Errorf("error setting up Python venv: %w", err)
 		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
-		// Setup Saltbox Repo
+	if err := runSetupPhase(ctx, "Preparing Saltbox repository", func() error {
 		if err := setup.SaltboxRepo(ctx, verbose, branch); err != nil {
 			return fmt.Errorf("error setting up Saltbox repository: %w", err)
 		}
-
-		// Initialize Git hooks
 		if err := setup.InitializeGitHooks(ctx); err != nil {
 			return fmt.Errorf("error initializing Git hooks: %w", err)
 		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
-		// Install pip3 Dependencies
+	if err := runSetupPhase(ctx, "Installing Ansible dependencies", func() error {
 		if err := setup.InstallPipDependencies(ctx, verbose); err != nil {
 			return fmt.Errorf("error installing pip dependencies: %w", err)
 		}
-
-		// Copy ansible* files to /usr/local/bin
 		if err := setup.CopyRequiredBinaries(ctx); err != nil {
 			return fmt.Errorf("error copying binaries: %w", err)
 		}
-
-		if verbose {
-			fmt.Println("Initial setup tasks completed")
-		} else {
-			if err := spinners.RunInfoSpinner("Initial setup tasks completed"); err != nil {
-				return err
-			}
-		}
 		return nil
-	},
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func runSetupPhase(ctx context.Context, name string, task spinners.TaskFunc) error {
+	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+		TaskName:        name,
+		StopMessage:     name + " completed",
+		StopFailMessage: name,
+	}, task)
 }
 
 func init() {

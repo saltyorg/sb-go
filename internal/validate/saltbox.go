@@ -25,10 +25,33 @@ type configValidationJob struct {
 
 // AllSaltboxConfigs validates all Saltbox configuration files using YAML schemas
 func AllSaltboxConfigs(verbose bool) error {
+	return runAllSaltboxConfigs(verbose, true)
+}
+
+// AllSaltboxConfigsDetailed validates all Saltbox configuration files and keeps
+// each file's result visible. This is intended for the dedicated validation command.
+func AllSaltboxConfigsDetailed(verbose bool) error {
+	return runAllSaltboxConfigs(verbose, false)
+}
+
+func runAllSaltboxConfigs(verbose, collapseChildren bool) error {
 	// Set verbose mode for both validation and spinners
 	SetVerbose(verbose)
 	spinners.SetVerboseMode(verbose)
 
+	opts := spinners.SpinnerOptions{
+		TaskName:         "Validating Saltbox configuration",
+		StopMessage:      "Saltbox configuration validated",
+		StopFailMessage:  "Saltbox configuration validation",
+		CollapseChildren: collapseChildren,
+		RetainChildren:   !collapseChildren,
+	}
+	return spinners.RunTaskWithSpinnerCustomContext(context.Background(), opts, func() error {
+		return validateAllSaltboxConfigs(verbose)
+	})
+}
+
+func validateAllSaltboxConfigs(verbose bool) error {
 	// Define all validation jobs
 	jobs := []configValidationJob{
 		{
@@ -89,7 +112,7 @@ func AllSaltboxConfigs(verbose bool) error {
 // validateDuplicateKeys checks a YAML file for duplicate keys
 func validateDuplicateKeys(node *yaml.Node, name string) error {
 	successMessage := fmt.Sprintf("Validated %s (no duplicates)", name)
-	failureMessage := fmt.Sprintf("Failed to validate %s (no duplicates)", name)
+	failureMessage := fmt.Sprintf("Validation of %s (no duplicates)", name)
 
 	validationError := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
 		TaskName:        fmt.Sprintf("Validating %s (no duplicates)", name),
@@ -216,7 +239,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 
 	// Perform validation with spinner
 	successMessage := fmt.Sprintf("Validated %s", job.name)
-	failureMessage := fmt.Sprintf("Failed to validate %s", job.name)
+	failureMessage := fmt.Sprintf("Validation of %s", job.name)
 
 	// Note: Using context.Background() here - consider adding context parameter in future refactor
 	validationError := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{

@@ -17,6 +17,7 @@ import (
 
 	sbconfig "github.com/saltyorg/sb-go/internal/config"
 	"github.com/saltyorg/sb-go/internal/logging"
+	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
 
 	"github.com/cloudflare/cloudflare-go/v6"
@@ -58,10 +59,30 @@ func NewAsyncValidationContext() *AsyncValidationContext {
 // AddAPIValidation adds an async API validation to be executed
 func (ctx *AsyncValidationContext) AddAPIValidation(name string, validator AsyncAPIValidator, value any, config map[string]any) {
 	ctx.eg.Go(func() error {
-		err := validator(value, config)
+		label := apiValidationLabel(name)
+		err := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
+			TaskName:        "Validating " + label,
+			StopMessage:     label + " validated",
+			StopFailMessage: label + " validation",
+			IndentLevel:     2,
+		}, func() error {
+			return validator(value, config)
+		})
 		ctx.results <- APIValidationResult{Name: name, Error: err}
 		return nil // We collect errors via channel, not errgroup's error return
 	})
+}
+
+func apiValidationLabel(name string) string {
+	lowerName := strings.ToLower(name)
+	switch {
+	case strings.HasSuffix(lowerName, "cloudflare"):
+		return "Cloudflare API credentials"
+	case strings.HasSuffix(lowerName, "dockerhub"):
+		return "Docker Hub credentials"
+	default:
+		return name + " API credentials"
+	}
 }
 
 // Wait waits for all async validations to complete and returns any errors

@@ -133,6 +133,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/creack/pty"
 )
 
 // OutputMode defines how command output should be handled during execution.
@@ -280,6 +282,23 @@ type Config struct {
 	// Stderr provides a custom writer for standard error.
 	// If set, this overrides the OutputMode's stderr handling.
 	Stderr io.Writer
+
+	// PseudoTerminal makes terminal-aware commands retain their interactive
+	// progress formatting while their output is captured.
+	PseudoTerminal bool
+}
+
+type managedOutputContextKey struct{}
+
+type managedOutput struct {
+	stdout io.Writer
+	stderr io.Writer
+}
+
+// WithManagedOutput carries temporary command writers through package
+// boundaries. Commands remain non-interactive and do not receive a PTY.
+func WithManagedOutput(ctx context.Context, stdout, stderr io.Writer) context.Context {
+	return context.WithValue(ctx, managedOutputContextKey{}, managedOutput{stdout: stdout, stderr: stderr})
 }
 
 // Option is a functional option for configuring command execution.
@@ -453,6 +472,14 @@ func WithStderr(stderr io.Writer) Option {
 	}
 }
 
+// WithPseudoTerminal runs the command with stdout and stderr connected to a
+// terminal. The merged terminal stream is forwarded through Stdout.
+func WithPseudoTerminal() Option {
+	return func(c *Config) {
+		c.PseudoTerminal = true
+	}
+}
+
 // Executor defines the interface for executing commands.
 // This interface allows for easy mocking in tests by providing a simple
 // contract that both production and test implementations can satisfy.
@@ -570,6 +597,41 @@ func (e *DefaultExecutor) Execute(config *Config) (*Result, error) {
 	// Always capture stdout and stderr internally, regardless of output mode
 	var stdoutBuf, stderrBuf bytes.Buffer
 
+	if output, ok := config.Context.Value(managedOutputContextKey{}).(managedOutput); ok &&
+		config.OutputMode != OutputModeInteractive && !config.PseudoTerminal {
+		config.Stdout = output.stdout
+		config.Stderr = output.stderr
+		config.OutputMode = OutputModeStream
+	}
+
+	if config.PseudoTerminal {
+		if config.Stdin != nil {
+			return nil, fmt.Errorf("custom stdin is not supported with a pseudo-terminal")
+		}
+		terminal, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 24, Cols: 120})
+		if err != nil {
+			return nil, fmt.Errorf("starting command in pseudo-terminal: %w", err)
+		}
+
+		output := io.Writer(&stdoutBuf)
+		if config.Stdout != nil {
+			output = io.MultiWriter(&stdoutBuf, config.Stdout)
+		}
+		copyDone := make(chan struct{})
+		go func() {
+			_, _ = io.Copy(output, terminal)
+			close(copyDone)
+		}()
+
+		result.Error = cmd.Wait()
+		_ = terminal.Close()
+		<-copyDone
+		result.Stdout = stdoutBuf.Bytes()
+		result.Combined = result.Stdout
+		setExitCode(result)
+		return result, result.Error
+	}
+
 	// Apply custom IO if provided (overrides OutputMode)
 	if config.Stdin != nil {
 		cmd.Stdin = config.Stdin
@@ -685,20 +747,22 @@ func (e *DefaultExecutor) Execute(config *Config) (*Result, error) {
 		result.Combined = append(result.Stdout, result.Stderr...)
 	}
 
-	// Extract exit code
-	if result.Error != nil {
-		var exitErr *exec.ExitError
-		if errors.As(result.Error, &exitErr) {
-			result.ExitCode = exitErr.ExitCode()
-		} else {
-			// Non-exit error (e.g., command not found)
-			result.ExitCode = -1
-		}
-	} else {
-		result.ExitCode = 0
-	}
+	setExitCode(result)
 
 	return result, result.Error
+}
+
+func setExitCode(result *Result) {
+	if result.Error == nil {
+		result.ExitCode = 0
+		return
+	}
+	var exitErr *exec.ExitError
+	if errors.As(result.Error, &exitErr) {
+		result.ExitCode = exitErr.ExitCode()
+	} else {
+		result.ExitCode = -1
+	}
 }
 
 // ExecuteSimple is a convenience method for simple command execution with combined output.

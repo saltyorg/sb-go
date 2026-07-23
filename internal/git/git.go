@@ -20,7 +20,7 @@ func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verb
 		return fmt.Errorf("destination path '%s' already exists", destPath)
 	}
 
-	cloneArgs := []string{"clone", "--depth", "1", "-b", branch, repoURL, destPath}
+	cloneArgs := []string{"clone", "--progress", "--depth", "1", "-b", branch, repoURL, destPath}
 
 	// Use executor to handle verbose/non-verbose output
 	var mode executor.OutputMode
@@ -86,13 +86,23 @@ func EnsureRemoteFetchAllBranches(ctx context.Context, repoPath string) error {
 // The context parameter allows for cancellation of git operations.
 // The repoName parameter is used to identify the repository in user prompts.
 func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool, repoName string) error {
+	branch, err := ResolveUpdateBranch(ctx, repoPath, defaultBranch, branchReset, repoName)
+	if err != nil {
+		return err
+	}
+	return FetchAndResetBranch(ctx, repoPath, branch, user, customCommands, repoName)
+}
+
+// ResolveUpdateBranch determines the branch to update and performs any required
+// interactive prompt before a terminal renderer is started.
+func ResolveUpdateBranch(ctx context.Context, repoPath, defaultBranch string, branchReset *bool, repoName string) (string, error) {
 	// Get the current branch name
 	result, err := executor.Run(ctx, "git",
 		executor.WithArgs("rev-parse", "--abbrev-ref", "HEAD"),
 		executor.WithWorkingDir(repoPath))
 	if err != nil {
 		fmt.Printf("Error: failed to get current branch: %s\n", string(result.Combined))
-		return fmt.Errorf("failed to get current branch: %w", err)
+		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
 	currentBranch := strings.TrimSpace(string(result.Combined))
 
@@ -100,7 +110,7 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 	// Determine if a reset to default_branch is needed
 	if currentBranch != defaultBranch {
 		if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Currently on branch '%s'", repoName, currentBranch)); err != nil {
-			return err
+			return "", err
 		}
 
 		if branchReset == nil {
@@ -108,7 +118,7 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 			if !tty.IsInteractive() {
 				// No TTY: default to keeping current branch (conservative approach)
 				if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s' (no TTY detected)", repoName, currentBranch)); err != nil {
-					return err
+					return "", err
 				}
 				branch = currentBranch
 			} else {
@@ -120,7 +130,7 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 
 				if input != "y" {
 					if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
-						return err
+						return "", err
 					}
 					branch = currentBranch
 				} else {
@@ -133,51 +143,80 @@ func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, cu
 		} else {
 			// --keep-branch flag: stay on current branch
 			if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
-				return err
+				return "", err
 			}
 			branch = currentBranch
 		}
 	} else {
 		branch = defaultBranch
 	}
+	return branch, nil
+}
 
-	// Commands to fetch and reset
-	commands := [][]string{
-		{"git", "fetch", "--quiet"},
+// FetchAndResetBranch updates a repository after branch selection has already
+// been resolved.
+func FetchAndResetBranch(ctx context.Context, repoPath, branch, user string, customCommands [][]string, repoName string) error {
+	fetchCommands := [][]string{
+		{"git", "fetch", "--progress"},
+	}
+	resetCommands := [][]string{
 		{"git", "clean", "--quiet", "-df"},
 		{"git", "reset", "--quiet", "--hard", "@{u}"},
 		{"git", "checkout", "--quiet", branch},
 		{"git", "clean", "--quiet", "-df"},
 		{"git", "reset", "--quiet", "--hard", "@{u}"},
-		{"git", "submodule", "update", "--init", "--recursive"},
+	}
+	submoduleCommands := [][]string{
+		{"git", "submodule", "update", "--progress", "--init", "--recursive"},
+	}
+	ownershipCommands := [][]string{
 		{"chown", "-R", fmt.Sprintf("%s:%s", user, user), repoPath},
 	}
 
-	for _, command := range commands {
-		result, err := executor.Run(ctx, command[0],
-			executor.WithArgs(command[1:]...),
-			executor.WithWorkingDir(repoPath))
-		if err != nil {
-			fmt.Printf("Error: failed to execute command %v: %s\n", command, string(result.Combined))
-			return fmt.Errorf("failed to execute command %v: %w", command, err)
+	runCommands := func(commandCtx context.Context, commands [][]string) error {
+		for _, command := range commands {
+			result, err := executor.Run(commandCtx, command[0],
+				executor.WithArgs(command[1:]...),
+				executor.WithWorkingDir(repoPath))
+			if err != nil {
+				return fmt.Errorf("failed to execute command %v: %w\n%s", command, err, string(result.Combined))
+			}
 		}
+		return nil
 	}
 
-	// Custom commands
-	for _, command := range customCommands {
-		result, err := executor.Run(ctx, command[0],
-			executor.WithArgs(command[1:]...),
-			executor.WithWorkingDir(repoPath))
-		if err != nil {
-			fmt.Printf("Error: failed to execute custom command %v: %s\n", command, string(result.Combined))
-			return fmt.Errorf("failed to execute custom command %v: %w", command, err)
+	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+		TaskName:         fmt.Sprintf("Updating %s repository", repoName),
+		StopMessage:      fmt.Sprintf("%s repository updated (%s)", repoName, branch),
+		StopFailMessage:  fmt.Sprintf("%s repository update", repoName),
+		CollapseChildren: true,
+	}, func() error {
+		steps := []struct {
+			name     string
+			commands [][]string
+		}{
+			{name: "Fetching repository changes", commands: fetchCommands},
+			{name: fmt.Sprintf("Resetting repository to %s", branch), commands: resetCommands},
+			{name: "Updating git submodules", commands: submoduleCommands},
+			{name: "Setting repository ownership", commands: ownershipCommands},
 		}
-	}
+		for _, step := range steps {
+			if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, step.name, func(taskCtx context.Context) error {
+				return runCommands(taskCtx, step.commands)
+			}); err != nil {
+				return err
+			}
+		}
 
-	if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Repository at %s (%s) has been updated", repoName, repoPath, branch)); err != nil {
-		return err
-	}
-	return nil
+		if len(customCommands) > 0 {
+			if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Running repository update hooks", func(taskCtx context.Context) error {
+				return runCommands(taskCtx, customCommands)
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // GetGitCommitHash returns the current Git commit hash of the repository.

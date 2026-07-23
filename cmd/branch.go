@@ -36,10 +36,6 @@ func init() {
 func changeBranch(ctx context.Context, branchName string) error {
 	spinners.SetVerboseMode(false)
 
-	if err := spinners.RunInfoSpinner("Switching Saltbox repository branch..."); err != nil {
-		return err
-	}
-
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
 		return err
@@ -49,35 +45,37 @@ func changeBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
-	err = git.FetchAndReset(ctx, constants.SaltboxRepoPath, branchName, saltboxUser, nil, nil, "Saltbox")
+	selectedBranch, err := git.ResolveUpdateBranch(ctx, constants.SaltboxRepoPath, branchName, nil, "Saltbox")
 	if err != nil {
 		return err
 	}
 
-	// Always update saltbox.fact during branch change
-	if err := fact.DownloadAndInstallSaltboxFact(false, false); err != nil {
-		return err
-	}
+	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+		TaskName:         fmt.Sprintf("Switching Saltbox repository to %s", selectedBranch),
+		StopMessage:      fmt.Sprintf("Saltbox repository switched to %s", selectedBranch),
+		StopFailMessage:  "Saltbox branch switch",
+		CollapseChildren: true,
+	}, func() error {
+		if err := git.FetchAndResetBranch(ctx, constants.SaltboxRepoPath, selectedBranch, saltboxUser, nil, "Saltbox"); err != nil {
+			return err
+		}
 
-	// Manage Ansible venv - this function already has internal spinners
-	if err := venv.ManageAnsibleVenv(ctx, false, saltboxUser, false); err != nil {
-		return fmt.Errorf("error managing Ansible venv: %w", err)
-	}
+		if err := fact.DownloadAndInstallSaltboxFact(false, false); err != nil {
+			return err
+		}
 
-	cacheInstance, err := cache.NewCache()
-	if err != nil {
-		return fmt.Errorf("error creating cache: %w", err)
-	}
+		if err := venv.ManageAnsibleVenv(ctx, false, saltboxUser, false); err != nil {
+			return fmt.Errorf("error managing Ansible venv: %w", err)
+		}
 
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating Saltbox tags cache", func() error {
-		_, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
-		return err
-	}); err != nil {
-		return err
-	}
+		cacheInstance, err := cache.NewCache()
+		if err != nil {
+			return fmt.Errorf("error creating cache: %w", err)
+		}
 
-	if err := spinners.RunInfoSpinner(fmt.Sprintf("Saltbox repository branch switched to %s.", branchName)); err != nil {
-		return err
-	}
-	return nil
+		return spinners.RunTaskWithSpinnerContext(ctx, "Updating Saltbox tags cache", func() error {
+			_, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
+			return err
+		})
+	})
 }

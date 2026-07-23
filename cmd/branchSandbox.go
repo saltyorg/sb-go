@@ -33,10 +33,6 @@ func init() {
 func changeSandboxBranch(ctx context.Context, branchName string) error {
 	spinners.SetVerboseMode(false)
 
-	if err := spinners.RunInfoSpinner("Switching Sandbox repository branch..."); err != nil {
-		return err
-	}
-
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
 		return err
@@ -46,25 +42,29 @@ func changeSandboxBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
-	err = git.FetchAndReset(ctx, constants.SandboxRepoPath, branchName, saltboxUser, nil, nil, "Sandbox")
+	selectedBranch, err := git.ResolveUpdateBranch(ctx, constants.SandboxRepoPath, branchName, nil, "Sandbox")
 	if err != nil {
 		return err
 	}
 
-	cacheInstance, err := cache.NewCache()
-	if err != nil {
-		return fmt.Errorf("error creating cache: %w", err)
-	}
+	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+		TaskName:         fmt.Sprintf("Switching Sandbox repository to %s", selectedBranch),
+		StopMessage:      fmt.Sprintf("Sandbox repository switched to %s", selectedBranch),
+		StopFailMessage:  "Sandbox branch switch",
+		CollapseChildren: true,
+	}, func() error {
+		if err := git.FetchAndResetBranch(ctx, constants.SandboxRepoPath, selectedBranch, saltboxUser, nil, "Sandbox"); err != nil {
+			return err
+		}
 
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating Sandbox tags cache", func() error {
-		_, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
-		return err
-	}); err != nil {
-		return err
-	}
+		cacheInstance, err := cache.NewCache()
+		if err != nil {
+			return fmt.Errorf("error creating cache: %w", err)
+		}
 
-	if err := spinners.RunInfoSpinner(fmt.Sprintf("Sandbox repository branch switched to %s.", branchName)); err != nil {
-		return err
-	}
-	return nil
+		return spinners.RunTaskWithSpinnerContext(ctx, "Updating Sandbox tags cache", func() error {
+			_, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "", cacheInstance, 0)
+			return err
+		})
+	})
 }

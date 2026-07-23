@@ -196,7 +196,7 @@ func fetchLatestReleaseInfoFromURL(client *http.Client, apiURL string) (string, 
 	}
 	defer func() {
 		if err := response.Body.Close(); err != nil {
-			fmt.Println("Error closing response body:", err)
+			_ = spinners.RunWarningSpinner(fmt.Sprintf("Error closing response body: %v", err))
 		}
 	}()
 
@@ -269,6 +269,23 @@ func fetchLatestReleaseInfo(proxyURL, githubURL string, verbose bool) (string, i
 
 // DownloadAndInstallSaltboxFact downloads and installs the latest saltbox.fact file.
 func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
+	action := "Checking saltbox.fact"
+	stopMessage := "saltbox.fact is ready"
+	if alwaysUpdate {
+		action = "Reinstalling saltbox.fact"
+		stopMessage = "saltbox.fact reinstalled"
+	}
+	return spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
+		TaskName:         action,
+		StopMessage:      stopMessage,
+		StopFailMessage:  "saltbox.fact update",
+		CollapseChildren: true,
+	}, func() error {
+		return downloadAndInstallSaltboxFact(alwaysUpdate, verbose)
+	})
+}
+
+func downloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 	downloadURL := "https://github.com/saltyorg/ansible-facts/releases/latest/download/saltbox-facts"
 	targetPath := "/srv/git/saltbox/ansible_facts.d/saltbox.fact"
 	githubURL := "https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
@@ -306,7 +323,7 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 				}
 				defer func() {
 					if err := response.Body.Close(); err != nil {
-						fmt.Println("Error closing response body:", err)
+						_ = spinners.RunWarningSpinner(fmt.Sprintf("Error closing response body: %v", err))
 					}
 				}()
 
@@ -326,7 +343,7 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 				}
 				defer func() {
 					if err := file.Close(); err != nil {
-						fmt.Println("Error closing file:", err)
+						_ = spinners.RunWarningSpinner(fmt.Sprintf("Error closing file: %v", err))
 					}
 				}()
 
@@ -342,7 +359,9 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 				}
 
 				// Validate the downloaded binary
-				if err := validateBinary(targetPath, expectedSize, verbose); err != nil {
+				if err := spinners.RunTaskWithSpinnerContext(context.Background(), "Validating downloaded saltbox.fact", func() error {
+					return validateBinary(targetPath, expectedSize, verbose)
+				}); err != nil {
 					// Clean up the invalid file
 					if removeErr := os.Remove(targetPath); removeErr != nil {
 						return fmt.Errorf("downloaded binary validation failed (%w) and cleanup failed (%v)", err, removeErr)
@@ -356,9 +375,6 @@ func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 			return err
 		}
 
-		if err := spinners.RunInfoSpinner(fmt.Sprintf("Successfully updated saltbox.fact to version %s at %s", latestVersion, targetPath)); err != nil {
-			return err
-		}
 	}
 
 	return nil

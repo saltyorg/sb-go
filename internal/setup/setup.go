@@ -22,16 +22,16 @@ import (
 // The context parameter allows for cancellation of long-running operations.
 func InitialSetup(ctx context.Context, verbose bool) error {
 	// Update apt cache
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache", func() error {
-		updateCache := apt.UpdatePackageLists(ctx, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Updating apt package cache", func(taskCtx context.Context) error {
+		updateCache := apt.UpdatePackageLists(taskCtx, verbose)
 		return updateCache()
 	}); err != nil {
 		return fmt.Errorf("error updating apt cache: %w", err)
 	}
 
 	// Install git and curl
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing git and curl", func() error {
-		installGitCurl := apt.InstallPackage(ctx, []string{"git", "curl"}, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Installing git and curl", func(taskCtx context.Context) error {
+		installGitCurl := apt.InstallPackage(taskCtx, []string{"git", "curl"}, verbose)
 		return installGitCurl()
 	}); err != nil {
 		return fmt.Errorf("error installing git and curl: %w", err)
@@ -54,36 +54,36 @@ func InitialSetup(ctx context.Context, verbose bool) error {
 	}
 
 	// Install software-properties-common and apt-transport-https
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing software-properties-common and apt-transport-https", func() error {
-		installPropsTransport := apt.InstallPackage(ctx, []string{"software-properties-common", "apt-transport-https"}, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Installing software-properties-common and apt-transport-https", func(taskCtx context.Context) error {
+		installPropsTransport := apt.InstallPackage(taskCtx, []string{"software-properties-common", "apt-transport-https"}, verbose)
 		return installPropsTransport()
 	}); err != nil {
 		return fmt.Errorf("error installing software-properties-common and apt-transport-https: %w", err)
 	}
 
 	// Add apt repos
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Adding apt repositories", func() error {
-		return apt.AddAptRepositories(ctx, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Adding apt repositories", func(taskCtx context.Context) error {
+		return apt.AddAptRepositories(taskCtx, verbose)
 	}); err != nil {
 		return fmt.Errorf("error adding apt repositories: %w", err)
 	}
 
 	// Update apt cache again after adding repositories
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache again", func() error {
-		updateCacheAgain := apt.UpdatePackageLists(ctx, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Updating apt package cache again", func(taskCtx context.Context) error {
+		updateCacheAgain := apt.UpdatePackageLists(taskCtx, verbose)
 		return updateCacheAgain()
 	}); err != nil {
 		return fmt.Errorf("error updating apt cache: %w", err)
 	}
 
 	// Install additional required packages.
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing additional required packages", func() error {
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Installing additional required packages", func(taskCtx context.Context) error {
 		packages := []string{
 			"locales", "nano", "wget", "jq", "file", "gpg-agent", "libpq-dev",
 			"build-essential", "libssl-dev", "libffi-dev", "python3-dev",
 			"python3-testresources", "python3-apt", "python3-venv", "python3-pip",
 		}
-		installPackages := apt.InstallPackage(ctx, packages, verbose)
+		installPackages := apt.InstallPackage(taskCtx, packages, verbose)
 		return installPackages()
 	}); err != nil {
 		return fmt.Errorf("error installing additional packages: %w", err)
@@ -182,8 +182,6 @@ func ConfigureLocale(ctx context.Context) error {
 		if !langSet {
 			_ = spinners.RunWarningSpinner("Warning: LANG was not set correctly in /etc/default/locale. This might cause issues.")
 		}
-	} else {
-		_ = spinners.RunInfoSpinner(fmt.Sprintf("Locales LC_ALL and LANG successfully set to %s", targetLocale))
 	}
 
 	return nil
@@ -192,11 +190,9 @@ func ConfigureLocale(ctx context.Context) error {
 // PythonVenv installs Python using uv and creates the Ansible venv.
 // The context parameter allows for cancellation of long-running operations.
 func PythonVenv(ctx context.Context, verbose bool) error {
-	_ = spinners.RunInfoSpinner(fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion))
-
 	// Download and install uv
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Downloading and installing uv", func() error {
-		return uv.DownloadAndInstallUV(ctx, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Downloading and installing uv", func(taskCtx context.Context) error {
+		return uv.DownloadAndInstallUV(taskCtx, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing uv: %w", err)
 	}
@@ -210,16 +206,16 @@ func PythonVenv(ctx context.Context, verbose bool) error {
 	}
 
 	// Install Python using uv
-	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion), func() error {
-		return uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion), func(taskCtx context.Context) error {
+		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing Python %s: %w", constants.AnsibleVenvPythonVersion, err)
 	}
 
 	// Create venv using uv
 	venvPath := filepath.Join(constants.AnsibleVenvPath, "venv")
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating venv", func() error {
-		return uv.CreateVenv(ctx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Creating venv", func(taskCtx context.Context) error {
+		return uv.CreateVenv(taskCtx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
 		return fmt.Errorf("error creating venv: %w", err)
 	}
@@ -259,16 +255,16 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) error {
 	_, err := os.Stat(saltboxPath)
 	if os.IsNotExist(err) {
 		// Clone the repository if it doesn't exist.
-		if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch), func() error {
-			return git.CloneRepository(ctx, saltboxRepoURL, saltboxPath, branch, verbose)
+		if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch), func(taskCtx context.Context) error {
+			return git.CloneRepository(taskCtx, saltboxRepoURL, saltboxPath, branch, verbose)
 		}); err != nil {
 			return fmt.Errorf("error cloning Saltbox repository: %w", err)
 		}
 
 		// Run submodule update after cloning.
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating git submodules", func() error {
-			_, err := executor.Run(ctx, "git",
-				executor.WithArgs("submodule", "update", "--init", "--recursive"),
+		if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Updating git submodules", func(taskCtx context.Context) error {
+			_, err := executor.Run(taskCtx, "git",
+				executor.WithArgs("submodule", "update", "--progress", "--init", "--recursive"),
 				executor.WithWorkingDir(saltboxPath),
 				executor.WithOutputMode(executor.OutputModeDiscard),
 			)
@@ -288,27 +284,29 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) error {
 
 		if os.IsNotExist(err) {
 			// Not a git repo, initialize, fetch, and set up.
-			_ = spinners.RunInfoSpinner("Saltbox directory exists but is not a git repository. Initializing...")
-
-			initCmds := [][]string{
-				{"git", "init"},
-				{"git", "remote", "add", "origin", saltboxRepoURL},
-				{"git", "fetch", "--all", "--prune"},
-				{"git", "branch", branch, "origin/" + branch},
-				{"git", "reset", "--hard", "origin/" + branch},
-				{"git", "submodule", "update", "--init", "--recursive"},
+			initSteps := []struct {
+				name    string
+				command []string
+			}{
+				{name: "Creating Git repository", command: []string{"git", "init"}},
+				{name: "Configuring Git remote", command: []string{"git", "remote", "add", "origin", saltboxRepoURL}},
+				{name: "Fetching repository branches", command: []string{"git", "fetch", "--progress", "--all", "--prune"}},
+				{name: fmt.Sprintf("Creating branch %s", branch), command: []string{"git", "branch", branch, "origin/" + branch}},
+				{name: fmt.Sprintf("Resetting to branch %s", branch), command: []string{"git", "reset", "--hard", "origin/" + branch}},
+				{name: "Updating git submodules", command: []string{"git", "submodule", "update", "--progress", "--init", "--recursive"}},
 			}
 
-			// Wrap the entire loop in a spinner
 			if err := spinners.RunTaskWithSpinnerContext(ctx, "Initializing Git repository", func() error {
-				for _, command := range initCmds {
-					_, err := executor.Run(ctx, command[0],
-						executor.WithArgs(command[1:]...),
-						executor.WithWorkingDir(saltboxPath),
-						executor.WithOutputMode(executor.OutputModeDiscard),
-					)
-					if err != nil {
-						return fmt.Errorf("error running command %v: %w", command, err) // Wrap the error
+				for _, step := range initSteps {
+					if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, step.name, func(taskCtx context.Context) error {
+						_, err := executor.Run(taskCtx, step.command[0],
+							executor.WithArgs(step.command[1:]...),
+							executor.WithWorkingDir(saltboxPath),
+							executor.WithOutputMode(executor.OutputModeDiscard),
+						)
+						return err
+					}); err != nil {
+						return fmt.Errorf("error running command %v: %w", step.command, err)
 					}
 				}
 				return nil
@@ -321,9 +319,7 @@ func SaltboxRepo(ctx context.Context, verbose bool, branch string) error {
 			return fmt.Errorf("error checking for .git directory: %w", err)
 		} else {
 			// It's a git repo, fetch and reset
-			if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating existing Saltbox repository", func() error {
-				return git.FetchAndReset(ctx, saltboxPath, branch, "root", nil, nil, "Saltbox") // Assuming root user
-			}); err != nil {
+			if err := git.FetchAndResetBranch(ctx, saltboxPath, branch, "root", nil, "Saltbox"); err != nil {
 				return fmt.Errorf("error updating Saltbox repository: %w", err)
 			}
 		}
@@ -354,8 +350,8 @@ func InitializeGitHooks(ctx context.Context) error {
 		return fmt.Errorf("error checking for init-hooks script: %w", err)
 	}
 
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Activating Git hooks", func() error {
-		result, err := executor.Run(ctx, "bash",
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Activating Git hooks", func(taskCtx context.Context) error {
+		result, err := executor.Run(taskCtx, "bash",
 			executor.WithArgs(initHooksScript),
 			executor.WithWorkingDir(saltboxPath),
 			executor.WithOutputMode(executor.OutputModeCombined),
@@ -378,23 +374,20 @@ func InstallPipDependencies(ctx context.Context, verbose bool) error {
 	python3Cmd := []string{venvPythonPath, "-m", "pip", "install", "--timeout=360", "--no-cache-dir", "--disable-pip-version-check", "--upgrade"}
 
 	// Install pip, setuptools, and wheel
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing pip, setuptools, and wheel", func() error {
+	if err := spinners.RunTaskWithSpinnerOutputContext(ctx, "Installing pip, setuptools, and wheel", func(stdout, stderr io.Writer) error {
 		installBaseDeps := append(python3Cmd, "pip", "setuptools", "wheel")
 		if verbose {
 			fmt.Println("Running command:", installBaseDeps)
-			_, err := executor.Run(ctx, installBaseDeps[0],
-				executor.WithArgs(installBaseDeps[1:]...),
-				executor.WithOutputMode(executor.OutputModeStream),
-			)
-			return err
 		}
-		// Capture output to prevent terminal interference
-		result, err := executor.Run(ctx, installBaseDeps[0],
+		_, err := executor.Run(ctx, installBaseDeps[0],
 			executor.WithArgs(installBaseDeps[1:]...),
-			executor.WithOutputMode(executor.OutputModeCombined),
+			executor.WithOutputMode(executor.OutputModeStream),
+			executor.WithStdout(stdout),
+			executor.WithStderr(stderr),
+			executor.WithPseudoTerminal(),
 		)
 		if err != nil {
-			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(result.Combined))
+			return fmt.Errorf("command failed: %w", err)
 		}
 		return nil
 	}); err != nil {
@@ -402,24 +395,21 @@ func InstallPipDependencies(ctx context.Context, verbose bool) error {
 	}
 
 	// Install requirements from requirements-saltbox.txt
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Installing requirements from requirements-saltbox.txt", func() error {
+	if err := spinners.RunTaskWithSpinnerOutputContext(ctx, "Installing requirements from requirements-saltbox.txt", func(stdout, stderr io.Writer) error {
 		requirementsPath := filepath.Join(constants.SaltboxRepoPath, "requirements", "requirements-saltbox.txt")
 		installRequirements := append(python3Cmd, "--requirement", requirementsPath)
 		if verbose {
 			fmt.Println("Running command:", installRequirements)
-			_, err := executor.Run(ctx, installRequirements[0],
-				executor.WithArgs(installRequirements[1:]...),
-				executor.WithOutputMode(executor.OutputModeStream),
-			)
-			return err
 		}
-		// Capture output to prevent terminal interference
-		result, err := executor.Run(ctx, installRequirements[0],
+		_, err := executor.Run(ctx, installRequirements[0],
 			executor.WithArgs(installRequirements[1:]...),
-			executor.WithOutputMode(executor.OutputModeCombined),
+			executor.WithOutputMode(executor.OutputModeStream),
+			executor.WithStdout(stdout),
+			executor.WithStderr(stderr),
+			executor.WithPseudoTerminal(),
 		)
 		if err != nil {
-			return fmt.Errorf("command failed: %w\nOutput:\n%s", err, string(result.Combined))
+			return fmt.Errorf("command failed: %w", err)
 		}
 		return nil
 	}); err != nil {

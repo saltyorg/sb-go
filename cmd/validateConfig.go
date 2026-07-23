@@ -12,7 +12,7 @@ var configCmd = &cobra.Command{
 	Long:  `Validate Saltbox configuration files`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
-		if err := validate.AllSaltboxConfigs(verbose); err != nil {
+		if err := validate.AllSaltboxConfigsDetailed(verbose); err != nil {
 			return err
 		}
 		return nil

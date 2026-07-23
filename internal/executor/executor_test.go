@@ -200,6 +200,40 @@ func TestRunVerbose(t *testing.T) {
 	}
 }
 
+func TestManagedOutputOverridesDiscardMode(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	ctx := WithManagedOutput(context.Background(), &stdout, &stderr)
+
+	_, err := Run(ctx, "sh",
+		WithArgs("-c", "printf stdout; printf stderr >&2"),
+		WithOutputMode(OutputModeDiscard),
+	)
+	if err != nil {
+		t.Fatalf("run command with managed output: %v", err)
+	}
+	if stdout.String() != "stdout" || stderr.String() != "stderr" {
+		t.Fatalf("managed output was not streamed: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestManagedOutputDoesNotOverrideInteractiveMode(t *testing.T) {
+	var managed, interactive bytes.Buffer
+	ctx := WithManagedOutput(context.Background(), &managed, &managed)
+
+	_, err := Run(ctx, "printf",
+		WithArgs("interactive"),
+		WithOutputMode(OutputModeInteractive),
+		WithStdout(&interactive),
+		WithStderr(&interactive),
+	)
+	if err != nil {
+		t.Fatalf("run interactive command: %v", err)
+	}
+	if managed.Len() != 0 || interactive.String() != "interactive" {
+		t.Fatalf("managed output changed interactive IO: managed=%q interactive=%q", managed.String(), interactive.String())
+	}
+}
+
 func TestFormatError(t *testing.T) {
 	result := &Result{
 		ExitCode: 1,

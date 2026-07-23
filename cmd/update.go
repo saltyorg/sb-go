@@ -89,8 +89,8 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 	}
 
 	// Update apt cache
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Updating apt package cache", func() error {
-		updateCache := apt.UpdatePackageLists(ctx, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Updating apt package cache", func(taskCtx context.Context) error {
+		updateCache := apt.UpdatePackageLists(taskCtx, verbose)
 		return updateCache()
 	}); err != nil {
 		return fmt.Errorf("error updating apt cache: %w", err)
@@ -148,11 +148,6 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 
 // validateSaltboxConfig validates the Saltbox configuration.
 func validateSaltboxConfig(verbose bool) error {
-	if err := spinners.RunInfoSpinner("Validating Saltbox configuration"); err != nil {
-		return err
-	}
-
-	// Validate Saltbox configuration
 	err := validate.AllSaltboxConfigs(verbose)
 	if err != nil {
 		return fmt.Errorf("error validating configs: %w", err)
@@ -163,10 +158,29 @@ func validateSaltboxConfig(verbose bool) error {
 
 // updateSaltbox updates the Saltbox repository and configuration.
 func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
+	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SaltboxRepoPath)))
+	}
+	branch, err := git.ResolveUpdateBranch(ctx, constants.SaltboxRepoPath, "master", branchReset, "Saltbox")
+	if err != nil {
+		return err
+	}
+	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+		TaskName:         "Updating Saltbox",
+		StopMessage:      "Saltbox updated",
+		StopFailMessage:  "Saltbox update",
+		CollapseChildren: true,
+	}, func() error {
+		return updateSaltboxComponents(ctx, verbose, branch)
+	})
+}
+
+func updateSaltboxComponents(ctx context.Context, verbose bool, branch string) error {
 	// Check if Saltbox repo exists
 	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
 		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render("error: SB_REPO_PATH does not exist or is not a directory"))
+		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SaltboxRepoPath)))
 	}
 
 	// Get Saltbox user
@@ -176,8 +190,8 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	// Clean up old deadsnakes packages on Ubuntu 20.04 and 22.04
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for old deadsnakes Python packages", func() error {
-		cleaned, err := python.CleanupDeadsnakesIfNeeded(ctx, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Checking for old deadsnakes Python packages", func(taskCtx context.Context) error {
+		cleaned, err := python.CleanupDeadsnakesIfNeeded(taskCtx, verbose)
 		if err != nil {
 			return err
 		}
@@ -190,8 +204,8 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	// Ensure uv is installed
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Ensuring uv is installed", func() error {
-		return uv.DownloadAndInstallUV(ctx, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Ensuring uv is installed", func(taskCtx context.Context) error {
+		return uv.DownloadAndInstallUV(taskCtx, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing uv: %w", err)
 	}
@@ -204,8 +218,8 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	// Ensure Python is installed via uv
-	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion), func() error {
-		return uv.InstallPython(ctx, constants.AnsibleVenvPythonVersion, verbose)
+	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion), func(taskCtx context.Context) error {
+		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing Python %s: %w", constants.AnsibleVenvPythonVersion, err)
 	}
@@ -217,7 +231,7 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(ctx, constants.SaltboxRepoPath, "master", saltboxUser, nil, branchReset, "Saltbox"); err != nil {
+	if err := git.FetchAndResetBranch(ctx, constants.SaltboxRepoPath, branch, saltboxUser, nil, "Saltbox"); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
@@ -258,12 +272,30 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 		}
 	}
 
-	// Final success message
-	return spinners.RunInfoSpinner("Saltbox Update Completed")
+	return nil
 }
 
 // updateSandbox updates the Sandbox repository and configuration.
 func updateSandbox(ctx context.Context, branchReset *bool) error {
+	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
+		normalStyle := lipgloss.NewStyle()
+		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)))
+	}
+	branch, err := git.ResolveUpdateBranch(ctx, constants.SandboxRepoPath, "master", branchReset, "Sandbox")
+	if err != nil {
+		return err
+	}
+	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
+		TaskName:         "Updating Sandbox",
+		StopMessage:      "Sandbox updated",
+		StopFailMessage:  "Sandbox update",
+		CollapseChildren: true,
+	}, func() error {
+		return updateSandboxComponents(ctx, branch)
+	})
+}
+
+func updateSandboxComponents(ctx context.Context, branch string) error {
 	// Check if Sandbox repo exists
 	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
 		normalStyle := lipgloss.NewStyle()
@@ -283,7 +315,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 	}
 
 	// Fetch and reset git repo - this function already has internal spinners
-	if err := git.FetchAndReset(ctx, constants.SandboxRepoPath, "master", saltboxUser, nil, branchReset, "Sandbox"); err != nil {
+	if err := git.FetchAndResetBranch(ctx, constants.SandboxRepoPath, branch, saltboxUser, nil, "Sandbox"); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
@@ -314,8 +346,7 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 		}
 	}
 
-	// Final success message
-	return spinners.RunInfoSpinner("Sandbox Update Completed")
+	return nil
 }
 
 // regenerateInstalledCompletions auto-installs or regenerates shell completion files
