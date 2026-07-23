@@ -82,20 +82,15 @@ func EnsureRemoteFetchAllBranches(ctx context.Context, repoPath string) error {
 	return nil
 }
 
-// FetchAndReset performs a git fetch and reset to a specified branch.
-// The context parameter allows for cancellation of git operations.
-// The repoName parameter is used to identify the repository in user prompts.
-func FetchAndReset(ctx context.Context, repoPath, defaultBranch, user string, customCommands [][]string, branchReset *bool, repoName string) error {
-	branch, err := ResolveUpdateBranch(ctx, repoPath, defaultBranch, branchReset, repoName)
-	if err != nil {
-		return err
-	}
-	return FetchAndResetBranch(ctx, repoPath, branch, user, customCommands, repoName)
-}
-
 // ResolveUpdateBranch determines the branch to update and performs any required
 // interactive prompt before a terminal renderer is started.
-func ResolveUpdateBranch(ctx context.Context, repoPath, defaultBranch string, branchReset *bool, repoName string) (string, error) {
+func ResolveUpdateBranch(
+	ctx context.Context,
+	runner *spinners.Runner,
+	repoPath, defaultBranch string,
+	branchReset *bool,
+	repoName string,
+) (string, error) {
 	// Get the current branch name
 	result, err := executor.Run(ctx, "git",
 		executor.WithArgs("rev-parse", "--abbrev-ref", "HEAD"),
@@ -109,17 +104,13 @@ func ResolveUpdateBranch(ctx context.Context, repoPath, defaultBranch string, br
 	var branch string
 	// Determine if a reset to default_branch is needed
 	if currentBranch != defaultBranch {
-		if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Currently on branch '%s'", repoName, currentBranch)); err != nil {
-			return "", err
-		}
+		runner.Info(fmt.Sprintf("%s: Currently on branch '%s'", repoName, currentBranch))
 
 		if branchReset == nil {
 			// No flag specified - prompt user if TTY, otherwise stay on current branch
 			if !tty.IsInteractive() {
 				// No TTY: default to keeping current branch (conservative approach)
-				if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s' (no TTY detected)", repoName, currentBranch)); err != nil {
-					return "", err
-				}
+				runner.Info(fmt.Sprintf("%s: Updating the current branch '%s' (no TTY detected)", repoName, currentBranch))
 				branch = currentBranch
 			} else {
 				// TTY available: prompt user
@@ -129,9 +120,7 @@ func ResolveUpdateBranch(ctx context.Context, repoPath, defaultBranch string, br
 				input = strings.TrimSpace(strings.ToLower(input))
 
 				if input != "y" {
-					if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
-						return "", err
-					}
+					runner.Info(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch))
 					branch = currentBranch
 				} else {
 					branch = defaultBranch
@@ -142,9 +131,7 @@ func ResolveUpdateBranch(ctx context.Context, repoPath, defaultBranch string, br
 			branch = defaultBranch
 		} else {
 			// --keep-branch flag: stay on current branch
-			if err := spinners.RunInfoSpinner(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch)); err != nil {
-				return "", err
-			}
+			runner.Info(fmt.Sprintf("%s: Updating the current branch '%s'", repoName, currentBranch))
 			branch = currentBranch
 		}
 	} else {
@@ -155,7 +142,13 @@ func ResolveUpdateBranch(ctx context.Context, repoPath, defaultBranch string, br
 
 // FetchAndResetBranch updates a repository after branch selection has already
 // been resolved.
-func FetchAndResetBranch(ctx context.Context, repoPath, branch, user string, customCommands [][]string, repoName string) error {
+func FetchAndResetBranch(
+	ctx context.Context,
+	parent *spinners.Task,
+	repoPath, branch, user string,
+	customCommands [][]string,
+	repoName string,
+) error {
 	fetchCommands := [][]string{
 		{"git", "fetch", "--progress"},
 	}
@@ -185,38 +178,31 @@ func FetchAndResetBranch(ctx context.Context, repoPath, branch, user string, cus
 		return nil
 	}
 
-	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
-		TaskName:         fmt.Sprintf("Updating %s repository", repoName),
-		StopMessage:      fmt.Sprintf("%s repository updated (%s)", repoName, branch),
-		StopFailMessage:  fmt.Sprintf("%s repository update", repoName),
-		CollapseChildren: true,
-	}, func() error {
-		steps := []struct {
-			name     string
-			commands [][]string
-		}{
-			{name: "Fetching repository changes", commands: fetchCommands},
-			{name: fmt.Sprintf("Resetting repository to %s", branch), commands: resetCommands},
-			{name: "Updating git submodules", commands: submoduleCommands},
-			{name: "Setting repository ownership", commands: ownershipCommands},
+	steps := []struct {
+		name     string
+		commands [][]string
+	}{
+		{name: "Fetching repository changes", commands: fetchCommands},
+		{name: fmt.Sprintf("Resetting repository to %s", branch), commands: resetCommands},
+		{name: "Updating git submodules", commands: submoduleCommands},
+		{name: "Setting repository ownership", commands: ownershipCommands},
+	}
+	for _, step := range steps {
+		if err := parent.RunStreaming(ctx, spinners.TaskSpec{Running: step.name}, func(taskCtx context.Context) error {
+			return runCommands(taskCtx, step.commands)
+		}); err != nil {
+			return err
 		}
-		for _, step := range steps {
-			if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, step.name, func(taskCtx context.Context) error {
-				return runCommands(taskCtx, step.commands)
-			}); err != nil {
-				return err
-			}
-		}
+	}
 
-		if len(customCommands) > 0 {
-			if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Running repository update hooks", func(taskCtx context.Context) error {
-				return runCommands(taskCtx, customCommands)
-			}); err != nil {
-				return err
-			}
+	if len(customCommands) > 0 {
+		if err := parent.RunStreaming(ctx, spinners.TaskSpec{Running: "Running repository update hooks"}, func(taskCtx context.Context) error {
+			return runCommands(taskCtx, customCommands)
+		}); err != nil {
+			return err
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 // GetGitCommitHash returns the current Git commit hash of the repository.

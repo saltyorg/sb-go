@@ -31,7 +31,7 @@ import (
 type CustomValidator func(value any, config map[string]any) error
 
 // AsyncAPIValidator function type for async API validation
-type AsyncAPIValidator func(value any, config map[string]any) error
+type AsyncAPIValidator func(context.Context, any, map[string]any) error
 
 // APIValidationResult holds the result of an async API validation
 type APIValidationResult struct {
@@ -41,6 +41,8 @@ type APIValidationResult struct {
 
 // AsyncValidationContext manages async API validations
 type AsyncValidationContext struct {
+	ctx     context.Context
+	task    *spinners.Task
 	eg      *errgroup.Group
 	results chan APIValidationResult
 	errors  []error
@@ -48,9 +50,11 @@ type AsyncValidationContext struct {
 }
 
 // NewAsyncValidationContext creates a new async validation context
-func NewAsyncValidationContext() *AsyncValidationContext {
+func NewAsyncValidationContext(ctx context.Context, task *spinners.Task) *AsyncValidationContext {
 	eg := &errgroup.Group{}
 	return &AsyncValidationContext{
+		ctx:     ctx,
+		task:    task,
 		eg:      eg,
 		results: make(chan APIValidationResult, 10), // Buffer for multiple API validations
 	}
@@ -60,13 +64,12 @@ func NewAsyncValidationContext() *AsyncValidationContext {
 func (ctx *AsyncValidationContext) AddAPIValidation(name string, validator AsyncAPIValidator, value any, config map[string]any) {
 	ctx.eg.Go(func() error {
 		label := apiValidationLabel(name)
-		err := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
-			TaskName:        "Validating " + label,
-			StopMessage:     label + " validated",
-			StopFailMessage: label + " validation",
-			IndentLevel:     2,
-		}, func() error {
-			return validator(value, config)
+		err := ctx.task.Run(ctx.ctx, spinners.TaskSpec{
+			Running: "Validating " + label,
+			Success: label + " validated",
+			Failure: label + " validation",
+		}, func(context.Context, *spinners.Task) error {
+			return validator(ctx.ctx, value, config)
 		})
 		ctx.results <- APIValidationResult{Name: name, Error: err}
 		return nil // We collect errors via channel, not errgroup's error return
@@ -230,7 +233,7 @@ func validateCloudflareConfigSync(value any, config map[string]any) error {
 }
 
 // validateCloudflareConfigAsync performs actual Cloudflare API validation
-func validateCloudflareConfigAsync(value any, config map[string]any) error {
+func validateCloudflareConfigAsync(ctx context.Context, value any, config map[string]any) error {
 	startTime := time.Now()
 	logging.DebugBool(verboseMode, "validateCloudflareConfigAsync starting at %v", startTime)
 
@@ -267,7 +270,7 @@ func validateCloudflareConfigAsync(value any, config map[string]any) error {
 
 	// Perform actual Cloudflare API validation
 	logging.DebugBool(verboseMode, "validateCloudflareConfigAsync starting API calls for domain: %s", domain)
-	err := validateCloudflareCredentials(api, email, domain)
+	err := validateCloudflareCredentials(ctx, api, email, domain)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -306,7 +309,7 @@ func validateDockerhubConfigSync(value any, _ map[string]any) error {
 }
 
 // validateDockerhubConfigAsync performs actual Docker Hub authentication test
-func validateDockerhubConfigAsync(value any, _ map[string]any) error {
+func validateDockerhubConfigAsync(ctx context.Context, value any, _ map[string]any) error {
 	startTime := time.Now()
 	logging.DebugBool(verboseMode, "validateDockerhubConfigAsync starting at %v", startTime)
 
@@ -330,7 +333,7 @@ func validateDockerhubConfigAsync(value any, _ map[string]any) error {
 
 	// Perform actual Docker Hub authentication test
 	logging.DebugBool(verboseMode, "validateDockerhubConfigAsync starting API call for user: %s", username)
-	err := validateDockerhubCredentials(username, token)
+	err := validateDockerhubCredentials(ctx, username, token)
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -508,7 +511,7 @@ func isValidSSHKey(key string) bool {
 }
 
 // validateCloudflareCredentials performs actual Cloudflare API validation
-func validateCloudflareCredentials(apiKey, email, domain string) error {
+func validateCloudflareCredentials(ctx context.Context, apiKey, email, domain string) error {
 	logging.DebugBool(verboseMode, "validateCloudflareCredentials called for domain: %s", domain)
 
 	// Create Cloudflare API client with timeout
@@ -522,7 +525,7 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 
 	// Verify API key
 	logging.DebugBool(verboseMode, "validateCloudflareCredentials - verifying API key")
-	_, err := api.User.Get(context.Background())
+	_, err := api.User.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("cloudflare API key verification failed: %w", err)
 	}
@@ -537,7 +540,7 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 	// Verify domain ownership
 	logging.DebugBool(verboseMode, "validateCloudflareCredentials - checking domain ownership for %s", rootDomain)
 	domainStart := time.Now()
-	zonesList, err := api.Zones.List(context.Background(), zones.ZoneListParams{
+	zonesList, err := api.Zones.List(ctx, zones.ZoneListParams{
 		Name: cloudflare.F(rootDomain),
 	})
 
@@ -557,7 +560,6 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 	// Check SSL settings directly (most efficient approach)
 	logging.DebugBool(verboseMode, "validateCloudflareCredentials - checking SSL settings")
 	sslStart := time.Now()
-	ctx := context.Background()
 	sslSettings, err := api.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{
 		ZoneID: cloudflare.F(zoneID),
 	})
@@ -587,13 +589,13 @@ func validateCloudflareCredentials(apiKey, email, domain string) error {
 }
 
 // validateDockerhubCredentials performs actual Docker Hub authentication
-func validateDockerhubCredentials(username, token string) error {
+func validateDockerhubCredentials(ctx context.Context, username, token string) error {
 	logging.DebugBool(verboseMode, "validateDockerhubCredentials called for username: %s", username)
 
 	dockerhubLoginUrl := "https://hub.docker.com/v2/users/login/"
 	payload := strings.NewReader(fmt.Sprintf(`{"username": "%s", "password": "%s"}`, username, token))
 
-	req, err := http.NewRequest("POST", dockerhubLoginUrl, payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dockerhubLoginUrl, payload)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

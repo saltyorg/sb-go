@@ -34,7 +34,7 @@ func init() {
 }
 
 func changeBranch(ctx context.Context, branchName string) error {
-	spinners.SetVerboseMode(false)
+	runner := spinners.NewRunner(spinners.RunnerOptions{})
 
 	saltboxUser, err := utils.GetSaltboxUser()
 	if err != nil {
@@ -45,26 +45,46 @@ func changeBranch(ctx context.Context, branchName string) error {
 		return err
 	}
 
-	selectedBranch, err := git.ResolveUpdateBranch(ctx, constants.SaltboxRepoPath, branchName, nil, "Saltbox")
+	selectedBranch, err := git.ResolveUpdateBranch(ctx, runner, constants.SaltboxRepoPath, branchName, nil, "Saltbox")
 	if err != nil {
 		return err
 	}
 
-	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
-		TaskName:         fmt.Sprintf("Switching Saltbox repository to %s", selectedBranch),
-		StopMessage:      fmt.Sprintf("Saltbox repository switched to %s", selectedBranch),
-		StopFailMessage:  "Saltbox branch switch",
-		CollapseChildren: true,
-	}, func() error {
-		if err := git.FetchAndResetBranch(ctx, constants.SaltboxRepoPath, selectedBranch, saltboxUser, nil, "Saltbox"); err != nil {
+	return runner.Run(ctx, spinners.TaskSpec{
+		Running: fmt.Sprintf("Switching Saltbox repository to %s", selectedBranch),
+		Success: fmt.Sprintf("Saltbox repository switched to %s", selectedBranch),
+		Failure: "Saltbox branch switch",
+	}, func(ctx context.Context, task *spinners.Task) error {
+		if err := task.Run(ctx, spinners.TaskSpec{
+			Running:      "Updating Saltbox repository",
+			Success:      fmt.Sprintf("Saltbox repository updated (%s)", selectedBranch),
+			Failure:      "Saltbox repository update",
+			ChildDisplay: spinners.CollapseChildTasks,
+		}, func(ctx context.Context, gitTask *spinners.Task) error {
+			return git.FetchAndResetBranch(ctx, gitTask, constants.SaltboxRepoPath, selectedBranch, saltboxUser, nil, "Saltbox")
+		}); err != nil {
 			return err
 		}
 
-		if err := fact.DownloadAndInstallSaltboxFact(false, false); err != nil {
+		if err := task.Run(ctx, spinners.TaskSpec{
+			Running:      "Checking saltbox.fact",
+			Success:      "saltbox.fact is ready",
+			Failure:      "saltbox.fact update",
+			ChildDisplay: spinners.CollapseChildTasks,
+		}, func(ctx context.Context, factTask *spinners.Task) error {
+			return fact.DownloadAndInstallSaltboxFact(ctx, factTask, false, false)
+		}); err != nil {
 			return err
 		}
 
-		if err := venv.ManageAnsibleVenv(ctx, false, saltboxUser, false); err != nil {
+		if err := task.Run(ctx, spinners.TaskSpec{
+			Running:      "Preparing Ansible virtual environment",
+			Success:      "Ansible virtual environment ready",
+			Failure:      "Ansible virtual environment",
+			ChildDisplay: spinners.CollapseChildTasks,
+		}, func(ctx context.Context, venvTask *spinners.Task) error {
+			return venv.ManageAnsibleVenv(ctx, venvTask, false, saltboxUser, false)
+		}); err != nil {
 			return fmt.Errorf("error managing Ansible venv: %w", err)
 		}
 
@@ -73,7 +93,7 @@ func changeBranch(ctx context.Context, branchName string) error {
 			return fmt.Errorf("error creating cache: %w", err)
 		}
 
-		return spinners.RunTaskWithSpinnerContext(ctx, "Updating Saltbox tags cache", func() error {
+		return task.Run(ctx, spinners.TaskSpec{Running: "Updating Saltbox tags cache"}, func(context.Context, *spinners.Task) error {
 			_, err := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
 			return err
 		})

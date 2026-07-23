@@ -43,8 +43,7 @@ func init() {
 }
 
 func handleAnnouncements(verbose bool, beforePath, afterPath, repo string) error {
-	// Set verbose mode for spinners
-	spinners.SetVerboseMode(verbose)
+	runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
 
 	// Validate repository name
 	if repo != "Saltbox" && repo != "Sandbox" {
@@ -78,7 +77,7 @@ func handleAnnouncements(verbose bool, beforePath, afterPath, repo string) error
 	announcementDiffs := []*announcements.AnnouncementDiff{diff}
 
 	// Display new announcements
-	if err := announcements.DisplayAnnouncements(announcementDiffs); err != nil {
+	if err := announcements.DisplayAnnouncements(runner, announcementDiffs); err != nil {
 		return fmt.Errorf("error displaying announcements: %w", err)
 	}
 
@@ -92,9 +91,7 @@ func handleAnnouncements(verbose bool, beforePath, afterPath, repo string) error
 	if len(migrationRequests) > 0 {
 		for _, migration := range migrationRequests {
 			msg := fmt.Sprintf("Would execute migration '%s' for %s repository", migration.Tag, migration.RepoName)
-			if err := spinners.RunInfoSpinner(msg); err != nil {
-				return err
-			}
+			runner.Info(msg)
 		}
 	}
 

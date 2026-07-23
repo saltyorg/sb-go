@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"context"
+
+	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/validate"
 
 	"github.com/spf13/cobra"
@@ -13,10 +16,14 @@ var configCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
-		if err := validate.AllSaltboxConfigsDetailed(verbose); err != nil {
-			return err
-		}
-		return nil
+		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
+		return runner.Run(cmd.Context(), spinners.TaskSpec{
+			Running:      "Validating Saltbox configuration",
+			Success:      "Saltbox configuration validated",
+			ChildDisplay: spinners.RetainChildTasks,
+		}, func(ctx context.Context, task *spinners.Task) error {
+			return validate.AllSaltboxConfigs(ctx, task, verbose)
+		})
 	},
 }
 

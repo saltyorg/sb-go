@@ -92,7 +92,8 @@ func TestFastSpinnerPTYHelper(t *testing.T) {
 	if os.Getenv(ptySpinnerHelperEnv) != "1" {
 		t.Skip("PTY subprocess helper")
 	}
-	err := runRootTask(context.Background(), withDefaults(SpinnerOptions{TaskName: "fast"}), func() error {
+	runner := NewRunner(RunnerOptions{})
+	err := runner.Run(context.Background(), TaskSpec{Running: "fast"}, func(context.Context, *Task) error {
 		return nil
 	})
 	if err != nil {

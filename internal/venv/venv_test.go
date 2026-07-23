@@ -12,8 +12,11 @@ import (
 	"testing"
 
 	"github.com/creack/pty"
+	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/spinners"
 )
+
+const invalidPackageTestName = "sb-go-intentionally-invalid-package-7f42d9"
 
 func TestRunCommandProvidesTerminalToVenvPython(t *testing.T) {
 	python, err := exec.LookPath("python3")
@@ -141,8 +144,8 @@ func TestRealPipThroughSpinner(t *testing.T) {
 		t.Fatalf("create test venv: %v\n%s", err, output)
 	}
 
-	spinners.SetVerboseMode(false)
-	err = spinners.RunTaskWithSpinnerOutputContext(context.Background(), "Installing test package", func(stdout, stderr io.Writer) error {
+	runner := spinners.NewRunner(spinners.RunnerOptions{})
+	err = runner.RunOutput(context.Background(), spinners.TaskSpec{Running: "Installing test package"}, func(ctx context.Context, stdout, stderr io.Writer) error {
 		command := []string{
 			filepath.Join(venvPath, "bin", "python"),
 			"-m", "pip", "install",
@@ -161,9 +164,75 @@ func TestRealPipThroughSpinner(t *testing.T) {
 			"setuptools",
 			"wheel",
 		}
-		return runCommand(context.Background(), command, os.Environ(), false, stdout, stderr)
+		return runCommand(ctx, command, os.Environ(), false, stdout, stderr)
 	})
 	if err != nil {
 		t.Fatalf("run real pip through spinner: %v", err)
+	}
+}
+
+func TestRealInvalidPackageFailuresThroughSpinner(t *testing.T) {
+	if os.Getenv("SB_REAL_PACKAGE_FAILURE_TEST") == "" {
+		t.Skip("set SB_REAL_PACKAGE_FAILURE_TEST=1 to run the invalid APT/pip integration test")
+	}
+	if os.Getenv("SB_REAL_PACKAGE_FAILURE_HELPER") == "" {
+		command := exec.Command(os.Args[0], "-test.run", "^TestRealInvalidPackageFailuresThroughSpinner$", "-test.v")
+		command.Env = append(os.Environ(), "SB_REAL_PACKAGE_FAILURE_HELPER=1")
+		terminal, err := pty.StartWithSize(command, &pty.Winsize{Rows: 40, Cols: 120})
+		if err != nil {
+			t.Fatalf("start package failure test in terminal: %v", err)
+		}
+		rendered, _ := io.ReadAll(terminal)
+		if err := command.Wait(); err != nil {
+			t.Fatalf("package failure test failed: %v\n%s", err, rendered)
+		}
+
+		for _, expected := range [][]byte{
+			[]byte("Unable to locate package " + invalidPackageTestName),
+			[]byte("No matching distribution found for " + invalidPackageTestName),
+			[]byte("Installing invalid APT package: Failed"),
+			[]byte("Installing invalid pip package: Failed"),
+		} {
+			if !bytes.Contains(rendered, expected) {
+				t.Fatalf("failure output %q was not retained:\n%q", expected, rendered)
+			}
+		}
+		return
+	}
+
+	ctx := context.Background()
+	aptRunner := spinners.NewRunner(spinners.RunnerOptions{})
+	aptErr := aptRunner.Run(ctx, spinners.TaskSpec{Running: "Testing invalid APT package"}, func(ctx context.Context, task *spinners.Task) error {
+		return task.RunStreaming(ctx, spinners.TaskSpec{Running: "Installing invalid APT package"}, func(taskCtx context.Context) error {
+			return apt.InstallPackage(taskCtx, []string{invalidPackageTestName}, false)()
+		})
+	})
+	if aptErr == nil {
+		t.Fatal("invalid APT package unexpectedly installed")
+	}
+
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is not installed")
+	}
+	venvPath := filepath.Join(t.TempDir(), "venv")
+	if output, err := exec.Command(python, "-m", "venv", venvPath).CombinedOutput(); err != nil {
+		t.Fatalf("create test venv: %v\n%s", err, output)
+	}
+
+	pipRunner := spinners.NewRunner(spinners.RunnerOptions{})
+	pipErr := pipRunner.Run(ctx, spinners.TaskSpec{Running: "Testing invalid pip package"}, func(ctx context.Context, task *spinners.Task) error {
+		return task.RunOutput(ctx, spinners.TaskSpec{Running: "Installing invalid pip package"}, func(ctx context.Context, stdout, stderr io.Writer) error {
+			command := []string{
+				filepath.Join(venvPath, "bin", "python"),
+				"-m", "pip", "install",
+				"--disable-pip-version-check",
+				invalidPackageTestName,
+			}
+			return runCommand(ctx, command, os.Environ(), false, stdout, stderr)
+		})
+	})
+	if pipErr == nil {
+		t.Fatal("invalid pip package unexpectedly installed")
 	}
 }

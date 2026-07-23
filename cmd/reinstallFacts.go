@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/saltyorg/sb-go/internal/fact"
@@ -18,13 +19,15 @@ var reinstallFactsCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 
-		// Set verbose mode for spinners
-		spinners.SetVerboseMode(verbose)
-
-		if err := fact.DownloadAndInstallSaltboxFact(true, verbose); err != nil {
-			return fmt.Errorf("error reinstalling saltbox.fact: %w", err)
-		}
-		return nil
+		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
+		return runner.Run(cmd.Context(), spinners.TaskSpec{
+			Running: "Reinstalling saltbox.fact",
+		}, func(ctx context.Context, task *spinners.Task) error {
+			if err := fact.DownloadAndInstallSaltboxFact(ctx, task, true, verbose); err != nil {
+				return fmt.Errorf("error reinstalling saltbox.fact: %w", err)
+			}
+			return nil
+		})
 	},
 }
 

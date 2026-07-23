@@ -382,7 +382,7 @@ func (av *announcementViewer) helpView() string {
 }
 
 // DisplayAnnouncements displays new announcements using Glamour and Bubble Tea
-func DisplayAnnouncements(diffs []*AnnouncementDiff) error {
+func DisplayAnnouncements(runner *spinners.Runner, diffs []*AnnouncementDiff) error {
 	// Collect all announcements
 	var allAnnouncements []announcementItem
 
@@ -400,9 +400,7 @@ func DisplayAnnouncements(diffs []*AnnouncementDiff) error {
 	}
 
 	// Info message before displaying announcements
-	if err := spinners.RunInfoSpinner("Displaying new announcements"); err != nil {
-		return err
-	}
+	runner.Info("Displaying new announcements")
 
 	// Pre-render all announcements BEFORE starting Bubbletea
 	// This avoids any async complexity and matches the fast plain-text version
@@ -568,21 +566,17 @@ func readMigrationApproval(input io.Reader, output io.Writer) (bool, error) {
 
 // ExecuteMigrations runs the requested migration playbook tags.
 // It accepts a context parameter for proper cancellation support.
-func ExecuteMigrations(ctx context.Context, migrationRequests []MigrationRequest) error {
+func ExecuteMigrations(ctx context.Context, runner *spinners.Runner, migrationRequests []MigrationRequest) error {
 	if len(migrationRequests) == 0 {
 		return nil
 	}
 
-	if err := spinners.RunInfoSpinner("Starting migration execution"); err != nil {
-		return err
-	}
+	runner.Info("Starting migration execution")
 
 	for _, migration := range migrationRequests {
 		// Info message before running each migration
 		migrationMsg := fmt.Sprintf("Running migration '%s' for %s repository", migration.Tag, migration.RepoName)
-		if err := spinners.RunInfoSpinner(migrationMsg); err != nil {
-			return err
-		}
+		runner.Info(migrationMsg)
 
 		// Determine the correct playbook path based on repository
 		var playbookPath string
@@ -605,9 +599,7 @@ func ExecuteMigrations(ctx context.Context, migrationRequests []MigrationRequest
 		}
 	}
 
-	if err := spinners.RunInfoSpinner("All migrations completed successfully"); err != nil {
-		return err
-	}
+	runner.Info("All migrations completed successfully")
 
 	return nil
 }

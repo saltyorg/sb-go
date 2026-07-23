@@ -1,6 +1,8 @@
 package fact
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -53,11 +55,17 @@ func TestFetchLatestReleaseInfoFromURL(t *testing.T) {
 }
 
 func TestFetchLatestReleaseInfoFallback(t *testing.T) {
-	originalVerboseMode := spinners.VerboseMode
-	spinners.VerboseMode = true
-	t.Cleanup(func() {
-		spinners.VerboseMode = originalVerboseMode
-	})
+	runFetch := func(proxyURL, githubURL string) (string, int64, error) {
+		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: true, Output: io.Discard})
+		var version string
+		var size int64
+		err := runner.Run(context.Background(), spinners.TaskSpec{Running: "test"}, func(ctx context.Context, task *spinners.Task) error {
+			var err error
+			version, size, err = fetchLatestReleaseInfo(ctx, task, proxyURL, githubURL, true)
+			return err
+		})
+		return version, size, err
+	}
 
 	t.Run("uses proxy response when usable", func(t *testing.T) {
 		proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -72,7 +80,7 @@ func TestFetchLatestReleaseInfoFallback(t *testing.T) {
 		}))
 		defer github.Close()
 
-		version, size, err := fetchLatestReleaseInfo(proxy.URL, github.URL, true)
+		version, size, err := runFetch(proxy.URL, github.URL)
 		if err != nil {
 			t.Fatalf("fetchLatestReleaseInfo() returned error: %v", err)
 		}
@@ -95,7 +103,7 @@ func TestFetchLatestReleaseInfoFallback(t *testing.T) {
 		}))
 		defer github.Close()
 
-		version, size, err := fetchLatestReleaseInfo(proxy.URL, github.URL, true)
+		version, size, err := runFetch(proxy.URL, github.URL)
 		if err != nil {
 			t.Fatalf("fetchLatestReleaseInfo() returned error: %v", err)
 		}

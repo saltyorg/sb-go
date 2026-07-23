@@ -18,41 +18,23 @@ import (
 // ManageAnsibleVenv manages the Ansible virtual environment.
 // The context parameter allows for cancellation of long-running operations.
 // The verbose parameter is passed to the global spinner mode - when true, spinners print text instead of animating.
-func ManageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser string, verbose bool) error {
-	return runManagedAnsibleVenv(ctx, forceRecreate, saltboxUser, verbose, false)
+func ManageAnsibleVenv(
+	ctx context.Context,
+	task *spinners.Task,
+	forceRecreate bool,
+	saltboxUser string,
+	verbose bool,
+) error {
+	return manageAnsibleVenv(ctx, task, forceRecreate, saltboxUser, verbose)
 }
 
-// ManageAnsibleVenvDetailed manages the environment while retaining completed
-// child tasks in the live hierarchy. It is intended for dedicated venv commands.
-func ManageAnsibleVenvDetailed(ctx context.Context, forceRecreate bool, saltboxUser string, verbose bool) error {
-	return runManagedAnsibleVenv(ctx, forceRecreate, saltboxUser, verbose, true)
-}
-
-func runManagedAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser string, verbose, retainChildren bool) error {
-	action := "Preparing Ansible virtual environment"
-	stopMessage := "Ansible virtual environment ready"
-	if forceRecreate {
-		action = "Recreating Ansible virtual environment"
-		stopMessage = "Ansible virtual environment recreated"
-	}
-	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
-		TaskName:         action,
-		StopMessage:      stopMessage,
-		StopFailMessage:  "Ansible virtual environment",
-		CollapseChildren: !retainChildren,
-		RetainChildren:   retainChildren,
-	}, func() error {
-		return manageAnsibleVenv(ctx, forceRecreate, saltboxUser, verbose)
-	})
-}
-
-func manageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser string, verbose bool) error {
+func manageAnsibleVenv(ctx context.Context, task *spinners.Task, forceRecreate bool, saltboxUser string, verbose bool) error {
 	ansibleVenvPath := constants.AnsibleVenvPath
 	venvPythonPath := constants.AnsibleVenvPythonPath()
 	pythonMissing := false
 
 	// Check the Python version
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking Python version", func() error {
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Checking Python version"}, func(context.Context, *spinners.Task) error {
 		var err error
 		pythonMissing, err = checkPythonVersion(ctx, ansibleVenvPath, venvPythonPath)
 		return err
@@ -63,14 +45,12 @@ func manageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 	recreate := forceRecreate || pythonMissing
 
 	if !forceRecreate && pythonMissing {
-		if err := spinners.RunWarningSpinner(fmt.Sprintf("Python %s not detected in venv, recreation required", constants.AnsibleVenvPythonVersion)); err != nil {
-			return err
-		}
+		task.Warning(fmt.Sprintf("Python %s not detected in venv, recreation required", constants.AnsibleVenvPythonVersion))
 	}
 
 	if recreate {
 		// Remove existing venv
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Removing existing venv", func() error {
+		if err := task.Run(ctx, spinners.TaskSpec{Running: "Removing existing venv"}, func(context.Context, *spinners.Task) error {
 			return removeExistingVenv(ctx, ansibleVenvPath)
 		}); err != nil {
 			return fmt.Errorf("error removing existing venv: %w", err)
@@ -79,43 +59,46 @@ func manageAnsibleVenv(ctx context.Context, forceRecreate bool, saltboxUser stri
 
 	if _, err := os.Stat(ansibleVenvPath); os.IsNotExist(err) {
 		// Create venv
-		if err := spinners.RunTaskWithSpinnerContext(ctx, "Creating virtual environment", func() error {
-			return createVirtualEnv(ctx, ansibleVenvPath, verbose)
+		if err := task.Run(ctx, spinners.TaskSpec{
+			Running:      "Creating virtual environment",
+			ChildDisplay: spinners.RetainChildTasks,
+		}, func(ctx context.Context, child *spinners.Task) error {
+			return createVirtualEnv(ctx, child, ansibleVenvPath, verbose)
 		}); err != nil {
 			return fmt.Errorf("error creating virtual environment: %w", err)
 		}
 	}
 
 	// Upgrade pip
-	if err := spinners.RunTaskWithSpinnerOutputContext(ctx, "Upgrading pip", func(stdout, stderr io.Writer) error {
+	if err := task.RunOutput(ctx, spinners.TaskSpec{Running: "Upgrading pip"}, func(ctx context.Context, stdout, stderr io.Writer) error {
 		return upgradePip(ctx, ansibleVenvPath, verbose, stdout, stderr)
 	}); err != nil {
 		return fmt.Errorf("error upgrading pip: %w", err)
 	}
 
 	// Install libpq-dev dependency
-	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Installing libpq-dev", func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Installing libpq-dev"}, func(taskCtx context.Context) error {
 		return apt.InstallPackage(taskCtx, []string{"libpq-dev"}, verbose)()
 	}); err != nil {
 		return fmt.Errorf("error installing libpq-dev: %w", err)
 	}
 
 	// Install requirements
-	if err := spinners.RunTaskWithSpinnerOutputContext(ctx, "Installing pip requirements", func(stdout, stderr io.Writer) error {
+	if err := task.RunOutput(ctx, spinners.TaskSpec{Running: "Installing pip requirements"}, func(ctx context.Context, stdout, stderr io.Writer) error {
 		return installRequirements(ctx, ansibleVenvPath, verbose, stdout, stderr)
 	}); err != nil {
 		return fmt.Errorf("error installing pip requirements: %w", err)
 	}
 
 	// Copy binaries
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Copying binaries", func() error {
-		return copyBinaries(ansibleVenvPath)
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Copying binaries"}, func(context.Context, *spinners.Task) error {
+		return copyBinaries(ansibleVenvPath, task.Verbose())
 	}); err != nil {
 		return fmt.Errorf("error copying binaries: %w", err)
 	}
 
 	// Set ownership
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Setting ownership", func() error {
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Setting ownership"}, func(context.Context, *spinners.Task) error {
 		return setOwnership(ctx, ansibleVenvPath, saltboxUser, verbose)
 	}); err != nil {
 		return fmt.Errorf("error setting ownership: %w", err)
@@ -192,9 +175,9 @@ func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
 }
 
 // createVirtualEnv creates the virtual environment using uv.
-func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool) error {
+func createVirtualEnv(ctx context.Context, task *spinners.Task, ansibleVenvPath string, verbose bool) error {
 	// Ensure uv is installed
-	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Ensuring uv is installed", func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Ensuring uv is installed"}, func(taskCtx context.Context) error {
 		return uv.DownloadAndInstallUV(taskCtx, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing uv: %w", err)
@@ -206,7 +189,7 @@ func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool)
 	}
 
 	// Install Python using uv
-	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion), func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion)}, func(taskCtx context.Context) error {
 		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing python: %w", err)
@@ -219,7 +202,7 @@ func createVirtualEnv(ctx context.Context, ansibleVenvPath string, verbose bool)
 
 	// Create venv using uv
 	venvPath := filepath.Join(ansibleVenvPath, "venv")
-	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Creating virtual environment files", func(taskCtx context.Context) error {
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Creating virtual environment files"}, func(taskCtx context.Context, _ *spinners.Task) error {
 		return uv.CreateVenv(taskCtx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
 		return fmt.Errorf("error creating venv: %w", err)
@@ -247,7 +230,7 @@ func installRequirements(ctx context.Context, ansibleVenvPath string, verbose bo
 }
 
 // copyBinaries copies the binaries in a robust and error-checked way.
-func copyBinaries(ansibleVenvPath string) error {
+func copyBinaries(ansibleVenvPath string, verbose bool) error {
 	venvBinDir := filepath.Join(ansibleVenvPath, "venv", "bin")
 	destDir := "/usr/local/bin/"
 
@@ -283,7 +266,7 @@ func copyBinaries(ansibleVenvPath string) error {
 		fileName := filepath.Base(srcPath)
 		destPath := filepath.Join(destDir, fileName)
 
-		if spinners.VerboseMode {
+		if verbose {
 			fmt.Printf("  Copying %s to %s\n", srcPath, destPath)
 		}
 

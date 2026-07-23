@@ -23,35 +23,18 @@ type configValidationJob struct {
 	duplicatesOnly bool // Only check for duplicate keys, skip schema validation
 }
 
-// AllSaltboxConfigs validates all Saltbox configuration files using YAML schemas
-func AllSaltboxConfigs(verbose bool) error {
-	return runAllSaltboxConfigs(verbose, true)
-}
-
-// AllSaltboxConfigsDetailed validates all Saltbox configuration files and keeps
-// each file's result visible. This is intended for the dedicated validation command.
-func AllSaltboxConfigsDetailed(verbose bool) error {
-	return runAllSaltboxConfigs(verbose, false)
-}
-
-func runAllSaltboxConfigs(verbose, collapseChildren bool) error {
+// AllSaltboxConfigs validates all Saltbox configuration files using YAML schemas.
+func AllSaltboxConfigs(
+	ctx context.Context,
+	task *spinners.Task,
+	verbose bool,
+) error {
 	// Set verbose mode for both validation and spinners
 	SetVerbose(verbose)
-	spinners.SetVerboseMode(verbose)
-
-	opts := spinners.SpinnerOptions{
-		TaskName:         "Validating Saltbox configuration",
-		StopMessage:      "Saltbox configuration validated",
-		StopFailMessage:  "Saltbox configuration validation",
-		CollapseChildren: collapseChildren,
-		RetainChildren:   !collapseChildren,
-	}
-	return spinners.RunTaskWithSpinnerCustomContext(context.Background(), opts, func() error {
-		return validateAllSaltboxConfigs(verbose)
-	})
+	return validateAllSaltboxConfigs(ctx, task, verbose)
 }
 
-func validateAllSaltboxConfigs(verbose bool) error {
+func validateAllSaltboxConfigs(ctx context.Context, task *spinners.Task, verbose bool) error {
 	// Define all validation jobs
 	jobs := []configValidationJob{
 		{
@@ -101,7 +84,7 @@ func validateAllSaltboxConfigs(verbose bool) error {
 
 	// Process each validation job
 	for _, job := range jobs {
-		if err := processValidationJob(job, verbose); err != nil {
+		if err := processValidationJob(ctx, task, job, verbose); err != nil {
 			return err
 		}
 	}
@@ -110,15 +93,15 @@ func validateAllSaltboxConfigs(verbose bool) error {
 }
 
 // validateDuplicateKeys checks a YAML file for duplicate keys
-func validateDuplicateKeys(node *yaml.Node, name string) error {
+func validateDuplicateKeys(ctx context.Context, task *spinners.Task, node *yaml.Node, name string) error {
 	successMessage := fmt.Sprintf("Validated %s (no duplicates)", name)
 	failureMessage := fmt.Sprintf("Validation of %s (no duplicates)", name)
 
-	validationError := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
-		TaskName:        fmt.Sprintf("Validating %s (no duplicates)", name),
-		StopMessage:     successMessage,
-		StopFailMessage: failureMessage,
-	}, func() error {
+	validationError := task.Run(ctx, spinners.TaskSpec{
+		Running: fmt.Sprintf("Validating %s (no duplicates)", name),
+		Success: successMessage,
+		Failure: failureMessage,
+	}, func(context.Context, *spinners.Task) error {
 		return checkDuplicateKeys(node)
 	})
 
@@ -208,7 +191,7 @@ func findDuplicateKeys(node *yaml.Node, path string) []string {
 }
 
 // processValidationJob handles validation of a single config file
-func processValidationJob(job configValidationJob, verbose bool) error {
+func processValidationJob(ctx context.Context, task *spinners.Task, job configValidationJob, verbose bool) error {
 	// Check if config file exists
 	if _, err := os.Stat(job.configPath); err != nil {
 		if job.optional {
@@ -228,7 +211,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 
 	// If this is a duplicate-only check, skip schema validation
 	if job.duplicatesOnly {
-		return validateDuplicateKeys(yamlNode, job.name)
+		return validateDuplicateKeys(ctx, task, yamlNode, job.name)
 	}
 
 	// Check if schema file exists
@@ -241,13 +224,13 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 	successMessage := fmt.Sprintf("Validated %s", job.name)
 	failureMessage := fmt.Sprintf("Validation of %s", job.name)
 
-	// Note: Using context.Background() here - consider adding context parameter in future refactor
-	validationError := spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
-		TaskName:        fmt.Sprintf("Validating %s", job.name),
-		StopMessage:     successMessage,
-		StopFailMessage: failureMessage,
-	}, func() error {
-		return validateConfigWithSchema(configFile, job.configPath, schemaPath)
+	validationError := task.Run(ctx, spinners.TaskSpec{
+		Running:      fmt.Sprintf("Validating %s", job.name),
+		Success:      successMessage,
+		Failure:      failureMessage,
+		ChildDisplay: spinners.RetainChildTasks,
+	}, func(ctx context.Context, validationTask *spinners.Task) error {
+		return validateConfigWithSchema(ctx, validationTask, configFile, job.configPath, schemaPath)
 	})
 
 	if validationError != nil {
@@ -258,7 +241,7 @@ func processValidationJob(job configValidationJob, verbose bool) error {
 }
 
 // validateConfigWithSchema validates a config file against its YAML schema
-func validateConfigWithSchema(configFile []byte, configPath, schemaPath string) error {
+func validateConfigWithSchema(ctx context.Context, task *spinners.Task, configFile []byte, configPath, schemaPath string) error {
 	startTime := time.Now()
 	logging.DebugBool(verboseMode, "validateConfigWithSchema called with config=%s, schema=%s at %v", configPath, schemaPath, startTime)
 
@@ -275,7 +258,7 @@ func validateConfigWithSchema(configFile []byte, configPath, schemaPath string) 
 	}
 
 	// Perform schema validation with async API checks
-	asyncCtx, syncErr := schema.ValidateWithTypeFlexibilityAsync(inputMap)
+	asyncCtx, syncErr := schema.ValidateWithTypeFlexibilityAsync(ctx, task, inputMap)
 	if syncErr != nil {
 		return fmt.Errorf("schema validation failed: %w", syncErr)
 	}

@@ -35,22 +35,24 @@ func init() {
 }
 
 func handleReinstallPython(ctx context.Context, verbose bool) error {
-	// Set verbose mode for spinners
-	spinners.SetVerboseMode(verbose)
-
-	return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
-		TaskName:         fmt.Sprintf("Reinstalling Python %s and Ansible environment", constants.AnsibleVenvPythonVersion),
-		StopMessage:      fmt.Sprintf("Python %s and Ansible environment reinstalled", constants.AnsibleVenvPythonVersion),
-		StopFailMessage:  "Python and Ansible environment reinstall",
-		CollapseChildren: true,
-	}, func() error {
-		return reinstallPython(ctx, verbose)
+	runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
+	return runner.Run(ctx, reinstallPythonTaskSpec(), func(ctx context.Context, task *spinners.Task) error {
+		return reinstallPython(ctx, task, verbose)
 	})
 }
 
-func reinstallPython(ctx context.Context, verbose bool) error {
+func reinstallPythonTaskSpec() spinners.TaskSpec {
+	return spinners.TaskSpec{
+		Running:      fmt.Sprintf("Reinstalling Python %s and Ansible environment", constants.AnsibleVenvPythonVersion),
+		Success:      fmt.Sprintf("Python %s and Ansible environment reinstalled", constants.AnsibleVenvPythonVersion),
+		Failure:      "Python and Ansible environment reinstall",
+		ChildDisplay: spinners.RetainChildTasks,
+	}
+}
+
+func reinstallPython(ctx context.Context, task *spinners.Task, verbose bool) error {
 	// Update apt cache
-	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Updating apt package cache", func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Updating apt package cache"}, func(taskCtx context.Context) error {
 		updateCache := apt.UpdatePackageLists(taskCtx, verbose)
 		return updateCache()
 	}); err != nil {
@@ -58,14 +60,14 @@ func reinstallPython(ctx context.Context, verbose bool) error {
 	}
 
 	// Ensure uv is installed
-	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, "Ensuring uv is installed", func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Ensuring uv is installed"}, func(taskCtx context.Context) error {
 		return uv.DownloadAndInstallUV(taskCtx, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing uv: %w", err)
 	}
 
 	// Create /srv/python directory if it doesn't exist
-	if err := spinners.RunTaskWithSpinnerContext(ctx, fmt.Sprintf("Creating directory %s", constants.PythonInstallDir), func() error {
+	if err := task.Run(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Creating directory %s", constants.PythonInstallDir)}, func(context.Context, *spinners.Task) error {
 		return os.MkdirAll(constants.PythonInstallDir, 0755)
 	}); err != nil {
 		return fmt.Errorf("error creating python install dir: %w", err)
@@ -73,7 +75,7 @@ func reinstallPython(ctx context.Context, verbose bool) error {
 
 	// Check if Python is already installed
 	pythonInstalled := false
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Checking for installed Python versions", func() error {
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Checking for installed Python versions"}, func(context.Context, *spinners.Task) error {
 		versions, err := uv.ListInstalledPythons(ctx)
 		if err == nil {
 			if slices.Contains(versions, constants.AnsibleVenvPythonVersion) {
@@ -87,7 +89,7 @@ func reinstallPython(ctx context.Context, verbose bool) error {
 
 	// Uninstall existing Python if installed
 	if pythonInstalled {
-		if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, fmt.Sprintf("Uninstalling existing Python %s", constants.AnsibleVenvPythonVersion), func(taskCtx context.Context) error {
+		if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Uninstalling existing Python %s", constants.AnsibleVenvPythonVersion)}, func(taskCtx context.Context) error {
 			return uv.UninstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
 		}); err != nil {
 			return fmt.Errorf("error uninstalling Python: %w", err)
@@ -95,7 +97,7 @@ func reinstallPython(ctx context.Context, verbose bool) error {
 	}
 
 	// Install Python using uv
-	if err := spinners.RunTaskWithSpinnerStreamingContext(ctx, fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion), func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion)}, func(taskCtx context.Context) error {
 		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
 	}); err != nil {
 		return fmt.Errorf("error installing Python: %w", err)
@@ -108,9 +110,20 @@ func reinstallPython(ctx context.Context, verbose bool) error {
 	}
 
 	// Recreate Ansible venv
-	if err := venv.ManageAnsibleVenv(ctx, true, saltboxUser, verbose); err != nil {
+	if err := task.Run(ctx, reinstallPythonVenvTaskSpec(), func(ctx context.Context, venvTask *spinners.Task) error {
+		return venv.ManageAnsibleVenv(ctx, venvTask, true, saltboxUser, verbose)
+	}); err != nil {
 		return fmt.Errorf("error managing Ansible venv: %w", err)
 	}
 
 	return nil
+}
+
+func reinstallPythonVenvTaskSpec() spinners.TaskSpec {
+	return spinners.TaskSpec{
+		Running:      "Recreating Ansible virtual environment",
+		Success:      "Ansible virtual environment recreated",
+		Failure:      "Ansible virtual environment",
+		ChildDisplay: spinners.RetainChildTasks,
+	}
 }

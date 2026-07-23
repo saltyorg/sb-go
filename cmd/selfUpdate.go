@@ -39,15 +39,16 @@ var selfUpdateCmd = &cobra.Command{
 	Long:   `Update Saltbox CLI`,
 	Args:   cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: debug})
 		// Check if self-update is disabled at build time (unless the force flag is used)
 		if runtime.DisableSelfUpdate == "true" && !forceUpdate {
-			_ = spinners.RunWarningSpinner("Self-update is disabled in this build")
+			runner.Warning("Self-update is disabled in this build")
 			if runtime.DisableSelfUpdate == "true" {
-				_ = spinners.RunInfoSpinner("Use --force-update to override this restriction")
+				runner.Info("Use --force-update to override this restriction")
 			}
 			return nil
 		}
-		_, err := doSelfUpdate(cmd.Context(), autoAccept, debug, "", forceUpdate)
+		_, err := doSelfUpdate(cmd.Context(), runner, autoAccept, debug, "", forceUpdate)
 		return err
 	},
 }
@@ -77,13 +78,13 @@ func promptForConfirmation(prompt string) (bool, error) {
 	return response == "y" || response == "yes", nil
 }
 
-func doSelfUpdate(ctx context.Context, autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
+func doSelfUpdate(ctx context.Context, runner *spinners.Runner, autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
 	// Check if self-update is disabled at build time (unless force is true)
 	if runtime.DisableSelfUpdate == "true" && !force {
 		if verbose {
 			fmt.Println("Debug: Self-update is disabled (build flag)")
 		} else {
-			_ = spinners.RunWarningSpinner("Self-update is disabled in this build")
+			runner.Warning("Self-update is disabled in this build")
 		}
 		return false, nil
 	}
@@ -93,7 +94,7 @@ func doSelfUpdate(ctx context.Context, autoUpdate bool, verbose bool, optionalMe
 		if verbose {
 			fmt.Println("Debug: Force update flag is active, bypassing DisableSelfUpdate build flag")
 		} else {
-			_ = spinners.RunInfoSpinner("Forcing self-update despite build configuration")
+			runner.Info("Forcing self-update despite build configuration")
 		}
 	}
 
@@ -117,7 +118,7 @@ func doSelfUpdate(ctx context.Context, autoUpdate bool, verbose bool, optionalMe
 	}
 
 	// Create the Saltbox proxy source
-	proxySource, err := NewSaltboxProxySource(constants.SVMVersionProxyURL, verbose)
+	proxySource, err := NewSaltboxProxySource(constants.SVMVersionProxyURL, verbose, runner)
 	if err != nil {
 		if verbose {
 			fmt.Printf("Debug: Error creating source: %v\n", err)
@@ -148,12 +149,12 @@ func doSelfUpdate(ctx context.Context, autoUpdate bool, verbose bool, optionalMe
 		if verbose {
 			fmt.Println("Debug: No update available - current version is the latest")
 		}
-		_ = spinners.RunInfoSpinner(fmt.Sprintf("Current binary is the latest version: %s", runtime.Version))
+		runner.Info(fmt.Sprintf("Current binary is the latest version: %s", runtime.Version))
 		return false, nil
 	}
 
 	// An update is available
-	_ = spinners.RunInfoSpinner(fmt.Sprintf("New sb CLI version available: %s (current: %s)", latest.Version(), v))
+	runner.Info(fmt.Sprintf("New sb CLI version available: %s (current: %s)", latest.Version(), v))
 
 	// If autoUpdate is false, ask for confirmation
 	if !autoUpdate {
@@ -162,7 +163,7 @@ func doSelfUpdate(ctx context.Context, autoUpdate bool, verbose bool, optionalMe
 			return false, err
 		}
 		if !confirmed {
-			_ = spinners.RunWarningSpinner("Update of sb CLI cancelled")
+			runner.Warning("Update of sb CLI cancelled")
 			fmt.Println()
 			return false, nil
 		}
@@ -190,11 +191,11 @@ func doSelfUpdate(ctx context.Context, autoUpdate bool, verbose bool, optionalMe
 	if verbose {
 		fmt.Printf("Debug: Update successful - previous version: %s, new version: %s\n", v, latest.Version())
 	}
-	_ = spinners.RunInfoSpinner(fmt.Sprintf("Successfully updated sb CLI to version: %s", latest.Version()))
+	runner.Info(fmt.Sprintf("Successfully updated sb CLI to version: %s", latest.Version()))
 
 	// Print an optional message if provided
 	if optionalMessage != "" {
-		_ = spinners.RunWarningSpinner(optionalMessage)
+		runner.Warning(optionalMessage)
 	}
 	fmt.Println("")
 	return true, nil
@@ -207,11 +208,12 @@ type SaltboxProxySource struct {
 	httpClient   *http.Client
 	githubSource selfupdate.Source
 	verbose      bool
+	runner       *spinners.Runner
 	warnOnce     sync.Once
 }
 
 // NewSaltboxProxySource creates a new Saltbox proxy source
-func NewSaltboxProxySource(proxyBaseURL string, verbose bool) (*SaltboxProxySource, error) {
+func NewSaltboxProxySource(proxyBaseURL string, verbose bool, runner *spinners.Runner) (*SaltboxProxySource, error) {
 	githubSource, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitHub source: %w", err)
@@ -224,6 +226,7 @@ func NewSaltboxProxySource(proxyBaseURL string, verbose bool) (*SaltboxProxySour
 		},
 		githubSource: githubSource,
 		verbose:      verbose,
+		runner:       runner,
 	}, nil
 }
 
@@ -277,7 +280,9 @@ func (s *SaltboxProxySource) notifyFallback(reason error) {
 			fmt.Printf("Debug: SVM proxy unavailable or unusable (%v); falling back to direct GitHub API\n", reason)
 			return
 		}
-		_ = spinners.RunWarningSpinner("SVM proxy unavailable or unusable; using direct GitHub API")
+		if s.runner != nil {
+			s.runner.Warning("SVM proxy unavailable or unusable; using direct GitHub API")
+		}
 	})
 }
 

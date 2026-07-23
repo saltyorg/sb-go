@@ -98,9 +98,9 @@ func validateBinary(filePath string, expectedSize int64, verbose bool) error {
 }
 
 // getCurrentFactVersion runs the existing saltbox.fact and extracts its version
-func getCurrentFactVersion(targetPath string) (string, error) {
+func getCurrentFactVersion(ctx context.Context, targetPath string) (string, error) {
 	// Use context with timeout for executing the binary
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	result, err := executor.Run(ctx, targetPath,
@@ -126,57 +126,43 @@ func getCurrentFactVersion(targetPath string) (string, error) {
 }
 
 // checkIfUpdateNeeded determines if saltbox.fact needs to be updated
-func checkIfUpdateNeeded(targetPath, latestVersion string, alwaysUpdate bool) (bool, error) {
+func checkIfUpdateNeeded(ctx context.Context, task *spinners.Task, targetPath, latestVersion string, alwaysUpdate bool) (bool, error) {
 	if alwaysUpdate {
-		if err := spinners.RunInfoSpinner("Reinstall forced."); err != nil {
-			return false, err
-		}
+		task.Info("Reinstall forced.")
 		return true, nil
 	}
 
 	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
-		if err := spinners.RunInfoSpinner("saltbox.fact not found. Proceeding with update."); err != nil {
-			return false, err
-		}
+		task.Info("saltbox.fact not found. Proceeding with update.")
 		return true, nil
 	} else if err != nil {
 		return false, fmt.Errorf("error checking for existing saltbox.fact: %w", err)
 	}
 
-	currentVersion, err := getCurrentFactVersion(targetPath)
+	currentVersion, err := getCurrentFactVersion(ctx, targetPath)
 	if err != nil {
-		if err := spinners.RunWarningSpinner(fmt.Sprintf("%v. Proceeding with update.", err)); err != nil {
-			return false, err
-		}
+		task.Warning(fmt.Sprintf("%v. Proceeding with update.", err))
 		return true, nil
 	}
 
 	currentSemVer, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
 	if err != nil {
-		if err := spinners.RunWarningSpinner(fmt.Sprintf("Failed to parse current version: %v. Updating...", err)); err != nil {
-			return false, err
-		}
+		task.Warning(fmt.Sprintf("Failed to parse current version: %v. Updating...", err))
 		return true, nil
 	}
 
 	latestSemVer, err := semver.NewVersion(strings.TrimPrefix(latestVersion, "v"))
 	if err != nil {
-		if err := spinners.RunWarningSpinner(fmt.Sprintf("Failed to parse latest version: %v. Updating...", err)); err != nil {
-			return false, err
-		}
+		task.Warning(fmt.Sprintf("Failed to parse latest version: %v. Updating...", err))
 		return true, nil
 	}
 
 	if currentSemVer.Compare(latestSemVer) >= 0 {
-		if err := spinners.RunInfoSpinner(fmt.Sprintf("saltbox.fact is up to date (version %s)", currentVersion)); err != nil {
-			return false, err
-		}
+		task.Info(fmt.Sprintf("saltbox.fact is up to date (version %s)", currentVersion))
 		return false, nil
 	}
 
-	if err := spinners.RunInfoSpinner(fmt.Sprintf("New version available. Updating from %s to %s", currentVersion, latestVersion)); err != nil {
-		return false, err
-	}
+	task.Info(fmt.Sprintf("saltbox.fact update available: %s → %s", currentVersion, latestVersion))
 	return true, nil
 }
 
@@ -195,9 +181,7 @@ func fetchLatestReleaseInfoFromURL(client *http.Client, apiURL string) (string, 
 		return "", 0, fmt.Errorf("error fetching latest release info: %w", err)
 	}
 	defer func() {
-		if err := response.Body.Close(); err != nil {
-			_ = spinners.RunWarningSpinner(fmt.Sprintf("Error closing response body: %v", err))
-		}
+		_ = response.Body.Close()
 	}()
 
 	if response.StatusCode != http.StatusOK {
@@ -226,12 +210,12 @@ func fetchLatestReleaseInfoFromURL(client *http.Client, apiURL string) (string, 
 }
 
 // fetchLatestReleaseInfo fetches latest release info through SVM first, then falls back to direct GitHub API.
-func fetchLatestReleaseInfo(proxyURL, githubURL string, verbose bool) (string, int64, error) {
+func fetchLatestReleaseInfo(ctx context.Context, task *spinners.Task, proxyURL, githubURL string, verbose bool) (string, int64, error) {
 	var latestVersion string
 	var expectedSize int64
 	var fallbackNotified bool
 
-	err := spinners.RunTaskWithSpinnerContext(context.Background(), "Fetching latest saltbox.fact release info", func() error {
+	err := task.Run(ctx, spinners.TaskSpec{Running: "Fetching latest saltbox.fact release info"}, func(context.Context, *spinners.Task) error {
 		return retryWithBackoff(func() error {
 			client := &http.Client{
 				Timeout: 30 * time.Second,
@@ -248,7 +232,7 @@ func fetchLatestReleaseInfo(proxyURL, githubURL string, verbose bool) (string, i
 				if verbose {
 					fmt.Printf("SVM proxy unavailable or unusable (%v); falling back to direct GitHub API\n", proxyErr)
 				} else {
-					_ = spinners.RunWarningSpinner("SVM proxy unavailable or unusable; using direct GitHub API")
+					task.Warning("SVM proxy unavailable or unusable; using direct GitHub API")
 				}
 				fallbackNotified = true
 			}
@@ -268,37 +252,29 @@ func fetchLatestReleaseInfo(proxyURL, githubURL string, verbose bool) (string, i
 }
 
 // DownloadAndInstallSaltboxFact downloads and installs the latest saltbox.fact file.
-func DownloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
-	action := "Checking saltbox.fact"
-	stopMessage := "saltbox.fact is ready"
-	if alwaysUpdate {
-		action = "Reinstalling saltbox.fact"
-		stopMessage = "saltbox.fact reinstalled"
-	}
-	return spinners.RunTaskWithSpinnerCustomContext(context.Background(), spinners.SpinnerOptions{
-		TaskName:         action,
-		StopMessage:      stopMessage,
-		StopFailMessage:  "saltbox.fact update",
-		CollapseChildren: true,
-	}, func() error {
-		return downloadAndInstallSaltboxFact(alwaysUpdate, verbose)
-	})
+func DownloadAndInstallSaltboxFact(
+	ctx context.Context,
+	task *spinners.Task,
+	alwaysUpdate bool,
+	verbose bool,
+) error {
+	return downloadAndInstallSaltboxFact(ctx, task, alwaysUpdate, verbose)
 }
 
-func downloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
+func downloadAndInstallSaltboxFact(ctx context.Context, task *spinners.Task, alwaysUpdate bool, verbose bool) error {
 	downloadURL := "https://github.com/saltyorg/ansible-facts/releases/latest/download/saltbox-facts"
 	targetPath := "/srv/git/saltbox/ansible_facts.d/saltbox.fact"
 	githubURL := "https://api.github.com/repos/saltyorg/ansible-facts/releases/latest"
 	proxyURL := fmt.Sprintf("%s?url=%s", constants.SVMVersionProxyURL, githubURL)
 
 	// Fetch the latest release info from GitHub with retry logic
-	latestVersion, expectedSize, err := fetchLatestReleaseInfo(proxyURL, githubURL, verbose)
+	latestVersion, expectedSize, err := fetchLatestReleaseInfo(ctx, task, proxyURL, githubURL, verbose)
 	if err != nil {
 		return err
 	}
 
 	// Check if we need to update
-	needsUpdate, err := checkIfUpdateNeeded(targetPath, latestVersion, alwaysUpdate)
+	needsUpdate, err := checkIfUpdateNeeded(ctx, task, targetPath, latestVersion, alwaysUpdate)
 	if err != nil {
 		return err
 	}
@@ -311,8 +287,7 @@ func downloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 			taskMessage = fmt.Sprintf("Reinstalling saltbox.fact with version %s", latestVersion)
 		}
 
-		// Note: Using context.Background() here - consider adding context parameter in future refactor
-		if err := spinners.RunTaskWithSpinnerContext(context.Background(), taskMessage, func() error {
+		if err := task.Run(ctx, spinners.TaskSpec{Running: taskMessage}, func(ctx context.Context, downloadTask *spinners.Task) error {
 			return retryWithBackoff(func() error {
 				client := &http.Client{
 					Timeout: 30 * time.Second,
@@ -323,7 +298,7 @@ func downloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 				}
 				defer func() {
 					if err := response.Body.Close(); err != nil {
-						_ = spinners.RunWarningSpinner(fmt.Sprintf("Error closing response body: %v", err))
+						downloadTask.Warning(fmt.Sprintf("Error closing response body: %v", err))
 					}
 				}()
 
@@ -343,7 +318,7 @@ func downloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 				}
 				defer func() {
 					if err := file.Close(); err != nil {
-						_ = spinners.RunWarningSpinner(fmt.Sprintf("Error closing file: %v", err))
+						downloadTask.Warning(fmt.Sprintf("Error closing file: %v", err))
 					}
 				}()
 
@@ -359,7 +334,7 @@ func downloadAndInstallSaltboxFact(alwaysUpdate bool, verbose bool) error {
 				}
 
 				// Validate the downloaded binary
-				if err := spinners.RunTaskWithSpinnerContext(context.Background(), "Validating downloaded saltbox.fact", func() error {
+				if err := downloadTask.Run(ctx, spinners.TaskSpec{Running: "Validating downloaded saltbox.fact"}, func(context.Context, *spinners.Task) error {
 					return validateBinary(targetPath, expectedSize, verbose)
 				}); err != nil {
 					// Clean up the invalid file

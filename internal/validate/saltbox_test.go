@@ -1,10 +1,14 @@
 package validate
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/saltyorg/sb-go/internal/spinners"
 )
 
 func TestParseYAMLFileInvalidYAML(t *testing.T) {
@@ -43,7 +47,10 @@ func TestProcessValidationJobInvalidYAMLBeforeSchemaCheck(t *testing.T) {
 		optional:   false,
 	}
 
-	err := processValidationJob(job, false)
+	runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: true, Output: io.Discard})
+	err := runner.Run(context.Background(), spinners.TaskSpec{Running: "test"}, func(ctx context.Context, task *spinners.Task) error {
+		return processValidationJob(ctx, task, job, false)
+	})
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}

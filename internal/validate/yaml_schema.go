@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/logging"
+	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"gopkg.in/yaml.v3"
 )
@@ -81,9 +83,13 @@ func (s *Schema) ValidateWithTypeFlexibility(config map[string]any) error {
 }
 
 // ValidateWithTypeFlexibilityAsync performs validation with async API checks
-func (s *Schema) ValidateWithTypeFlexibilityAsync(config map[string]any) (*AsyncValidationContext, error) {
+func (s *Schema) ValidateWithTypeFlexibilityAsync(
+	ctx context.Context,
+	task *spinners.Task,
+	config map[string]any,
+) (*AsyncValidationContext, error) {
 	logging.DebugBool(verboseMode, "Schema.ValidateWithTypeFlexibilityAsync called with config keys: %v", getKeys(config))
-	asyncCtx := NewAsyncValidationContext()
+	asyncCtx := NewAsyncValidationContext(ctx, task)
 	err := s.validateObjectWithTypeFlexibility(config, s.Rules, "", asyncCtx)
 	return asyncCtx, err
 }

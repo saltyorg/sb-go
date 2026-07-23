@@ -31,8 +31,7 @@ func init() {
 
 // handleReinstallVenv handles the reinstallation of the Ansible virtual environment.
 func handleReinstallVenv(ctx context.Context, verbose bool) error {
-	// Set verbose mode for spinners
-	spinners.SetVerboseMode(verbose)
+	runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
 
 	// Get Saltbox user
 	saltboxUser, err := utils.GetSaltboxUser()
@@ -42,9 +41,14 @@ func handleReinstallVenv(ctx context.Context, verbose bool) error {
 
 	// Manage Ansible venv with the force recreate flag set to true
 	// This function already has internal spinners
-	if err := venv.ManageAnsibleVenvDetailed(ctx, true, saltboxUser, verbose); err != nil {
-		return fmt.Errorf("error managing Ansible venv: %w", err)
-	}
-
-	return nil
+	return runner.Run(ctx, spinners.TaskSpec{
+		Running:      "Reinstalling Ansible virtual environment",
+		Success:      "Ansible virtual environment reinstalled",
+		ChildDisplay: spinners.RetainChildTasks,
+	}, func(ctx context.Context, task *spinners.Task) error {
+		if err := venv.ManageAnsibleVenv(ctx, task, true, saltboxUser, verbose); err != nil {
+			return fmt.Errorf("error managing Ansible venv: %w", err)
+		}
+		return nil
+	})
 }

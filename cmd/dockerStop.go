@@ -24,19 +24,29 @@ var stopCmd = &cobra.Command{
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		ignoreContainers, _ := cmd.Flags().GetStringSlice("ignore")
-		spinners.SetVerboseMode(verbose)
-		return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{
-			TaskName:         "Stopping Docker containers",
-			StopMessage:      "Docker containers stopped",
-			StopFailMessage:  "Docker container stop",
-			CollapseChildren: true,
-		}, func() error {
-			return runDockerStop(ctx, verbose, ignoreContainers)
-		})
+		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
+		return runDockerStop(ctx, runner, verbose, ignoreContainers, spinners.CollapseChildTasks)
 	},
 }
 
-func runDockerStop(ctx context.Context, verbose bool, ignoreContainers []string) error {
+func runDockerStop(
+	ctx context.Context,
+	runner *spinners.Runner,
+	verbose bool,
+	ignoreContainers []string,
+	childDisplay spinners.ChildDisplay,
+) error {
+	return runner.Run(ctx, spinners.TaskSpec{
+		Running:      "Stopping Docker containers",
+		Success:      "Docker containers stopped",
+		Failure:      "Docker container stop",
+		ChildDisplay: childDisplay,
+	}, func(ctx context.Context, task *spinners.Task) error {
+		return performDockerStop(ctx, task, verbose, ignoreContainers)
+	})
+}
+
+func performDockerStop(ctx context.Context, task *spinners.Task, verbose bool, ignoreContainers []string) error {
 	serviceCheckTask := func() error {
 		exists, running, err := isServiceExistAndRunning(ctx)
 		if err != nil {
@@ -56,23 +66,23 @@ func runDockerStop(ctx context.Context, verbose bool, ignoreContainers []string)
 	}
 
 	// Check service with spinner
-	opts := spinners.SpinnerOptions{
-		TaskName:        "Checking Docker controller service",
-		StopMessage:     "Docker controller service ready",
-		StopFailMessage: "Docker controller service check",
-	}
-
-	if err := spinners.RunTaskWithSpinnerCustomContext(ctx, opts, serviceCheckTask); err != nil {
+	if err := task.Run(ctx, spinners.TaskSpec{
+		Running: "Checking Docker controller service",
+		Success: "Docker controller service ready",
+		Failure: "Docker controller service check",
+	}, func(context.Context, *spinners.Task) error {
+		return serviceCheckTask()
+	}); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
 
 	if verbose && len(ignoreContainers) > 0 {
-		_ = spinners.RunInfoSpinner(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
+		task.Info(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	var jobResp JobResponse
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Requesting Docker stop job", func() error {
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Requesting Docker stop job"}, func(context.Context, *spinners.Task) error {
 		var err error
 		jobResp, err = requestDockerJob(ctx, constants.DockerControllerAPIURL+"/stop", ignoreContainers, client)
 		return err
@@ -81,11 +91,11 @@ func runDockerStop(ctx context.Context, verbose bool, ignoreContainers []string)
 	}
 
 	if verbose {
-		_ = spinners.RunInfoSpinner(fmt.Sprintf("Stopping containers. Job ID: %s", jobResp.JobID))
+		task.Info(fmt.Sprintf("Stopping containers. Job ID: %s", jobResp.JobID))
 	}
 
 	var success bool
-	if err := spinners.RunTaskWithSpinnerContext(ctx, "Waiting for Docker stop job", func() error {
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Waiting for Docker stop job"}, func(context.Context, *spinners.Task) error {
 		var err error
 		success, err = waitForJobCompletion(ctx, jobResp.JobID)
 		return err
