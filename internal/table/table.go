@@ -302,7 +302,8 @@ func (t *Table) renderHeaders(colWidths []int, numCols int) {
 
 		// Center align by default for headers, with padding
 		paddedContent := t.addPadding(content, totalWidth, aquatable.AlignCenter)
-		line.WriteString(paddedContent.String() + t.styledChar(t.dividers.NS))
+		line.WriteString(paddedContent.String())
+		line.WriteString(t.styledChar(t.dividers.NS))
 
 		colIdx += colspan
 		headerIdx++
@@ -310,7 +311,8 @@ func (t *Table) renderHeaders(colWidths []int, numCols int) {
 
 	// Fill remaining columns if any
 	for colIdx < numCols {
-		line.WriteString(strings.Repeat(" ", colWidths[colIdx]) + t.styledChar(t.dividers.NS))
+		line.WriteString(strings.Repeat(" ", colWidths[colIdx]))
+		line.WriteString(t.styledChar(t.dividers.NS))
 		colIdx++
 	}
 
@@ -337,7 +339,8 @@ func (t *Table) renderRow(row []string, colWidths []int, numCols int) {
 
 		// Add padding and align
 		paddedContent := t.addPadding(content, colWidths[i], align)
-		line.WriteString(paddedContent.String() + t.styledChar(t.dividers.NS))
+		line.WriteString(paddedContent.String())
+		line.WriteString(t.styledChar(t.dividers.NS))
 	}
 
 	t.writeLine(line.String())

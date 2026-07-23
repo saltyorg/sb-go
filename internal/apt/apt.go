@@ -531,7 +531,10 @@ func addRepo(repoLine, sourcesFile string) error {
 
 	writer := bufio.NewWriter(file)
 	for _, line := range uniqueLines {
-		if _, err := writer.WriteString(line + "\n"); err != nil {
+		if _, err := writer.WriteString(line); err != nil {
+			return fmt.Errorf("error writing to %s: %w", sourcesFile, err)
+		}
+		if _, err := writer.WriteString("\n"); err != nil {
 			return fmt.Errorf("error writing to %s: %w", sourcesFile, err)
 		}
 	}

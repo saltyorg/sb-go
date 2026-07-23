@@ -32,7 +32,8 @@ func (a ansiBlob) Len() int {
 func (a ansiBlob) String() string {
 	var output strings.Builder
 	for _, segment := range a {
-		output.WriteString(segment.style + segment.value)
+		output.WriteString(segment.style)
+		output.WriteString(segment.value)
 	}
 	return output.String()
 }
@@ -67,7 +68,8 @@ func (a ansiBlob) Cut(index int) (ansiBlob, ansiBlob) {
 			found = true
 			continue
 		}
-		outputBefore.WriteString(segment.style + segment.value)
+		outputBefore.WriteString(segment.style)
+		outputBefore.WriteString(segment.value)
 		current += utf8.RuneCountInString(segment.value)
 	}
 	return newANSI(outputBefore.String()), newANSI(outputAfter)

@@ -259,7 +259,8 @@ func formatSuggestions(suggestions []suggestion) string {
 	normalStyle := lipgloss.NewStyle()                                                   // Regular text
 
 	var result strings.Builder
-	result.WriteString(warningStyle.Render("Tag validation found some issues:") + "\n\n")
+	result.WriteString(warningStyle.Render("Tag validation found some issues:"))
+	result.WriteString("\n\n")
 
 	for _, s := range suggestions {
 		switch s.sType {

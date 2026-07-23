@@ -579,7 +579,8 @@ func joinStrings(strs []string, sep string) string {
 	var result strings.Builder
 	result.WriteString(strs[0])
 	for i := 1; i < len(strs); i++ {
-		result.WriteString(sep + strs[i])
+		result.WriteString(sep)
+		result.WriteString(strs[i])
 	}
 	return result.String()
 }
