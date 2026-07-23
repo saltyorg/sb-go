@@ -17,7 +17,7 @@ func TestFetchLatestReleaseInfoFromURL(t *testing.T) {
 		}))
 		defer server.Close()
 
-		version, size, err := fetchLatestReleaseInfoFromURL(server.Client(), server.URL)
+		version, size, err := fetchLatestReleaseInfoFromURL(context.Background(), server.Client(), server.URL)
 		if err != nil {
 			t.Fatalf("fetchLatestReleaseInfoFromURL() returned error: %v", err)
 		}
@@ -35,7 +35,7 @@ func TestFetchLatestReleaseInfoFromURL(t *testing.T) {
 		}))
 		defer server.Close()
 
-		_, _, err := fetchLatestReleaseInfoFromURL(server.Client(), server.URL)
+		_, _, err := fetchLatestReleaseInfoFromURL(context.Background(), server.Client(), server.URL)
 		if err == nil {
 			t.Fatal("expected error for missing tag_name")
 		}
@@ -47,7 +47,7 @@ func TestFetchLatestReleaseInfoFromURL(t *testing.T) {
 		}))
 		defer server.Close()
 
-		_, _, err := fetchLatestReleaseInfoFromURL(server.Client(), server.URL)
+		_, _, err := fetchLatestReleaseInfoFromURL(context.Background(), server.Client(), server.URL)
 		if err == nil {
 			t.Fatal("expected error for missing saltbox-facts asset")
 		}

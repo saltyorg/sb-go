@@ -13,6 +13,7 @@ import (
 
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/releaseproxy"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
 	"github.com/Masterminds/semver/v3"
@@ -175,8 +176,12 @@ type latestReleaseInfo struct {
 }
 
 // fetchLatestReleaseInfoFromURL fetches the latest release metadata from a single URL.
-func fetchLatestReleaseInfoFromURL(client *http.Client, apiURL string) (string, int64, error) {
-	response, err := client.Get(apiURL)
+func fetchLatestReleaseInfoFromURL(ctx context.Context, client *http.Client, apiURL string) (string, int64, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return "", 0, fmt.Errorf("error creating latest release request: %w", err)
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return "", 0, fmt.Errorf("error fetching latest release info: %w", err)
 	}
@@ -185,28 +190,31 @@ func fetchLatestReleaseInfoFromURL(client *http.Client, apiURL string) (string, 
 	}()
 
 	if response.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("unexpected status code: %d", response.StatusCode)
+		return "", 0, releaseproxy.HTTPStatus(response.StatusCode)
 	}
 
 	var latestRelease latestReleaseInfo
 	if err := json.NewDecoder(response.Body).Decode(&latestRelease); err != nil {
-		return "", 0, fmt.Errorf("failed to parse release info: %w", err)
+		return "", 0, releaseproxy.InvalidResponse("returned invalid JSON", err)
 	}
 	if strings.TrimSpace(latestRelease.TagName) == "" {
-		return "", 0, fmt.Errorf("release tag_name is missing")
+		return "", 0, releaseproxy.InvalidResponse("response is missing tag_name", nil)
 	}
 
 	// Find the saltbox-facts asset and get its size.
 	for _, asset := range latestRelease.Assets {
 		if asset.Name == "saltbox-facts" {
 			if asset.Size <= 0 {
-				return "", 0, fmt.Errorf("saltbox-facts asset has invalid size: %d", asset.Size)
+				return "", 0, releaseproxy.InvalidResponse(
+					fmt.Sprintf("saltbox-facts asset has invalid size %d", asset.Size),
+					nil,
+				)
 			}
 			return latestRelease.TagName, asset.Size, nil
 		}
 	}
 
-	return "", 0, fmt.Errorf("saltbox-facts asset not found in release")
+	return "", 0, releaseproxy.InvalidResponse("response is missing the saltbox-facts asset", nil)
 }
 
 // fetchLatestReleaseInfo fetches latest release info through SVM first, then falls back to direct GitHub API.
@@ -215,13 +223,13 @@ func fetchLatestReleaseInfo(ctx context.Context, task *spinners.Task, proxyURL, 
 	var expectedSize int64
 	var fallbackNotified bool
 
-	err := task.Run(ctx, spinners.TaskSpec{Running: "Fetching latest saltbox.fact release info"}, func(context.Context, *spinners.Task) error {
+	err := task.Run(ctx, spinners.TaskSpec{Running: "Fetching latest saltbox.fact release info"}, func(taskCtx context.Context, _ *spinners.Task) error {
 		return retryWithBackoff(func() error {
 			client := &http.Client{
 				Timeout: 30 * time.Second,
 			}
 
-			version, size, proxyErr := fetchLatestReleaseInfoFromURL(client, proxyURL)
+			version, size, proxyErr := fetchLatestReleaseInfoFromURL(taskCtx, client, proxyURL)
 			if proxyErr == nil {
 				latestVersion = version
 				expectedSize = size
@@ -232,18 +240,23 @@ func fetchLatestReleaseInfo(ctx context.Context, task *spinners.Task, proxyURL, 
 				if verbose {
 					fmt.Printf("SVM proxy unavailable or unusable (%v); falling back to direct GitHub API\n", proxyErr)
 				} else {
-					task.Warning("SVM proxy unavailable or unusable; using direct GitHub API")
+					task.Warning(fmt.Sprintf("SVM proxy %s; trying GitHub directly", releaseproxy.Describe(proxyErr)))
 				}
 				fallbackNotified = true
 			}
 
-			version, size, githubErr := fetchLatestReleaseInfoFromURL(client, githubURL)
+			version, size, githubErr := fetchLatestReleaseInfoFromURL(taskCtx, client, githubURL)
 			if githubErr != nil {
 				return fmt.Errorf("proxy request failed: %w; fallback GitHub API request failed: %w", proxyErr, githubErr)
 			}
 
 			latestVersion = version
 			expectedSize = size
+			if verbose {
+				fmt.Println("Direct GitHub API fallback succeeded")
+			} else {
+				task.Info("GitHub fallback succeeded")
+			}
 			return nil
 		}, 3, 1*time.Second) // 3 retries with 1-second base delay
 	})

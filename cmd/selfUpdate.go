@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/internal/releaseproxy"
 	"github.com/saltyorg/sb-go/internal/runtime"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
@@ -210,6 +211,7 @@ type SaltboxProxySource struct {
 	verbose      bool
 	runner       *spinners.Runner
 	warnOnce     sync.Once
+	successOnce  sync.Once
 }
 
 // NewSaltboxProxySource creates a new Saltbox proxy source
@@ -257,7 +259,7 @@ func (s *SaltboxProxySource) ListReleases(ctx context.Context, repository selfup
 		if usabilityErr := releaseListUsabilityError(proxyReleases); usabilityErr == nil {
 			return proxyReleases, nil
 		} else {
-			proxyErr = fmt.Errorf("proxy response unusable: %w", usabilityErr)
+			proxyErr = releaseproxy.InvalidResponse(usabilityErr.Error(), usabilityErr)
 		}
 	}
 
@@ -271,6 +273,7 @@ func (s *SaltboxProxySource) ListReleases(ctx context.Context, repository selfup
 		return nil, fmt.Errorf("%w; fallback GitHub API response unusable: %w", proxyErr, usabilityErr)
 	}
 
+	s.notifyFallbackSuccess()
 	return githubReleases, nil
 }
 
@@ -281,7 +284,19 @@ func (s *SaltboxProxySource) notifyFallback(reason error) {
 			return
 		}
 		if s.runner != nil {
-			s.runner.Warning("SVM proxy unavailable or unusable; using direct GitHub API")
+			s.runner.Warning(fmt.Sprintf("SVM proxy %s; trying GitHub directly", releaseproxy.Describe(reason)))
+		}
+	})
+}
+
+func (s *SaltboxProxySource) notifyFallbackSuccess() {
+	s.successOnce.Do(func() {
+		if s.verbose {
+			fmt.Println("Debug: Direct GitHub API fallback succeeded")
+			return
+		}
+		if s.runner != nil {
+			s.runner.Info("GitHub fallback succeeded")
 		}
 	})
 }
@@ -313,13 +328,13 @@ func (s *SaltboxProxySource) listReleasesFromProxy(ctx context.Context, reposito
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		return nil, fmt.Errorf("proxy returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("%w: %s", releaseproxy.HTTPStatus(resp.StatusCode), string(body))
 	}
 
 	// Parse the response
 	var githubReleases []githubRelease
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&githubReleases); err != nil {
-		return nil, fmt.Errorf("failed to decode releases: %w", err)
+		return nil, releaseproxy.InvalidResponse("returned invalid JSON", err)
 	}
 
 	// Convert to SourceRelease format
