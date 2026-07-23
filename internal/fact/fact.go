@@ -127,44 +127,43 @@ func getCurrentFactVersion(ctx context.Context, targetPath string) (string, erro
 }
 
 // checkIfUpdateNeeded determines if saltbox.fact needs to be updated
-func checkIfUpdateNeeded(ctx context.Context, task *spinners.Task, targetPath, latestVersion string, alwaysUpdate bool) (bool, error) {
+func checkIfUpdateNeeded(ctx context.Context, task *spinners.Task, targetPath, latestVersion string, alwaysUpdate bool) (bool, string, error) {
 	if alwaysUpdate {
 		task.Info("Reinstall forced.")
-		return true, nil
+		return true, "", nil
 	}
 
 	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
 		task.Info("saltbox.fact not found. Proceeding with update.")
-		return true, nil
+		return true, "", nil
 	} else if err != nil {
-		return false, fmt.Errorf("error checking for existing saltbox.fact: %w", err)
+		return false, "", fmt.Errorf("error checking for existing saltbox.fact: %w", err)
 	}
 
 	currentVersion, err := getCurrentFactVersion(ctx, targetPath)
 	if err != nil {
 		task.Warning(fmt.Sprintf("%v. Proceeding with update.", err))
-		return true, nil
+		return true, "", nil
 	}
 
 	currentSemVer, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
 	if err != nil {
 		task.Warning(fmt.Sprintf("Failed to parse current version: %v. Updating...", err))
-		return true, nil
+		return true, currentVersion, nil
 	}
 
 	latestSemVer, err := semver.NewVersion(strings.TrimPrefix(latestVersion, "v"))
 	if err != nil {
 		task.Warning(fmt.Sprintf("Failed to parse latest version: %v. Updating...", err))
-		return true, nil
+		return true, currentVersion, nil
 	}
 
 	if currentSemVer.Compare(latestSemVer) >= 0 {
 		task.Info(fmt.Sprintf("saltbox.fact is up to date (version %s)", currentVersion))
-		return false, nil
+		return false, currentVersion, nil
 	}
 
-	task.Info(fmt.Sprintf("saltbox.fact update available: %s → %s", currentVersion, latestVersion))
-	return true, nil
+	return true, currentVersion, nil
 }
 
 type latestReleaseInfo struct {
@@ -287,7 +286,7 @@ func downloadAndInstallSaltboxFact(ctx context.Context, task *spinners.Task, alw
 	}
 
 	// Check if we need to update
-	needsUpdate, err := checkIfUpdateNeeded(ctx, task, targetPath, latestVersion, alwaysUpdate)
+	needsUpdate, currentVersion, err := checkIfUpdateNeeded(ctx, task, targetPath, latestVersion, alwaysUpdate)
 	if err != nil {
 		return err
 	}
@@ -363,6 +362,13 @@ func downloadAndInstallSaltboxFact(ctx context.Context, task *spinners.Task, alw
 			return err
 		}
 
+		if alwaysUpdate {
+			task.Info(fmt.Sprintf("saltbox.fact reinstalled successfully (version %s)", latestVersion))
+		} else if currentVersion != "" {
+			task.Info(fmt.Sprintf("saltbox.fact updated successfully: %s → %s", currentVersion, latestVersion))
+		} else {
+			task.Info(fmt.Sprintf("saltbox.fact installed successfully (version %s)", latestVersion))
+		}
 	}
 
 	return nil

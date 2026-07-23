@@ -169,7 +169,7 @@ func TestTaskNoticeRemainsAttachedToCompletedTask(t *testing.T) {
 	model = updated.(progressModel)
 	updated, _ = model.Update(progressNoticeMsg{
 		id:      1,
-		message: "saltbox.fact update available: 1.0.7 → v1.0.8",
+		message: "saltbox.fact updated successfully: 1.0.7 → v1.0.8",
 		color:   styles.ColorLightBlue,
 	})
 	model = updated.(progressModel)
@@ -180,13 +180,13 @@ func TestTaskNoticeRemainsAttachedToCompletedTask(t *testing.T) {
 
 	view := model.View().Content
 	taskAt := strings.Index(view, "fact ready")
-	noticeAt := strings.Index(view, "saltbox.fact update available")
+	noticeAt := strings.Index(view, "saltbox.fact updated successfully")
 	if taskAt < 0 || noticeAt < taskAt {
 		t.Fatalf("task notice was not retained beneath its task: %q", view)
 	}
 	noticeLine := ""
 	for line := range strings.SplitSeq(view, "\n") {
-		if strings.Contains(line, "saltbox.fact update available") {
+		if strings.Contains(line, "saltbox.fact updated successfully") {
 			noticeLine = line
 			break
 		}
