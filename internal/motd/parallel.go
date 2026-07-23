@@ -15,8 +15,8 @@ type InfoProvider func(ctx context.Context, verbose bool) string
 // InfoSource represents a source of system information
 type InfoSource struct {
 	Key      string // The label for the information (e.g., "Distribution:")
-	Provider any    // The function that retrieves the information (can be string or []string)
-	Order    int    // Display order for a consistent output
+	Provider InfoProvider
+	Order    int // Display order for a consistent output
 }
 
 // Result stores the output of a single information function
@@ -37,6 +37,10 @@ const defaultProviderTimeout = 30 * time.Second
 
 // GetSystemInfo gathers all requested system information in parallel
 func GetSystemInfo(ctx context.Context, sources []InfoSource, verbose bool) []Result {
+	return getSystemInfo(ctx, sources, verbose, defaultProviderTimeout)
+}
+
+func getSystemInfo(ctx context.Context, sources []InfoSource, verbose bool, providerTimeout time.Duration) []Result {
 	var wg sync.WaitGroup
 	resultChan := make(chan Result, len(sources))
 	results := make([]Result, 0, len(sources))
@@ -47,23 +51,7 @@ func GetSystemInfo(ctx context.Context, sources []InfoSource, verbose bool) []Re
 		go func(src InfoSource) {
 			defer wg.Done()
 
-			// Recover from panics to prevent goroutine crashes from hanging the entire MOTD.
-			// Without this, a panic in any provider would prevent wg.Done() from being called,
-			// causing the wait group to hang indefinitely and no output to be displayed.
-			defer func() {
-				if r := recover(); r != nil {
-					if verbose {
-						fmt.Fprintf(os.Stderr, "PANIC in %s: %v\n", src.Key, r)
-					}
-					resultChan <- Result{
-						Key:   src.Key,
-						Value: fmt.Sprintf("Error: panic occurred (%v)", r),
-						Order: src.Order,
-					}
-				}
-			}()
-
-			ctx, cancel := context.WithTimeout(ctx, defaultProviderTimeout)
+			providerCtx, cancel := context.WithTimeout(ctx, providerTimeout)
 			defer cancel()
 
 			// Track timing if verbose mode is enabled
@@ -72,20 +60,29 @@ func GetSystemInfo(ctx context.Context, sources []InfoSource, verbose bool) []Re
 				start = time.Now()
 			}
 
-			// Get the information with timeout
-			providerFunc, ok := src.Provider.(func(context.Context, bool) string)
-			if !ok {
-				if verbose {
-					fmt.Printf("ERROR: Invalid provider type for %s\n", src.Key)
+			providerResult := make(chan string, 1)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						if verbose {
+							fmt.Fprintf(os.Stderr, "PANIC in %s: %v\n", src.Key, r)
+						}
+						providerResult <- fmt.Sprintf("Error: panic occurred (%v)", r)
+					}
+				}()
+				providerResult <- src.Provider(providerCtx, verbose)
+			}()
+
+			var value string
+			select {
+			case value = <-providerResult:
+			case <-providerCtx.Done():
+				if ctx.Err() != nil {
+					value = fmt.Sprintf("Error: provider canceled (%v)", ctx.Err())
+				} else {
+					value = fmt.Sprintf("Error: provider timed out after %s", providerTimeout)
 				}
-				resultChan <- Result{
-					Key:   src.Key,
-					Value: "Error: Invalid provider",
-					Order: src.Order,
-				}
-				return
 			}
-			value := providerFunc(ctx, verbose)
 
 			// Print timing debug info if verbose mode is enabled
 			if verbose {
