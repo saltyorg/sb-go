@@ -12,7 +12,7 @@ require (
 	github.com/autobrr/go-qbittorrent v1.16.0
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/fang v1.0.0
-	github.com/charmbracelet/glamour v1.0.0
+	github.com/charmbracelet/glamour/v2 v2.0.1
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260720091843-3eef36eaaa28
 	github.com/cloudflare/cloudflare-go/v6 v6.10.0
