@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -525,31 +526,44 @@ func PromptForMigrations(diffs []*AnnouncementDiff) ([]MigrationRequest, error) 
 			m.date)
 	}
 
-	// Prompt for approval once for all migrations
-	scanner := bufio.NewScanner(os.Stdin)
-	var response string
-	for {
-		fmt.Print("\nRun all migration tags? (y/n): ")
-		scanner.Scan()
-		response = strings.TrimSpace(strings.ToLower(scanner.Text()))
-
-		// Validate input - require explicit y/yes/n/no
-		if response == "y" || response == "yes" || response == "n" || response == "no" {
-			break
-		}
-
-		// Show error for invalid input
-		fmt.Println("Invalid input. Please enter 'y' (yes) or 'n' (no).")
+	approved, err := readMigrationApproval(os.Stdin, os.Stdout)
+	if err != nil {
+		return nil, err
 	}
 
 	// If approved, add all migrations in chronological order
-	if response == "y" || response == "yes" {
+	if approved {
 		for _, m := range migrations {
 			migrationRequests = append(migrationRequests, m.request)
 		}
 	}
 
 	return migrationRequests, nil
+}
+
+func readMigrationApproval(input io.Reader, output io.Writer) (bool, error) {
+	scanner := bufio.NewScanner(input)
+	for {
+		fmt.Fprint(output, "\nRun all migration tags? (y/n): ")
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return false, fmt.Errorf("failed to read migration approval: %w", err)
+			}
+			return false, fmt.Errorf("failed to read migration approval: %w", io.EOF)
+		}
+		response := strings.TrimSpace(strings.ToLower(scanner.Text()))
+
+		// Validate input - require explicit y/yes/n/no
+		switch response {
+		case "y", "yes":
+			return true, nil
+		case "n", "no":
+			return false, nil
+		}
+
+		// Show error for invalid input
+		fmt.Fprintln(output, "Invalid input. Please enter 'y' (yes) or 'n' (no).")
+	}
 }
 
 // ExecuteMigrations runs the requested migration playbook tags.
