@@ -36,7 +36,7 @@ type MultiStringResult struct {
 const defaultProviderTimeout = 30 * time.Second
 
 // GetSystemInfo gathers all requested system information in parallel
-func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
+func GetSystemInfo(ctx context.Context, sources []InfoSource, verbose bool) []Result {
 	var wg sync.WaitGroup
 	resultChan := make(chan Result, len(sources))
 	results := make([]Result, 0, len(sources))
@@ -63,7 +63,7 @@ func GetSystemInfo(sources []InfoSource, verbose bool) []Result {
 				}
 			}()
 
-			ctx, cancel := context.WithTimeout(context.Background(), defaultProviderTimeout)
+			ctx, cancel := context.WithTimeout(ctx, defaultProviderTimeout)
 			defer cancel()
 
 			// Track timing if verbose mode is enabled

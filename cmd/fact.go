@@ -6,9 +6,11 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
+	"unicode"
 
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/utils"
@@ -39,6 +41,7 @@ Example usage:
   sb fact role instance --method=delete --delete-type=key --key key1
   sb fact role instance --method=delete --delete-type=instance
   sb fact role --method=delete --delete-type=role`,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get flag values and create config
 		method, _ := cmd.Flags().GetString("method")
@@ -57,11 +60,8 @@ Example usage:
 
 // runFactCommand handles the main logic for the fact command
 func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error {
-	if len(args) < 1 {
-		fmt.Print("Error: Role name is required\n\n")
-		_ = cmd.Help()
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render("role name is required"))
+	if err := validateFactCommand(args, config); err != nil {
+		return err
 	}
 
 	role := args[0]
@@ -216,15 +216,93 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 	}
 }
 
-// sortStrings performs a simple bubble sort on a string slice
-func sortStrings(items []string) {
-	for i := range items {
-		for j := i + 1; j < len(items); j++ {
-			if items[i] > items[j] {
-				items[i], items[j] = items[j], items[i]
-			}
+func validateFactCommand(args []string, config *factConfig) error {
+	if len(args) < 1 {
+		return fmt.Errorf("role name is required")
+	}
+	if err := validateFactIdentifier("role", args[0], true); err != nil {
+		return err
+	}
+	if len(args) == 2 {
+		if err := validateFactIdentifier("instance", args[1], false); err != nil {
+			return err
 		}
 	}
+
+	switch config.method {
+	case "load":
+		if config.deleteType != "" {
+			return fmt.Errorf("--delete-type is only valid with --method=delete")
+		}
+	case "save":
+		if len(args) != 2 {
+			return fmt.Errorf("instance name is required for save method")
+		}
+		if config.deleteType != "" {
+			return fmt.Errorf("--delete-type is only valid with --method=delete")
+		}
+		if len(config.keyValues) == 0 {
+			return fmt.Errorf("at least one --key key=value is required for save method")
+		}
+		for _, keyValue := range config.keyValues {
+			key, _, found := strings.Cut(keyValue, "=")
+			if !found || strings.TrimSpace(key) == "" {
+				return fmt.Errorf("invalid save key %q: expected key=value", keyValue)
+			}
+		}
+	case "delete":
+		switch config.deleteType {
+		case "role":
+			if len(args) != 1 {
+				return fmt.Errorf("instance must not be provided for role deletion")
+			}
+			if len(config.keyValues) > 0 {
+				return fmt.Errorf("--key is not valid for role deletion")
+			}
+		case "instance":
+			if len(args) != 2 {
+				return fmt.Errorf("instance name is required for instance deletion")
+			}
+			if len(config.keyValues) > 0 {
+				return fmt.Errorf("--key is not valid for instance deletion")
+			}
+		case "key":
+			if len(args) != 2 {
+				return fmt.Errorf("instance name is required for key deletion")
+			}
+			if len(config.keyValues) == 0 {
+				return fmt.Errorf("at least one --key is required for key deletion")
+			}
+			for _, keyValue := range config.keyValues {
+				key, _, _ := strings.Cut(keyValue, "=")
+				if strings.TrimSpace(key) == "" {
+					return fmt.Errorf("key name must not be empty")
+				}
+			}
+		default:
+			return fmt.Errorf("invalid delete type %q: expected role, instance, or key", config.deleteType)
+		}
+	default:
+		return fmt.Errorf("unknown method %q: expected load, save, or delete", config.method)
+	}
+	return nil
+}
+
+func validateFactIdentifier(kind, value string, fileName bool) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("%s name must not be empty", kind)
+	}
+	if strings.IndexFunc(value, unicode.IsControl) >= 0 || strings.ContainsAny(value, "[]") {
+		return fmt.Errorf("%s name contains unsupported characters", kind)
+	}
+	if fileName && (value == "." || value == ".." || filepath.Base(value) != value || strings.ContainsAny(value, `/\`)) {
+		return fmt.Errorf("role name must not contain a path")
+	}
+	return nil
+}
+
+func sortStrings(items []string) {
+	sort.Strings(items)
 }
 
 // getSortedKeys returns sorted keys from a map
@@ -274,6 +352,7 @@ func getKeyNames(keys map[string]string) []string {
 	for k := range keys {
 		keyNames = append(keyNames, k)
 	}
+	sort.Strings(keyNames)
 	return keyNames
 }
 

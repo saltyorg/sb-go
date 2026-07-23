@@ -2,10 +2,9 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -19,6 +18,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start Docker containers managed by Saltbox",
 	Long:  `Start Docker containers managed by Saltbox in dependency order.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
@@ -66,25 +66,10 @@ func runDockerStart(ctx context.Context, verbose bool) error {
 
 	// Create a start container task
 	startContainersTask := func() error {
-		// Call the API to start containers
-		resp, err := http.Post(fmt.Sprintf("%s/start", constants.DockerControllerAPIURL), "application/json", nil)
+		client := &http.Client{Timeout: 10 * time.Second}
+		jobResp, err := requestDockerJob(ctx, constants.DockerControllerAPIURL+"/start", nil, client)
 		if err != nil {
-			return fmt.Errorf("failed to start containers: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("failed to start containers (status code: %d)", resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read response: %v", err)
-		}
-
-		var jobResp JobResponse
-		if err := json.Unmarshal(body, &jobResp); err != nil {
-			return fmt.Errorf("failed to parse response: %v", err)
+			return fmt.Errorf("failed to start containers: %w", err)
 		}
 
 		if verbose {
@@ -95,10 +80,10 @@ func runDockerStart(ctx context.Context, verbose bool) error {
 		var success bool
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Waiting for Docker start job", func() error {
 			var err error
-			success, err = waitForJobCompletion(jobResp.JobID)
+			success, err = waitForJobCompletion(ctx, jobResp.JobID)
 			return err
 		}); err != nil {
-			return fmt.Errorf("error while starting containers: %v", err)
+			return fmt.Errorf("error while starting containers: %w", err)
 		}
 
 		if !success {

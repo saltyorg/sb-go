@@ -16,6 +16,7 @@ var ghaCmd = &cobra.Command{
 	Short:  "Install GHA dependencies",
 	Long:   `Install GHA dependencies`,
 	Hidden: true,
+	Args:   cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 

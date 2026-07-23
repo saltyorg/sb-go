@@ -14,6 +14,7 @@ var reinstallFactsCmd = &cobra.Command{
 	Use:   "reinstall-facts",
 	Short: "Reinstall the Rust saltbox.fact file",
 	Long:  `Reinstall the Rust saltbox.fact file`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 

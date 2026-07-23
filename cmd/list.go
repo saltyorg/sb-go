@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -83,7 +84,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 	}
 
 	if includeMod {
-		if _, err := os.Stat(constants.SaltboxModRepoPath); !os.IsNotExist(err) {
+		if _, err := os.Stat(constants.SaltboxModRepoPath); err == nil {
 			repoInfo = append(repoInfo, struct {
 				RepoPath      string
 				PlaybookPath  string
@@ -92,8 +93,10 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 				Prefix        string
 				RepoName      string
 			}{constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), "sanity_check", "\nSaltbox_mod tags (prepend mod-):", "mod-", "Saltbox-mod"})
-		} else {
+		} else if errors.Is(err, os.ErrNotExist) {
 			fmt.Println("Saltbox-mod directory not found, skipping.  Ensure Saltbox-mod is installed.")
+		} else {
+			return fmt.Errorf("inspect Saltbox-mod directory: %w", err)
 		}
 	}
 
@@ -141,7 +144,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 
 			tagsInterface, ok := repoCache["tags"]
 			if !ok {
-				fmt.Printf("Error: Tags not found in cache for %s. RepoCache: %+v\n", info.RepoPath, repoCache)
+				errs = append(errs, fmt.Errorf("tags not found in cache for %s", info.RepoPath))
 				continue
 			}
 
@@ -155,15 +158,14 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 					if strTag, ok := tag.(string); ok {
 						tags = append(tags, strTag)
 					} else {
-						fmt.Printf("Error: Non-string tag found in cache for %s at index %d. Tag: %+v (type: %T)\n", info.RepoPath, i, tag, tag)
-						continue
+						errs = append(errs, fmt.Errorf("non-string tag in cache for %s at index %d", info.RepoPath, i))
 					}
 				}
 			case []string:
 				logging.Debug(verbosity, "Processing []string with %d elements", len(v))
 				tags = v
 			default:
-				fmt.Printf("Error: Unexpected type for tags in cache for %s. Type: %T\n", info.RepoPath, tagsInterface)
+				errs = append(errs, fmt.Errorf("unexpected tags type in cache for %s: %T", info.RepoPath, tagsInterface))
 				continue
 			}
 
@@ -183,7 +185,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 
 	// Return accumulated errors if any repos failed
 	if len(errs) > 0 {
-		return fmt.Errorf("errors occurred while listing tags: %v", errs)
+		return fmt.Errorf("errors occurred while listing tags: %w", errors.Join(errs...))
 	}
 	return nil
 }
@@ -262,24 +264,30 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 
 			repoCache, cacheFound := cacheInstance.GetRepoCache(info.RepoPath)
 			if !cacheFound {
+				errs = append(errs, fmt.Errorf("cache not found for %s", info.RepoPath))
 				continue
 			}
 
 			tagsInterface, ok := repoCache["tags"]
 			if !ok {
+				errs = append(errs, fmt.Errorf("tags not found in cache for %s", info.RepoPath))
 				continue
 			}
 
 			tags = make([]string, 0)
 			switch v := tagsInterface.(type) {
 			case []any:
-				for _, tag := range v {
+				for i, tag := range v {
 					if strTag, ok := tag.(string); ok {
 						tags = append(tags, strTag)
+					} else {
+						errs = append(errs, fmt.Errorf("non-string tag in cache for %s at index %d", info.RepoPath, i))
 					}
 				}
 			case []string:
 				tags = v
+			default:
+				errs = append(errs, fmt.Errorf("unexpected tags type in cache for %s: %T", info.RepoPath, tagsInterface))
 			}
 		}
 
@@ -314,6 +322,9 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 	}
 
 	if len(allResults) == 0 {
+		if len(errs) > 0 {
+			return fmt.Errorf("errors occurred while searching tags: %w", errors.Join(errs...))
+		}
 		fmt.Printf("No tags found matching '%s'\n", query)
 		return nil
 	}
@@ -408,7 +419,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 
 	// Return accumulated errors if any repos failed
 	if len(errs) > 0 {
-		return fmt.Errorf("errors occurred while searching tags: %v", errs)
+		return fmt.Errorf("errors occurred while searching tags: %w", errors.Join(errs...))
 	}
 	return nil
 }

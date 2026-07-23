@@ -17,6 +17,7 @@ var completionCmd = &cobra.Command{
 	Use:    "completion",
 	Hidden: true,
 	Short:  "Install shell completion for sb",
+	Args:   cobra.NoArgs,
 	Long: `Install shell completion scripts for sb.
 
 This command installs completion scripts system-wide on Ubuntu.
@@ -29,6 +30,7 @@ After installation, restart your shell or source the completion file.`,
 var bashCompletionCmd = &cobra.Command{
 	Use:   "bash",
 	Short: "Install bash completion",
+	Args:  cobra.NoArgs,
 	Long: `Installs bash completion script for all binary names (including symlinks).
 
 After installation, restart your shell or source the completion file.`,
@@ -41,6 +43,7 @@ After installation, restart your shell or source the completion file.`,
 var zshCompletionCmd = &cobra.Command{
 	Use:   "zsh",
 	Short: "Install zsh completion",
+	Args:  cobra.NoArgs,
 	Long: `Installs zsh completion script for all binary names (including symlinks).
 
 After installation, restart your shell or run:

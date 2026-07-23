@@ -14,6 +14,7 @@ var diagCmd = &cobra.Command{
 	Use:   "diag",
 	Short: "Runs Saltbox diagnostics role",
 	Long:  `Runs Saltbox diagnostics role`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return handleDiag(cmd)
 	},

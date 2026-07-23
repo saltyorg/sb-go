@@ -10,6 +10,7 @@ var configCmd = &cobra.Command{
 	Use:   "validate-config",
 	Short: "Validate Saltbox configuration files",
 	Long:  `Validate Saltbox configuration files`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		if err := validate.AllSaltboxConfigsDetailed(verbose); err != nil {

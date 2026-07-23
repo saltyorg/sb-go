@@ -29,6 +29,7 @@ var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update Saltbox & Sandbox",
 	Long:  `Update Saltbox & Sandbox`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
@@ -55,6 +56,7 @@ func init() {
 	updateCmd.PersistentFlags().Bool("keep-branch", false, "Skip branch reset prompt and stay on current branch")
 	updateCmd.PersistentFlags().Bool("reset-branch", false, "Skip branch reset prompt and reset to default branch")
 	updateCmd.PersistentFlags().Bool("skip-self-update", false, "Skip CLI self-update check")
+	updateCmd.MarkFlagsMutuallyExclusive("keep-branch", "reset-branch")
 }
 
 func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelfUpdate bool) error {
@@ -78,7 +80,7 @@ func handleUpdate(ctx context.Context, verbose bool, branchReset *bool, skipSelf
 	spinners.SetVerboseMode(verbose)
 
 	if !skipSelfUpdate {
-		updated, err := doSelfUpdate(true, verbose, "Re-run the update command to update Saltbox", false)
+		updated, err := doSelfUpdate(ctx, true, verbose, "Re-run the update command to update Saltbox", false)
 		if err != nil {
 			return fmt.Errorf("error during self-update: %w", err)
 		}
@@ -158,9 +160,8 @@ func validateSaltboxConfig(verbose bool) error {
 
 // updateSaltbox updates the Saltbox repository and configuration.
 func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
-	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SaltboxRepoPath)))
+	if err := requireDirectory(constants.SaltboxRepoPath); err != nil {
+		return err
 	}
 	branch, err := git.ResolveUpdateBranch(ctx, constants.SaltboxRepoPath, "master", branchReset, "Saltbox")
 	if err != nil {
@@ -178,9 +179,8 @@ func updateSaltbox(ctx context.Context, verbose bool, branchReset *bool) error {
 
 func updateSaltboxComponents(ctx context.Context, verbose bool, branch string) error {
 	// Check if Saltbox repo exists
-	if _, err := os.Stat(constants.SaltboxRepoPath); os.IsNotExist(err) {
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SaltboxRepoPath)))
+	if err := requireDirectory(constants.SaltboxRepoPath); err != nil {
+		return err
 	}
 
 	// Get Saltbox user
@@ -277,9 +277,8 @@ func updateSaltboxComponents(ctx context.Context, verbose bool, branch string) e
 
 // updateSandbox updates the Sandbox repository and configuration.
 func updateSandbox(ctx context.Context, branchReset *bool) error {
-	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)))
+	if err := requireDirectory(constants.SandboxRepoPath); err != nil {
+		return err
 	}
 	branch, err := git.ResolveUpdateBranch(ctx, constants.SandboxRepoPath, "master", branchReset, "Sandbox")
 	if err != nil {
@@ -297,9 +296,8 @@ func updateSandbox(ctx context.Context, branchReset *bool) error {
 
 func updateSandboxComponents(ctx context.Context, branch string) error {
 	// Check if Sandbox repo exists
-	if _, err := os.Stat(constants.SandboxRepoPath); os.IsNotExist(err) {
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("error: %s does not exist or is not a directory", constants.SandboxRepoPath)))
+	if err := requireDirectory(constants.SandboxRepoPath); err != nil {
+		return err
 	}
 
 	// Get Saltbox user
@@ -346,6 +344,17 @@ func updateSandboxComponents(ctx context.Context, branch string) error {
 		}
 	}
 
+	return nil
+}
+
+func requireDirectory(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("inspect required directory %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s exists but is not a directory", path)
+	}
 	return nil
 }
 

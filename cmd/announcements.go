@@ -15,6 +15,7 @@ var announcementsCmd = &cobra.Command{
 	Short:  "Display announcements from announcement files",
 	Long:   `Display announcements by comparing before and after announcements.yml files`,
 	Hidden: true,
+	Args:   cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		beforePath, _ := cmd.Flags().GetString("before")

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -56,6 +57,7 @@ var motdCmd = &cobra.Command{
 	Long: `Displays system information including Ubuntu distribution version,
 kernel version, system uptime, CPU load, memory usage, disk usage,
 last login, user sessions, process information, and system update status based on flags provided.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get flag values and create config
 		config := &motdConfig{}
@@ -94,12 +96,12 @@ last login, user sessions, process information, and system update status based o
 		config.shareMode, _ = cmd.Flags().GetBool("share")
 		config.generateConfig, _ = cmd.Flags().GetBool("generate-config")
 
-		return runMotdCommand(config)
+		return runMotdCommand(cmd.Context(), config)
 	},
 }
 
 // runMotdCommand handles the main logic for the motd command
-func runMotdCommand(mcfg *motdConfig) error {
+func runMotdCommand(ctx context.Context, mcfg *motdConfig) error {
 	// Handle --generate-config flag
 	if mcfg.generateConfig {
 		config, err := motd.GenerateExampleConfig()
@@ -193,10 +195,10 @@ func runMotdCommand(mcfg *motdConfig) error {
 		return fmt.Errorf("invalid font specified: %s%s", mcfg.bannerFont, availableFonts.String())
 	}
 
-	return displayMotd(mcfg, mcfg.verbosity > 0)
+	return displayMotd(ctx, mcfg, mcfg.verbosity > 0)
 }
 
-func displayMotd(config *motdConfig, verbose bool) error {
+func displayMotd(ctx context.Context, config *motdConfig, verbose bool) error {
 	// Set share mode if enabled
 	motd.SetShareMode(config.shareMode)
 
@@ -288,7 +290,7 @@ func displayMotd(config *motdConfig, verbose bool) error {
 	}
 
 	// Get system information in parallel
-	results := motd.GetSystemInfo(activeSources, verbose)
+	results := motd.GetSystemInfo(ctx, activeSources, verbose)
 
 	// Filter out any results with empty values
 	var filteredResults []motd.Result

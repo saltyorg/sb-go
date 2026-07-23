@@ -22,6 +22,7 @@ var setupCmd = &cobra.Command{
 	Short:  "Install Saltbox and its dependencies",
 	Long:   `Install Saltbox and its dependencies`,
 	Hidden: true,
+	Args:   cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
@@ -31,16 +32,24 @@ var setupCmd = &cobra.Command{
 		spinners.SetVerboseMode(verbose)
 
 		// Check if Saltbox installation was already installed and prompt for confirmation.
-		if _, err := os.Stat(constants.SaltboxRepoPath); err == nil {
+		if info, err := os.Stat(constants.SaltboxRepoPath); err == nil {
+			if !info.IsDir() {
+				return fmt.Errorf("%s exists but is not a directory", constants.SaltboxRepoPath)
+			}
 			reader := bufio.NewReader(os.Stdin)
 			fmt.Printf("\n%s folder already exists. Continuing may reset your installation. Are you sure you want to continue? (yes/no): ", constants.SaltboxRepoPath)
-			response, _ := reader.ReadString('\n')
+			response, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("read setup confirmation: %w", err)
+			}
 			response = strings.TrimSpace(strings.ToLower(response))
 
 			if response != "yes" && response != "y" {
 				fmt.Println("Setup aborted by user.")
 				return nil
 			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect existing Saltbox installation: %w", err)
 		}
 
 		selectedBranch := branch
@@ -49,6 +58,8 @@ var setupCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect existing Saltbox Git repository: %w", err)
 		}
 
 		return spinners.RunTaskWithSpinnerCustomContext(ctx, spinners.SpinnerOptions{

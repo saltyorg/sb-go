@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -36,6 +37,7 @@ var selfUpdateCmd = &cobra.Command{
 	Hidden: true,
 	Short:  "Update Saltbox CLI",
 	Long:   `Update Saltbox CLI`,
+	Args:   cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check if self-update is disabled at build time (unless the force flag is used)
 		if runtime.DisableSelfUpdate == "true" && !forceUpdate {
@@ -45,7 +47,7 @@ var selfUpdateCmd = &cobra.Command{
 			}
 			return nil
 		}
-		_, err := doSelfUpdate(autoAccept, debug, "", forceUpdate)
+		_, err := doSelfUpdate(cmd.Context(), autoAccept, debug, "", forceUpdate)
 		return err
 	},
 }
@@ -75,7 +77,7 @@ func promptForConfirmation(prompt string) (bool, error) {
 	return response == "y" || response == "yes", nil
 }
 
-func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
+func doSelfUpdate(ctx context.Context, autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
 	// Check if self-update is disabled at build time (unless force is true)
 	if runtime.DisableSelfUpdate == "true" && !force {
 		if verbose {
@@ -104,7 +106,10 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		//selfupdate.EnableLog()
 	}
 
-	v := semver.MustParse(runtime.Version)
+	v, err := semver.NewVersion(runtime.Version)
+	if err != nil {
+		return false, fmt.Errorf("invalid current version %q: %w", runtime.Version, err)
+	}
 
 	if verbose {
 		fmt.Printf("Debug: Parsed semver version: %s\n", v.String())
@@ -131,7 +136,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		return false, fmt.Errorf("error creating updater: %w", err)
 	}
 
-	latest, found, err := updater.DetectLatest(context.Background(), selfupdate.ParseSlug("saltyorg/sb-go"))
+	latest, found, err := updater.DetectLatest(ctx, selfupdate.ParseSlug("saltyorg/sb-go"))
 	if err != nil {
 		if verbose {
 			fmt.Printf("Debug: Error checking for updates: %v\n", err)
@@ -174,7 +179,7 @@ func doSelfUpdate(autoUpdate bool, verbose bool, optionalMessage string, force b
 		return false, fmt.Errorf("error getting executable path: %w", err)
 	}
 
-	err = updater.UpdateTo(context.Background(), latest, exe)
+	err = updater.UpdateTo(ctx, latest, exe)
 	if err != nil {
 		if verbose {
 			fmt.Printf("Debug: Update failed with error: %v\n", err)
@@ -287,7 +292,7 @@ func (s *SaltboxProxySource) listReleasesFromProxy(ctx context.Context, reposito
 	githubAPIURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, name)
 
 	// Construct the proxied URL
-	proxyURL := fmt.Sprintf("%s?url=%s", s.proxyBaseURL, githubAPIURL)
+	proxyURL := fmt.Sprintf("%s?url=%s", s.proxyBaseURL, url.QueryEscape(githubAPIURL))
 
 	// Make the request
 	req, err := http.NewRequestWithContext(ctx, "GET", proxyURL, nil)
@@ -302,13 +307,13 @@ func (s *SaltboxProxySource) listReleasesFromProxy(ctx context.Context, reposito
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 		return nil, fmt.Errorf("proxy returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	// Parse the response
 	var githubReleases []githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&githubReleases); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&githubReleases); err != nil {
 		return nil, fmt.Errorf("failed to decode releases: %w", err)
 	}
 

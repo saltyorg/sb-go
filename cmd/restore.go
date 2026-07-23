@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha1"
@@ -212,10 +213,11 @@ var restoreCmd = &cobra.Command{
 	Use:   "restore",
 	Short: "Fetches and decrypts files based on username and password",
 	Long: `Fetches encrypted files from a remote URL, decrypts them, and places them in the Saltbox directory.
-The restore URL defaults to "crs.saltbox.dev".  A password will be prompted for twice.`,
+	The restore URL defaults to "crs.saltbox.dev".  A password will be prompted for twice.`,
 	Hidden: true,
+	Args:   cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		p := tea.NewProgram(initialRestoreModel(), tea.WithOutput(os.Stdout))
+		p := tea.NewProgram(initialRestoreModel(), tea.WithOutput(os.Stdout), tea.WithContext(cmd.Context()))
 
 		m, err := p.Run()
 		if err != nil {
@@ -234,7 +236,7 @@ The restore URL defaults to "crs.saltbox.dev".  A password will be prompted for 
 				folder := filepath.Join(os.TempDir(), "saltbox_restore")
 				verbose, _ := cmd.Flags().GetBool("verbose")
 
-				successfulDownloads, err := validateAndRestore(user, password, restoreURL, dir, folder, verbose)
+				successfulDownloads, err := validateAndRestore(cmd.Context(), user, password, restoreURL, dir, folder, verbose)
 				if err != nil {
 					if verbose {
 						return fmt.Errorf("restore error (DEBUG: %v): %w", err, err)
@@ -354,7 +356,7 @@ func processRestoredFile(file, folder, dir, password string, verbose bool) error
 	return nil
 }
 
-func validateAndRestore(user, password, restoreURL, dir, folder string, verbose bool) (int, error) {
+func validateAndRestore(ctx context.Context, user, password, restoreURL, dir, folder string, verbose bool) (int, error) {
 	files := []string{"accounts.yml", "adv_settings.yml", "backup_config.yml", "hetzner_vlan.yml", "localhost.yml", "motd.yml", "providers.yml", "rclone.conf", "settings.yml"}
 
 	if err := setupRestoreFolders(dir, folder, verbose); err != nil {
@@ -376,7 +378,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 			fmt.Printf("DEBUG: Fetching URL: %s\n", url)
 		}
 
-		if !validateURL(url, verbose) {
+		if !validateURL(ctx, url, verbose) {
 			fmt.Println(" [IGNORED]")
 			continue
 		}
@@ -385,7 +387,7 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 		if verbose {
 			fmt.Printf("DEBUG: Downloading to: %s\n", outFile)
 		}
-		if err := downloadFile(url, outFile); err != nil {
+		if err := downloadFile(ctx, url, outFile); err != nil {
 			fmt.Println(" [FAIL]")
 			continue
 		}
@@ -411,14 +413,18 @@ func validateAndRestore(user, password, restoreURL, dir, folder string, verbose 
 	return successfulDownloads, nil
 }
 
-func validateURL(url string, verbose bool) bool {
+func validateURL(ctx context.Context, url string, verbose bool) bool {
 	if verbose {
 		fmt.Printf("DEBUG: Validating URL: %s\n", url)
 	}
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
-	resp, err := client.Head(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		if verbose {
 			fmt.Printf("DEBUG: URL validation failed: %v\n", err)
@@ -432,11 +438,17 @@ func validateURL(url string, verbose bool) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func downloadFile(url, filepath string) error {
+func downloadFile(ctx context.Context, url, filePath string) error {
+	const maxRestoreFileSize = 16 << 20
+
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("create download request: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -446,17 +458,20 @@ func downloadFile(url, filepath string) error {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 
-	out, err := os.Create(filepath)
+	out, err := os.Create(filePath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = out.Close() }()
 
-	_, err = io.Copy(out, resp.Body)
+	written, err := io.Copy(out, io.LimitReader(resp.Body, maxRestoreFileSize+1))
 	if err != nil {
-		return fmt.Errorf("failed to write to file during download: %v", err)
+		return fmt.Errorf("failed to write to file during download: %w", err)
 	}
-	return err
+	if written > maxRestoreFileSize {
+		return fmt.Errorf("restore file exceeds %d bytes", maxRestoreFileSize)
+	}
+	return nil
 }
 
 // Custom error type for padding errors

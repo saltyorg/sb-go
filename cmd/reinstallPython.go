@@ -21,6 +21,7 @@ var reinstallPythonCmd = &cobra.Command{
 	Use:   "reinstall-python",
 	Short: "Reinstall the Python version used by Saltbox and related Ansible virtual environment using uv",
 	Long:  `Reinstall the Python version used by Saltbox and related Ansible virtual environment using uv`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")

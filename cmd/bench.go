@@ -19,6 +19,7 @@ var benchCmd = &cobra.Command{
 	Use:   "bench",
 	Short: "Runs bench.sh benchmark",
 	Long:  `Runs bench.sh benchmark`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		if err := runBenchmark(ctx); err != nil {
@@ -29,6 +30,8 @@ var benchCmd = &cobra.Command{
 }
 
 func runBenchmark(ctx context.Context) error {
+	const maxBenchmarkScriptSize = 1 << 20
+
 	// Create a variable to track our temporary file
 	var tempFileName string
 
@@ -63,15 +66,7 @@ func runBenchmark(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to download bench.sh: %w", err)
 	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			if err != nil {
-				err = fmt.Errorf("%w; failed to close response body: %v", err, closeErr)
-			} else {
-				err = fmt.Errorf("failed to close response body: %v", closeErr)
-			}
-		}
-	}()
+	defer resp.Body.Close()
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
@@ -83,14 +78,21 @@ func runBenchmark(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temporary file: %w", err)
 	}
+	defer tmpFile.Close()
 
 	// Store the filename for cleanup
 	tempFileName = tmpFile.Name()
 
 	// Copy the response body to the temp file
-	_, err = io.Copy(tmpFile, resp.Body)
+	written, err := io.Copy(tmpFile, io.LimitReader(resp.Body, maxBenchmarkScriptSize+1))
 	if err != nil {
 		return fmt.Errorf("failed to write response to file: %w", err)
+	}
+	if written == 0 {
+		return fmt.Errorf("downloaded bench.sh is empty")
+	}
+	if written > maxBenchmarkScriptSize {
+		return fmt.Errorf("downloaded bench.sh exceeds %d bytes", maxBenchmarkScriptSize)
 	}
 
 	// Close the file to ensure all data is written

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -41,6 +42,10 @@ const (
 	JobStatusFailed    = "failed"
 	JobStatusPending   = "pending"
 	JobStatusRunning   = "running"
+
+	dockerAPIResponseLimit = 1 << 20
+	dockerJobPollInterval  = 5 * time.Second
+	dockerJobMaxPolls      = 60
 )
 
 // dockerCmd is the primary command for managing Docker containers in Saltbox.
@@ -49,6 +54,7 @@ var dockerCmd = &cobra.Command{
 	Short:              "Manage Docker containers managed by Saltbox",
 	Long:               `Manage Docker containers managed by Saltbox`,
 	DisableFlagParsing: false,
+	Args:               cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// If args are provided, it means an unknown subcommand was used
 		if len(args) > 0 {
@@ -114,29 +120,80 @@ func getJobStatus(ctx context.Context, url string, client *http.Client) (StatusR
 		return statusResp, fmt.Errorf("job status check failed with status code: %d", resp.StatusCode)
 	}
 
-	// Read and unmarshal the response body.
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return statusResp, err
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, dockerAPIResponseLimit))
+	if err := decoder.Decode(&statusResp); err != nil {
+		return statusResp, fmt.Errorf("decode job status response: %w", err)
 	}
-
-	if err := json.Unmarshal(body, &statusResp); err != nil {
-		return statusResp, err
+	if statusResp.Status == "" {
+		return statusResp, fmt.Errorf("job status response is missing status")
 	}
 
 	return statusResp, nil
 }
 
+func requestDockerJob(ctx context.Context, endpoint string, ignoreContainers []string, client *http.Client) (JobResponse, error) {
+	var jobResp JobResponse
+
+	requestURL, err := url.Parse(endpoint)
+	if err != nil {
+		return jobResp, fmt.Errorf("parse Docker controller URL: %w", err)
+	}
+	query := requestURL.Query()
+	for _, container := range ignoreContainers {
+		if container != "" {
+			query.Add("ignore", container)
+		}
+	}
+	requestURL.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), nil)
+	if err != nil {
+		return jobResp, fmt.Errorf("create Docker controller request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return jobResp, fmt.Errorf("send Docker controller request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return jobResp, fmt.Errorf("Docker controller request failed with status code: %d", resp.StatusCode)
+	}
+
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, dockerAPIResponseLimit))
+	if err := decoder.Decode(&jobResp); err != nil {
+		return jobResp, fmt.Errorf("decode Docker controller response: %w", err)
+	}
+	if strings.TrimSpace(jobResp.JobID) == "" {
+		return jobResp, fmt.Errorf("Docker controller response is missing job ID")
+	}
+	return jobResp, nil
+}
+
 // waitForJobCompletion polls the job status endpoint until the job is completed,
 // has failed, or a timeout occurs.
-func waitForJobCompletion(jobID string) (bool, error) {
-	maxRetries := 60 // Polling for 5 minutes with 5-second intervals.
-	url := fmt.Sprintf("%s/job_status/%s", constants.DockerControllerAPIURL, jobID)
+func waitForJobCompletion(ctx context.Context, jobID string) (bool, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
+	return waitForJobCompletionWithClient(ctx, jobID, constants.DockerControllerAPIURL, client, dockerJobPollInterval, dockerJobMaxPolls)
+}
+
+func waitForJobCompletionWithClient(
+	ctx context.Context,
+	jobID, baseURL string,
+	client *http.Client,
+	pollInterval time.Duration,
+	maxPolls int,
+) (bool, error) {
+	if strings.TrimSpace(jobID) == "" {
+		return false, fmt.Errorf("job ID is empty")
+	}
+	statusURL := fmt.Sprintf("%s/job_status/%s", strings.TrimRight(baseURL, "/"), url.PathEscape(jobID))
 
 	// Poll the job status endpoint.
-	for range maxRetries {
-		statusResp, err := getJobStatus(context.Background(), url, client)
+	for attempt := range maxPolls {
+		statusResp, err := getJobStatus(ctx, statusURL, client)
 		if err != nil {
 			return false, err
 		}
@@ -147,14 +204,31 @@ func waitForJobCompletion(jobID string) (bool, error) {
 		case JobStatusFailed:
 			return false, fmt.Errorf("job failed")
 		case JobStatusPending, JobStatusRunning:
-			// Job is still in progress; wait before retrying.
-			time.Sleep(5 * time.Second)
+			if attempt == maxPolls-1 {
+				break
+			}
+			timer := time.NewTimer(pollInterval)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return false, ctx.Err()
+			case <-timer.C:
+			}
 		default:
 			return false, fmt.Errorf("unknown job status: %s", statusResp.Status)
 		}
 	}
 
 	return false, fmt.Errorf("timeout waiting for job completion")
+}
+
+func containerDisplayName(id string, names []string) string {
+	if len(names) > 0 {
+		if name := strings.TrimPrefix(names[0], "/"); name != "" {
+			return name
+		}
+	}
+	return shortContainerID(id)
 }
 
 // init registers the docker command and its associated subcommands.

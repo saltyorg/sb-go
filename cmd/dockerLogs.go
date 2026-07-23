@@ -29,8 +29,9 @@ var dockerLogsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Display logs of Docker containers",
 	Long:  `Displays a list of Docker containers and allows viewing their logs.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleDockerLogs()
+		return handleDockerLogs(cmd.Context())
 	},
 }
 
@@ -883,7 +884,7 @@ func (lb *dockerLogBuffer) CheckPrefetchNeeds(viewportY, viewportHeight, totalHe
 
 func fetchDockerLogs(cli *client.Client, containerID string, timestamp string, reverse bool, isPrefetch bool) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(signals.GetGlobalManager().Context(), 10*time.Second)
 		defer cancel()
 
 		options := client.ContainerLogsOptions{
@@ -1088,8 +1089,7 @@ func parseDockerLogs(reader io.Reader) ([]dockerLogEntry, error) {
 	return entries, nil
 }
 
-func handleDockerLogs() error {
-	ctx := context.Background()
+func handleDockerLogs(ctx context.Context) error {
 	cli, err := client.New(client.FromEnv)
 	if err != nil {
 		return fmt.Errorf("failed to connect to Docker: %w", err)
@@ -1109,7 +1109,7 @@ func handleDockerLogs() error {
 	// Calculate maximum container name length for alignment
 	maxNameLength := 0
 	for _, c := range containersSummary.Items {
-		name := c.Names[0][1:] // Remove leading slash
+		name := containerDisplayName(c.ID, c.Names)
 		if len(name) > maxNameLength {
 			maxNameLength = len(name)
 		}
@@ -1118,7 +1118,7 @@ func handleDockerLogs() error {
 	// Convert containers to list items
 	items := make([]list.Item, len(containersSummary.Items))
 	for i, c := range containersSummary.Items {
-		name := c.Names[0][1:] // Remove leading slash
+		name := containerDisplayName(c.ID, c.Names)
 		// Use the simple string status for now (e.g., "Up 2 hours (healthy)")
 		// The State field is a complex struct and we'd need to inspect for details
 		statusDisplay := c.Status
@@ -1188,7 +1188,7 @@ func handleDockerLogs() error {
 	}
 
 	// Run the program with alt screen controlled declaratively in View().
-	p := tea.NewProgram(initialModel)
+	p := tea.NewProgram(initialModel, tea.WithContext(ctx))
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running docker logs UI: %w", err)
 	}

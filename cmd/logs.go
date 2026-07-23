@@ -28,8 +28,9 @@ var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Display logs of managed systemd services",
 	Long:  `Displays a list of managed systemd services.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleLogs()
+		return handleLogs(cmd.Context())
 	},
 }
 
@@ -1071,8 +1072,8 @@ func decodeMessage(raw any) string {
 	}
 }
 
-func handleLogs() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func handleLogs(parentCtx context.Context) error {
+	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 	defer cancel()
 
 	services, err := systemd.GetFilteredServices(ctx, systemd.DefaultFilters)
@@ -1140,7 +1141,7 @@ func handleLogs() error {
 	}
 
 	// Run the program with alt screen controlled declaratively in View().
-	p := tea.NewProgram(initialModel)
+	p := tea.NewProgram(initialModel, tea.WithContext(parentCtx))
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("error running logs UI: %w", err)
 	}

@@ -2,11 +2,10 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/spinners"
@@ -20,6 +19,7 @@ var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop Docker containers managed by Saltbox",
 	Long:  `Stop Docker containers managed by Saltbox in dependency order.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 		verbose, _ := cmd.Flags().GetBool("verbose")
@@ -68,42 +68,14 @@ func runDockerStop(ctx context.Context, verbose bool, ignoreContainers []string)
 
 	// Create a stop container task
 	stopContainersTask := func() error {
-		// Build query parameters
-		var url strings.Builder
-		url.WriteString(fmt.Sprintf("%s/stop", constants.DockerControllerAPIURL))
-		if len(ignoreContainers) > 0 {
-			url.WriteString("?")
-			for i, container := range ignoreContainers {
-				if i > 0 {
-					url.WriteString("&")
-				}
-				url.WriteString(fmt.Sprintf("ignore=%s", container))
-			}
-
-			if verbose {
-				_ = spinners.RunInfoSpinner(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
-			}
+		if verbose && len(ignoreContainers) > 0 {
+			_ = spinners.RunInfoSpinner(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
 		}
 
-		// Call the API to stop containers
-		resp, err := http.Post(url.String(), "application/json", nil)
+		client := &http.Client{Timeout: 10 * time.Second}
+		jobResp, err := requestDockerJob(ctx, constants.DockerControllerAPIURL+"/stop", ignoreContainers, client)
 		if err != nil {
-			return fmt.Errorf("failed to stop containers: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("failed to stop containers (status code: %d)", resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("failed to read response: %v", err)
-		}
-
-		var jobResp JobResponse
-		if err := json.Unmarshal(body, &jobResp); err != nil {
-			return fmt.Errorf("failed to parse response: %v", err)
+			return fmt.Errorf("failed to stop containers: %w", err)
 		}
 
 		if verbose {
@@ -114,10 +86,10 @@ func runDockerStop(ctx context.Context, verbose bool, ignoreContainers []string)
 		var success bool
 		if err := spinners.RunTaskWithSpinnerContext(ctx, "Waiting for Docker stop job", func() error {
 			var err error
-			success, err = waitForJobCompletion(jobResp.JobID)
+			success, err = waitForJobCompletion(ctx, jobResp.JobID)
 			return err
 		}); err != nil {
-			return fmt.Errorf("error while stopping containers: %v", err)
+			return fmt.Errorf("error while stopping containers: %w", err)
 		}
 
 		if !success {

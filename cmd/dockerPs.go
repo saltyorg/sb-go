@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -28,8 +28,9 @@ var psCmd = &cobra.Command{
 	Short: "List Docker containers with port mappings",
 	Long: `List all Docker containers and their status, displaying their internal
 ports (as potentially exposed by Traefik labels) and their external port bindings.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
 		cli, err := client.New(client.FromEnv)
 		if err != nil {
 			return err
@@ -47,7 +48,7 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 		for _, cs := range containersSummary.Items {
 			containerInspect, err := cli.ContainerInspect(ctx, cs.ID, client.ContainerInspectOptions{})
 			if err != nil {
-				errs = append(errs, fmt.Errorf("error inspecting container %s: %w", cs.ID[:12], err))
+				errs = append(errs, fmt.Errorf("error inspecting container %s: %w", shortContainerID(cs.ID), err))
 				continue
 			}
 
@@ -55,7 +56,7 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 			deduplicatedInternalPorts := deduplicate(internalPorts)
 			externalPorts := getExternalPortBindings(containerInspect.Container.NetworkSettings.Ports)
 
-			containerName := cs.Names[0][1:] // Remove the leading slash
+			containerName := containerDisplayName(cs.ID, cs.Names)
 
 			var statusText string
 			var statusStyle lipgloss.Style
@@ -146,13 +147,22 @@ ports (as potentially exposed by Traefik labels) and their external port binding
 		// Render the table
 		t.Render()
 
-		// If all containers failed to inspect, return error
-		if len(errs) > 0 && len(containers) == 0 {
-			return fmt.Errorf("failed to inspect all containers: %v", errs)
+		if len(errs) > 0 {
+			return fmt.Errorf("failed to inspect %d container(s): %w", len(errs), errors.Join(errs...))
 		}
 
 		return nil
 	},
+}
+
+func shortContainerID(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	if id == "" {
+		return "unknown"
+	}
+	return id
 }
 
 func getTraefikInternalPorts(labels map[string]string) []string {

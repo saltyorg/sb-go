@@ -96,7 +96,7 @@ var installCmd = &cobra.Command{
 		// Check if cache is populated
 		if !isCachePopulated(cacheInstance) {
 			// Try to auto-generate cache - at least one must succeed for completion to work
-			ctx := context.Background()
+			ctx := cmd.Context()
 
 			// Try Saltbox first
 			_, saltboxErr := ansible.RunAndCacheAnsibleTags(ctx, constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", cacheInstance, 0)
@@ -575,6 +575,13 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *cache.Cache, verbosit
 		logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' is a non-empty list for %s", repoPath)
 		return true
 	}
+	if cachedTags, ok := cachedTagsInterface.([]string); ok {
+		if len(cachedTags) == 0 {
+			logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' array is empty for %s", repoPath)
+			return false
+		}
+		return true
+	}
 
 	logging.Debug(verbosity, "cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)", repoPath, cachedTagsInterface)
 	return false
@@ -602,26 +609,33 @@ func getCompletionTags(cacheInstance *cache.Cache) []string {
 	// Get Saltbox tags (returned as-is)
 	saltboxCache, ok := cacheInstance.GetRepoCache(constants.SaltboxRepoPath)
 	if ok {
-		if cachedTags, tagsOK := saltboxCache["tags"].([]any); tagsOK {
-			for _, tag := range cachedTags {
-				if strTag, ok := tag.(string); ok {
-					allTags = append(allTags, strTag)
-				}
-			}
-		}
+		allTags = append(allTags, cachedTagStrings(saltboxCache["tags"])...)
 	}
 
 	// Get Sandbox tags (prefixed with "sandbox-")
 	sandboxCache, ok := cacheInstance.GetRepoCache(constants.SandboxRepoPath)
 	if ok {
-		if cachedTags, tagsOK := sandboxCache["tags"].([]any); tagsOK {
-			for _, tag := range cachedTags {
-				if strTag, ok := tag.(string); ok {
-					allTags = append(allTags, "sandbox-"+strTag)
-				}
-			}
+		for _, tag := range cachedTagStrings(sandboxCache["tags"]) {
+			allTags = append(allTags, "sandbox-"+tag)
 		}
 	}
 
 	return allTags
+}
+
+func cachedTagStrings(value any) []string {
+	switch tags := value.(type) {
+	case []string:
+		return slices.Clone(tags)
+	case []any:
+		result := make([]string, 0, len(tags))
+		for _, tag := range tags {
+			if stringTag, ok := tag.(string); ok {
+				result = append(result, stringTag)
+			}
+		}
+		return result
+	default:
+		return nil
+	}
 }
