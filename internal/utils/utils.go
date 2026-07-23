@@ -141,8 +141,7 @@ func CheckLXC(ctx context.Context) error {
 	// be "none". We only want to return an error if the command itself failed to run,
 	// not if it successfully ran and detected "none"
 	if err != nil {
-		var exitError *exec.ExitError
-		if errors.As(err, &exitError) {
+		if _, ok := errors.AsType[*exec.ExitError](err); ok {
 			// If it's an ExitError, and the output *isn't* none, then we have a problem
 			if strings.TrimSpace(string(result.Combined)) != "none" {
 				return fmt.Errorf("could not detect virtualization using systemd-detect-virt: %v, output: %s", err, strings.TrimSpace(string(result.Combined)))
@@ -178,8 +177,7 @@ func CheckDesktopEnvironment(ctx context.Context) error {
 		return fmt.Errorf("UNSUPPORTED DESKTOP INSTALL - Install cancelled: Only Ubuntu Server is supported")
 	}
 	// If there is an error other than the package being missing
-	var exitError *exec.ExitError
-	if errors.As(err, &exitError) {
+	if exitError, ok := errors.AsType[*exec.ExitError](err); ok {
 		// non-zero exit code means package not installed, which is what we want
 		if exitError.ExitCode() == 1 {
 			return nil

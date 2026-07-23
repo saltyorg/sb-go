@@ -45,8 +45,7 @@ func ValidateRcloneRemote(remoteName string, verbose bool) error {
 	_, err = user.Lookup(rcloneUser)
 	if err != nil {
 		logging.DebugBool(verbose, "ValidateRcloneRemote - error looking up user")
-		var unknownUserError user.UnknownUserError
-		if errors.As(err, &unknownUserError) {
+		if _, ok := errors.AsType[user.UnknownUserError](err); ok {
 			err := fmt.Errorf("%w: user '%s' does not exist", ErrSystemUserNotFound, rcloneUser)
 			logging.DebugBool(verbose, "ValidateRcloneRemote - %v", err)
 			return err

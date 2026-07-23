@@ -76,8 +76,7 @@ func ValidateBackupConfig(config *BackupConfig, inputMap map[string]any) error {
 	logging.DebugBool(verboseMode, "ValidateBackupConfig - validating struct: %+v", config)
 	if err := validate.Struct(config); err != nil {
 		logging.DebugBool(verboseMode, "ValidateBackupConfig - struct validation error: %v", err)
-		var validationErrors validator.ValidationErrors
-		if errors.As(err, &validationErrors) {
+		if validationErrors, ok := errors.AsType[validator.ValidationErrors](err); ok {
 			for _, e := range validationErrors {
 				// Get the full path to the field based on the namespace
 				fieldPath := e.Namespace()

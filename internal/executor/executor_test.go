@@ -164,8 +164,7 @@ func TestExecuteWithExitCode(t *testing.T) {
 		t.Fatal("expected error for non-zero exit code, got nil")
 	}
 
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
 		t.Errorf("expected ExitError, got %T", err)
 	}
 

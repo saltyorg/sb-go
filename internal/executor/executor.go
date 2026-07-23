@@ -676,8 +676,7 @@ func (e *DefaultExecutor) Execute(config *Config) (*Result, error) {
 			result.Error = err
 			// Extract exit code early for CombinedOutput path
 			if err != nil {
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
+				if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 					result.ExitCode = exitErr.ExitCode()
 				} else {
 					result.ExitCode = -1
@@ -757,8 +756,7 @@ func setExitCode(result *Result) {
 		result.ExitCode = 0
 		return
 	}
-	var exitErr *exec.ExitError
-	if errors.As(result.Error, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](result.Error); ok {
 		result.ExitCode = exitErr.ExitCode()
 	} else {
 		result.ExitCode = -1

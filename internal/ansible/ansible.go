@@ -49,8 +49,7 @@ func RunAnsiblePlaybook(ctx context.Context, repoPath, playbookPath, ansibleBina
 			return fmt.Errorf("playbook execution interrupted by user")
 		}
 
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			if exitErr.ExitCode() < 0 {
 				if sbErrors.HandleInterruptError(err) {
 					return fmt.Errorf("playbook execution interrupted by user")

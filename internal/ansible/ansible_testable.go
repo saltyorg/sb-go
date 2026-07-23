@@ -115,8 +115,7 @@ func cacheTagsWithCommit(ctx context.Context, repoPath string, tags []string, ca
 
 // formatPlaybookError formats an error message for playbook execution failures
 func formatPlaybookError(playbookPath string, err error, stderrBuf *bytes.Buffer, verbose bool) error {
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		// Check if the exit code indicates the process was killed by a signal
 		if exitErr.ExitCode() < 0 {
 			if sbErrors.HandleInterruptError(err) {

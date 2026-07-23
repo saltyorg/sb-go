@@ -320,8 +320,7 @@ func processRestoredFile(file, folder, dir, password string, verbose bool) error
 	}
 
 	if err := decryptFile(encryptedFilePath, decryptedFilePath, password, verbose); err != nil {
-		var paddingErr *paddingError
-		if errors.As(err, &paddingErr) {
+		if _, ok := errors.AsType[*paddingError](err); ok {
 			return fmt.Errorf("decryption failed (likely incorrect password): %w", err)
 		}
 		return fmt.Errorf("decryption failed: %w", err)

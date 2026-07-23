@@ -52,7 +52,7 @@ func obscureIPsInText(text string) string {
 	ipv6Regex := regexp.MustCompile(`\b[0-9a-fA-F:]{3,}\b`)
 	return ipv6Regex.ReplaceAllStringFunc(text, func(candidate string) string {
 		trimmed := strings.Trim(candidate, "[](),;")
-		base := strings.SplitN(trimmed, "%", 2)[0]
+		base, _, _ := strings.Cut(trimmed, "%")
 		if strings.Count(base, ":") < 2 {
 			return candidate
 		}
