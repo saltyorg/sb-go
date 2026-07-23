@@ -68,7 +68,7 @@ jobs:
       - name: Verify self-update is disabled
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: |
-          output=$("./${APP_NAME}" self-update)
+          output=$("./${APP_NAME}" self-update 2>&1)
           echo "${output}"
           grep -Fq "Self-update is disabled in this build" <<< "${output}"
 
