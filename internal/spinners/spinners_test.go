@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/styles"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestSynchronizedOutputWriterWrapsRendererFrame(t *testing.T) {
@@ -37,6 +41,81 @@ func TestWithDefaultsPreservesCustomMessages(t *testing.T) {
 		opts.StopColor != styles.ColorMediumGreen ||
 		opts.StopFailColor != styles.ColorDarkRed {
 		t.Fatalf("default colors were not applied: %#v", opts)
+	}
+}
+
+func TestSpinnerModelWaitsForTerminalCapabilitiesBeforeFastSuccess(t *testing.T) {
+	model := newSpinnerModel(withDefaults(SpinnerOptions{TaskName: "fast"}), func() error { return nil })
+
+	updated, cmd := model.Update(successMsg{})
+	model = updated.(spinnerModel)
+	if cmd != nil {
+		t.Fatal("fast task quit before terminal capability responses could settle")
+	}
+	if !model.finished {
+		t.Fatal("fast task result was not retained while waiting")
+	}
+
+	updated, cmd = model.Update(terminalSettledMsg{})
+	model = updated.(spinnerModel)
+	if cmd == nil {
+		t.Fatal("settled, completed task did not quit")
+	}
+	if !model.terminalSettled {
+		t.Fatal("terminal was not marked settled")
+	}
+}
+
+func TestSpinnerModelQuitsImmediatelyWhenTaskFinishesAfterTerminalSettles(t *testing.T) {
+	model := newSpinnerModel(withDefaults(SpinnerOptions{TaskName: "slow"}), func() error { return nil })
+
+	updated, cmd := model.Update(terminalSettledMsg{})
+	model = updated.(spinnerModel)
+	if cmd != nil {
+		t.Fatal("terminal settling quit a task that was still running")
+	}
+
+	_, cmd = model.Update(successMsg{})
+	if cmd == nil {
+		t.Fatal("task completion did not quit after terminal capabilities settled")
+	}
+}
+
+func TestSpinnerModelRetainsFastFailureWhileTerminalSettles(t *testing.T) {
+	model := newSpinnerModel(withDefaults(SpinnerOptions{TaskName: "fast failure"}), func() error { return nil })
+	taskErr := errors.New("failed quickly")
+
+	updated, cmd := model.Update(errMsg{err: taskErr})
+	model = updated.(spinnerModel)
+	if cmd != nil {
+		t.Fatal("fast failed task quit before terminal capability responses could settle")
+	}
+	if !errors.Is(model.taskErr, taskErr) {
+		t.Fatalf("fast task error was not retained: %v", model.taskErr)
+	}
+
+	_, cmd = model.Update(terminalSettledMsg{})
+	if cmd == nil {
+		t.Fatal("settled, failed task did not quit")
+	}
+}
+
+func TestFastSpinnerProgramHonorsTerminalCapabilitySettleDelay(t *testing.T) {
+	model := newSpinnerModel(withDefaults(SpinnerOptions{TaskName: "fast"}), func() error { return nil })
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(nil),
+		tea.WithOutput(io.Discard),
+		tea.WithWindowSize(80, 24),
+	)
+
+	started := time.Now()
+	if _, err := program.Run(); err != nil {
+		t.Fatalf("run fast spinner: %v", err)
+	}
+	elapsed := time.Since(started)
+	if minimum := terminalCapabilitySettleDelay - 25*time.Millisecond; elapsed < minimum {
+		t.Fatalf("fast spinner exited before terminal capability responses could settle: %v < %v", elapsed, minimum)
 	}
 }
 

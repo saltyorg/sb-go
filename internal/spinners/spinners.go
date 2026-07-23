@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/signals"
@@ -26,6 +27,7 @@ var GlobalSpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.Co
 var VerboseMode bool
 
 const liveTaskOutputLines = 8
+const terminalCapabilitySettleDelay = 250 * time.Millisecond
 
 type TaskFunc func() error
 type TaskOutputFunc func(stdout, stderr io.Writer) error
@@ -365,12 +367,14 @@ type spinnerModel struct {
 	taskFunc        TaskFunc
 	taskErr         error
 	finished        bool
+	terminalSettled bool
 	interrupt       bool
 	interruptReason string
 }
 
 type errMsg struct{ err error }
 type successMsg struct{}
+type terminalSettledMsg struct{}
 type quitMsg struct{}
 type spinnerTask struct {
 	id     uint64
@@ -482,7 +486,9 @@ func newSpinnerModel(opts SpinnerOptions, taskFunc TaskFunc) spinnerModel {
 }
 
 func (m spinnerModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, func() tea.Msg {
+	return tea.Batch(m.spinner.Tick, tea.Tick(terminalCapabilitySettleDelay, func(time.Time) tea.Msg {
+		return terminalSettledMsg{}
+	}), func() tea.Msg {
 		if err := m.taskFunc(); err != nil {
 			return errMsg{err}
 		}
@@ -502,10 +508,22 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.taskErr = msg.err
 		m.finished = true
+		if !m.terminalSettled {
+			return m, nil
+		}
 		return m, tea.Quit
 	case successMsg:
 		m.finished = true
+		if !m.terminalSettled {
+			return m, nil
+		}
 		return m, tea.Quit
+	case terminalSettledMsg:
+		m.terminalSettled = true
+		if m.finished {
+			return m, tea.Quit
+		}
+		return m, nil
 	case quitMsg:
 		m.interrupt = true
 		m.interruptReason = "interrupted"
