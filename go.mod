@@ -15,6 +15,7 @@ require (
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260720091843-3eef36eaaa28
 	github.com/cloudflare/cloudflare-go/v6 v6.10.0
+	github.com/cloudflare/cloudflare-go/v7 v7.7.0
 	github.com/creativeprojects/go-selfupdate v1.6.0
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/mattn/go-isatty v0.0.23
