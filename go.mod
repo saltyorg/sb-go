@@ -19,8 +19,8 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/creativeprojects/go-selfupdate v1.6.0
 	github.com/go-playground/validator/v10 v10.30.3
-	github.com/mattn/go-isatty v0.0.23
-	github.com/mattn/go-runewidth v0.0.24
+	github.com/mattn/go-isatty v0.0.24
+	github.com/mattn/go-runewidth v0.0.27
 	github.com/moby/moby/api v1.55.0
 	github.com/moby/moby/client v0.5.0
 	github.com/saltydk/go-rtorrent v1.0.1
