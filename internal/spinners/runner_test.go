@@ -262,6 +262,42 @@ func TestPlainRunnerPreservesNestedDepth(t *testing.T) {
 	}
 }
 
+func TestNoProgressRunnerSuppressesTaskLifecycleButStreamsOutput(t *testing.T) {
+	var output bytes.Buffer
+	runner := NewRunner(RunnerOptions{NoProgress: true, Output: &output})
+	err := runner.Run(context.Background(), TaskSpec{
+		Running: "root running",
+		Success: "root done",
+		Failure: "root failed",
+	}, func(ctx context.Context, root *Task) error {
+		root.Info("useful notice")
+		return root.RunOutput(ctx, TaskSpec{
+			Running: "child running",
+			Success: "child done",
+			Failure: "child failed",
+		}, func(_ context.Context, stdout, _ io.Writer) error {
+			_, err := io.WriteString(stdout, "command output\n")
+			return err
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := output.String()
+	for _, lifecycle := range []string{
+		"root running", "root done", "root failed",
+		"child running", "child done", "child failed",
+	} {
+		if strings.Contains(rendered, lifecycle) {
+			t.Fatalf("no-progress runner emitted task lifecycle %q: %q", lifecycle, rendered)
+		}
+	}
+	if !strings.Contains(rendered, "useful notice") || !strings.Contains(rendered, "command output") {
+		t.Fatalf("no-progress runner dropped useful output: %q", rendered)
+	}
+}
+
 func TestRunnerSupportsConcurrentExplicitSiblings(t *testing.T) {
 	runner := NewRunner(RunnerOptions{Verbose: true, Output: io.Discard})
 	err := runner.Run(context.Background(), TaskSpec{Running: "root"}, func(ctx context.Context, root *Task) error {

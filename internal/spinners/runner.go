@@ -43,14 +43,18 @@ type TaskSpec struct {
 // RunnerOptions configures one independent progress renderer.
 type RunnerOptions struct {
 	Verbose bool
-	Output  io.Writer
+	// NoProgress suppresses task lifecycle output while preserving notices and
+	// output written by the work itself.
+	NoProgress bool
+	Output     io.Writer
 }
 
 // Runner owns one progress session. It contains no process-global state.
 type Runner struct {
-	verbose bool
-	output  io.Writer
-	mu      sync.Mutex
+	verbose    bool
+	noProgress bool
+	output     io.Writer
+	mu         sync.Mutex
 }
 
 // NewRunner creates an independent progress runner.
@@ -60,8 +64,9 @@ func NewRunner(opts RunnerOptions) *Runner {
 		output = os.Stderr
 	}
 	return &Runner{
-		verbose: opts.Verbose || !tty.IsInteractive(),
-		output:  output,
+		verbose:    opts.Verbose || opts.NoProgress || !tty.IsInteractive(),
+		noProgress: opts.NoProgress,
+		output:     output,
 	}
 }
 
@@ -115,6 +120,10 @@ func (r *Runner) Run(
 	root := &Task{run: run, id: 0}
 	taskCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	if r.noProgress {
+		return fn(taskCtx, root)
+	}
 
 	if r.verbose {
 		r.printPlain(0, spec.Running+"...")
@@ -220,6 +229,13 @@ func (t *Task) runTask(
 	}
 	id := t.run.nextID.Add(1)
 	child := &Task{run: t.run, id: id, depth: t.depth + 1}
+
+	if t.run.runner.noProgress {
+		if outputFn != nil {
+			return outputFn(ctx, t.run.runner.output, t.run.runner.output)
+		}
+		return fn(ctx, child)
+	}
 
 	if t.run.runner.verbose {
 		depth := child.depth

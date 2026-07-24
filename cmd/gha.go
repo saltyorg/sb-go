@@ -20,7 +20,7 @@ var ghaCmd = &cobra.Command{
 	Args:   cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: true})
+		runner := spinners.NewRunner(spinners.RunnerOptions{NoProgress: true})
 		return runner.Run(ctx, spinners.TaskSpec{
 			Running: "Installing GHA dependencies",
 			Success: "GHA dependencies installed",
