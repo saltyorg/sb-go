@@ -147,8 +147,7 @@ func RemoveDeadsnakesPackages(ctx context.Context, pythonVersion string, verbose
 		fmt.Printf("Running command: apt-get %s\n", strings.Join(args, " "))
 	}
 
-	if err := executor.RunVerbose(ctx, "apt-get", args, verbose,
-		executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive")); err != nil {
+	if err := apt.RunAptGet(ctx, args, verbose); err != nil {
 		return fmt.Errorf("error removing Python packages: %w", err)
 	}
 
@@ -157,8 +156,7 @@ func RemoveDeadsnakesPackages(ctx context.Context, pythonVersion string, verbose
 		fmt.Println("Running command: apt-get autoremove -y")
 	}
 
-	if err := executor.RunVerbose(ctx, "apt-get", []string{"autoremove", "-y"}, verbose,
-		executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive")); err != nil {
+	if err := apt.RunAptGet(ctx, []string{"autoremove", "-y"}, verbose); err != nil {
 		return fmt.Errorf("error running apt autoremove: %w", err)
 	}
 

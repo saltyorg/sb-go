@@ -19,6 +19,32 @@ import (
 // aptLockFile is the primary lock file used by dpkg/apt operations.
 const aptLockFile = "/var/lib/dpkg/lock-frontend"
 
+const (
+	debianFrontendEnv  = "DEBIAN_FRONTEND=noninteractive"
+	needrestartModeEnv = "NEEDRESTART_MODE=l"
+)
+
+var dpkgConffileOptions = []string{
+	"-o", "Dpkg::Options::=--force-confdef",
+	"-o", "Dpkg::Options::=--force-confold",
+}
+
+func nonInteractiveEnvironment() []string {
+	return []string{debianFrontendEnv, needrestartModeEnv}
+}
+
+func aptGetArgs(args []string) []string {
+	commandArgs := make([]string, 0, len(dpkgConffileOptions)+len(args))
+	commandArgs = append(commandArgs, dpkgConffileOptions...)
+	return append(commandArgs, args...)
+}
+
+// RunAptGet executes apt-get with sb-go's process-local unattended policy.
+func RunAptGet(ctx context.Context, args []string, verbose bool) error {
+	return executor.RunVerbose(ctx, "apt-get", aptGetArgs(args), verbose,
+		executor.WithInheritEnv(nonInteractiveEnvironment()...))
+}
+
 // isAptLocked checks if the apt/dpkg lock file is currently held by another process.
 // It attempts to acquire a non-blocking exclusive lock on the lock file.
 // Returns true if the lock is held by another process, false if available.
@@ -98,9 +124,9 @@ func WaitForAptLock(ctx context.Context, verbose bool) error {
 
 // InstallPackage returns a function that installs one or more apt packages using "apt-get install".
 // When executed, the returned function builds a command that includes:
-// - "sudo apt-get install -y" to install packages non-interactively.
+// - "apt-get install -y" to install packages non-interactively.
 // - The provided package names appended individually.
-// The function sets the environment variable "DEBIAN_FRONTEND=noninteractive" to suppress interactive prompts.
+// The function applies sb-go's process-local non-interactive environment and conffile policy.
 // When verbose is true, all output is streamed to console. When false, stdout is discarded but stderr
 // is captured for error reporting, avoiding conflicts with spinner frameworks.
 // In case of an error, the returned function provides a detailed error message including the exit code and stderr output.
@@ -113,11 +139,9 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 		}
 
 		// Build the command arguments starting with "apt-get install -y"
-		args := append([]string{"apt-get", "install", "-y"}, packages...)
+		args := append([]string{"install", "-y"}, packages...)
 
-		// Run the command with the unified executor
-		err := executor.RunVerbose(ctx, "sudo", args, verbose,
-			executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
+		err := RunAptGet(ctx, args, verbose)
 
 		// Handle command execution errors.
 		if err != nil {
@@ -136,7 +160,7 @@ func InstallPackage(ctx context.Context, packages []string, verbose bool) func()
 }
 
 // UpdatePackageLists returns a function that updates the system's apt package lists.
-// When executed, it runs the "sudo apt-get update" command with the non-interactive environment.
+// When executed, it runs "apt-get update" with sb-go's non-interactive policy.
 // The verbose flag determines whether the command output is streamed to the console or discarded.
 // If the command fails, a detailed error message is returned, including the exit code.
 // The context parameter allows for cancellation of the update process.
@@ -166,9 +190,7 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 			// Create a timeout context for this attempt
 			attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
 
-			// Run the command with the unified executor
-			err := executor.RunVerbose(attemptCtx, "sudo", []string{"apt-get", "update"}, verbose,
-				executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
+			err := RunAptGet(attemptCtx, []string{"update"}, verbose)
 
 			// Clean up the timeout context
 			cancel()
@@ -543,7 +565,7 @@ func addRepo(repoLine, sourcesFile string) error {
 }
 
 // AddPPA returns a function that adds a Personal Package Archive (PPA) to the system using "add-apt-repository".
-// When executed, the returned function constructs the command "sudo add-apt-repository <ppa> --yes"
+// When executed, the returned function constructs the command "add-apt-repository <ppa> --yes"
 // and runs it with non-interactive settings. The verbose flag controls whether command output is streamed
 // directly to the console or discarded.
 // If the command fails, an error is returned with details including the exit code.
@@ -555,9 +577,8 @@ func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
 			return fmt.Errorf("failed waiting for apt lock: %w", err)
 		}
 
-		// Run the command with the unified executor
-		err := executor.RunVerbose(ctx, "sudo", []string{"add-apt-repository", ppa, "--yes"}, verbose,
-			executor.WithInheritEnv("DEBIAN_FRONTEND=noninteractive"))
+		err := executor.RunVerbose(ctx, "add-apt-repository", []string{ppa, "--yes"}, verbose,
+			executor.WithInheritEnv(nonInteractiveEnvironment()...))
 
 		// Handle errors during PPA addition.
 		if err != nil {

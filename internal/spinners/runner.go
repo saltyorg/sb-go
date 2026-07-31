@@ -43,18 +43,14 @@ type TaskSpec struct {
 // RunnerOptions configures one independent progress renderer.
 type RunnerOptions struct {
 	Verbose bool
-	// NoProgress suppresses task lifecycle output while preserving notices and
-	// output written by the work itself.
-	NoProgress bool
-	Output     io.Writer
+	Output  io.Writer
 }
 
 // Runner owns one progress session. It contains no process-global state.
 type Runner struct {
-	verbose    bool
-	noProgress bool
-	output     io.Writer
-	mu         sync.Mutex
+	verbose bool
+	output  io.Writer
+	mu      sync.Mutex
 }
 
 // NewRunner creates an independent progress runner.
@@ -64,9 +60,8 @@ func NewRunner(opts RunnerOptions) *Runner {
 		output = os.Stderr
 	}
 	return &Runner{
-		verbose:    opts.Verbose || opts.NoProgress || !tty.IsInteractive(),
-		noProgress: opts.NoProgress,
-		output:     output,
+		verbose: opts.Verbose || !tty.IsInteractive(),
+		output:  output,
 	}
 }
 
@@ -120,10 +115,6 @@ func (r *Runner) Run(
 	root := &Task{run: run, id: 0}
 	taskCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
-	if r.noProgress {
-		return fn(taskCtx, root)
-	}
 
 	if r.verbose {
 		r.printPlain(0, spec.Running+"...")
@@ -230,16 +221,8 @@ func (t *Task) runTask(
 	id := t.run.nextID.Add(1)
 	child := &Task{run: t.run, id: id, depth: t.depth + 1}
 
-	if t.run.runner.noProgress {
-		if outputFn != nil {
-			return outputFn(ctx, t.run.runner.output, t.run.runner.output)
-		}
-		return fn(ctx, child)
-	}
-
 	if t.run.runner.verbose {
-		depth := child.depth
-		t.run.runner.printPlain(depth, spec.Running+"...")
+		t.run.runner.printPlain(0, spec.Running+"...")
 		var err error
 		if outputFn != nil {
 			err = outputFn(ctx, t.run.runner.output, t.run.runner.output)
@@ -247,9 +230,9 @@ func (t *Task) runTask(
 			err = fn(ctx, child)
 		}
 		if err != nil {
-			t.run.runner.printPlain(depth, spec.Failure+": Failed")
+			t.run.runner.printPlain(0, spec.Failure+": Failed")
 		} else {
-			t.run.runner.printPlain(depth, spec.Success)
+			t.run.runner.printPlain(0, spec.Success)
 		}
 		return err
 	}
@@ -292,7 +275,7 @@ func (t *Task) Warning(message string) {
 
 func (t *Task) message(message, color string) {
 	if t.run.runner.verbose {
-		t.run.runner.printPlain(t.depth+1, message)
+		t.run.runner.printPlain(0, message)
 		return
 	}
 	t.run.program.Send(progressNoticeMsg{id: t.id, message: message, color: color})

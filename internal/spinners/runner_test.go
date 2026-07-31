@@ -244,11 +244,12 @@ func TestRunnerRejectsInvalidTaskSpec(t *testing.T) {
 	}
 }
 
-func TestPlainRunnerPreservesNestedDepth(t *testing.T) {
+func TestPlainRunnerUsesFlatOutput(t *testing.T) {
 	var output bytes.Buffer
 	runner := NewRunner(RunnerOptions{Verbose: true, Output: &output})
 	err := runner.Run(context.Background(), TaskSpec{Running: "root"}, func(ctx context.Context, root *Task) error {
 		return root.Run(ctx, TaskSpec{Running: "parent"}, func(ctx context.Context, parent *Task) error {
+			parent.Info("notice")
 			return parent.Run(ctx, TaskSpec{Running: "child"}, func(context.Context, *Task) error {
 				return nil
 			})
@@ -257,44 +258,9 @@ func TestPlainRunnerPreservesNestedDepth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), "\n    child...") {
-		t.Fatalf("nested plain output had wrong depth: %q", output.String())
-	}
-}
-
-func TestNoProgressRunnerSuppressesTaskLifecycleButStreamsOutput(t *testing.T) {
-	var output bytes.Buffer
-	runner := NewRunner(RunnerOptions{NoProgress: true, Output: &output})
-	err := runner.Run(context.Background(), TaskSpec{
-		Running: "root running",
-		Success: "root done",
-		Failure: "root failed",
-	}, func(ctx context.Context, root *Task) error {
-		root.Info("useful notice")
-		return root.RunOutput(ctx, TaskSpec{
-			Running: "child running",
-			Success: "child done",
-			Failure: "child failed",
-		}, func(_ context.Context, stdout, _ io.Writer) error {
-			_, err := io.WriteString(stdout, "command output\n")
-			return err
-		})
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rendered := output.String()
-	for _, lifecycle := range []string{
-		"root running", "root done", "root failed",
-		"child running", "child done", "child failed",
-	} {
-		if strings.Contains(rendered, lifecycle) {
-			t.Fatalf("no-progress runner emitted task lifecycle %q: %q", lifecycle, rendered)
-		}
-	}
-	if !strings.Contains(rendered, "useful notice") || !strings.Contains(rendered, "command output") {
-		t.Fatalf("no-progress runner dropped useful output: %q", rendered)
+	want := "root...\nparent...\nnotice\nchild...\nchild\nparent\nroot\n"
+	if got := output.String(); got != want {
+		t.Fatalf("plain output = %q, want %q", got, want)
 	}
 }
 

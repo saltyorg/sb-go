@@ -2,10 +2,73 @@ package apt
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestAptGetArgsAppliesConffilePolicy(t *testing.T) {
+	input := []string{"install", "-y", "curl"}
+	want := []string{
+		"-o", "Dpkg::Options::=--force-confdef",
+		"-o", "Dpkg::Options::=--force-confold",
+		"install", "-y", "curl",
+	}
+
+	got := aptGetArgs(input)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("aptGetArgs() = %#v, want %#v", got, want)
+	}
+
+	if !reflect.DeepEqual(input, []string{"install", "-y", "curl"}) {
+		t.Fatalf("aptGetArgs mutated its input: %#v", input)
+	}
+}
+
+func TestNonInteractiveEnvironment(t *testing.T) {
+	want := []string{
+		"DEBIAN_FRONTEND=noninteractive",
+		"NEEDRESTART_MODE=l",
+	}
+
+	if got := nonInteractiveEnvironment(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("nonInteractiveEnvironment() = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunAptGetUsesDirectNonInteractiveCommand(t *testing.T) {
+	testBin := t.TempDir()
+	aptGetPath := filepath.Join(testBin, "apt-get")
+	aptGetScript := `#!/bin/sh
+printf 'args:%s\n' "$*" >&2
+printf 'DEBIAN_FRONTEND:%s\n' "$DEBIAN_FRONTEND" >&2
+printf 'NEEDRESTART_MODE:%s\n' "$NEEDRESTART_MODE" >&2
+exit 23
+`
+	if err := os.WriteFile(aptGetPath, []byte(aptGetScript), 0o755); err != nil {
+		t.Fatalf("write fake apt-get: %v", err)
+	}
+	t.Setenv("PATH", testBin)
+
+	err := RunAptGet(context.Background(), []string{"install", "-y", "curl"}, false)
+	if err == nil {
+		t.Fatal("RunAptGet() unexpectedly succeeded")
+	}
+
+	errText := err.Error()
+	for _, want := range []string{
+		"args:-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install -y curl",
+		"DEBIAN_FRONTEND:noninteractive",
+		"NEEDRESTART_MODE:l",
+	} {
+		if !strings.Contains(errText, want) {
+			t.Errorf("RunAptGet() error does not contain %q:\n%s", want, errText)
+		}
+	}
+}
 
 // TestInstallPackage_NonExistentPackage tests that we get proper error information
 // when trying to install a package that doesn't exist
