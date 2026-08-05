@@ -271,6 +271,9 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 			if err := validator(value, parentConfig); err != nil {
 				return fmt.Errorf("field '%s': %w", path, err)
 			}
+			if validatorName == "validate_password_strength" {
+				emitPasswordStrengthWarning(value, asyncCtx)
+			}
 		}
 	}
 
@@ -397,6 +400,9 @@ func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentC
 					if err := validator(value, parentConfig); err != nil {
 						return fmt.Errorf("field '%s': %w", path, err)
 					}
+					if validatorName == "validate_password_strength" {
+						emitPasswordStrengthWarning(value, nil)
+					}
 				}
 			}
 		}
@@ -434,6 +440,18 @@ func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentC
 	}
 
 	return nil
+}
+
+func emitPasswordStrengthWarning(value any, asyncCtx *AsyncValidationContext) {
+	warning := passwordStrengthWarning(value)
+	if warning == "" {
+		return
+	}
+	if asyncCtx != nil && asyncCtx.task != nil {
+		asyncCtx.task.Warning(warning)
+		return
+	}
+	fmt.Fprintln(os.Stderr, warning)
 }
 
 // validateType validates the basic type of a value

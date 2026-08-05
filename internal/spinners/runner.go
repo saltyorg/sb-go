@@ -145,10 +145,17 @@ func (r *Runner) Run(
 		}
 	}()
 
-	_, runErr := program.Run()
+	finalModel, runErr := program.Run()
 	close(renderDone)
 	if runErr != nil {
 		return fmt.Errorf("run progress renderer: %w", runErr)
+	}
+	model, ok := finalModel.(progressModel)
+	if !ok {
+		return fmt.Errorf("progress renderer returned unexpected model %T", finalModel)
+	}
+	if !model.cancelled {
+		r.printFinal(model.finalOutput())
 	}
 	select {
 	case taskErr := <-result:
@@ -296,6 +303,15 @@ func (r *Runner) printMessage(message, color string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	fmt.Fprintln(r.output, getStyle(color).Render("● "+message))
+}
+
+func (r *Runner) printFinal(output string) {
+	if output == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	fmt.Fprintln(r.output, output)
 }
 
 func normalizeTaskSpec(spec TaskSpec) TaskSpec {
@@ -506,8 +522,17 @@ func (m progressModel) View() tea.View {
 	if m.cancelled {
 		return tea.NewView(getStyle(styles.ColorDarkRed).Render("● interrupted") + "\n")
 	}
-	lines := m.renderNode(m.rootID, 0, true)
-	return tea.NewView(strings.Join(lines, "\n") + "\n")
+	if m.finished {
+		// Clear the transient frame before Runner commits the final tree as
+		// ordinary terminal output. Growing an inline frame at the bottom of
+		// the terminal can otherwise strand its old rows in scrollback.
+		return tea.NewView("")
+	}
+	return tea.NewView(m.finalOutput() + "\n")
+}
+
+func (m progressModel) finalOutput() string {
+	return strings.Join(m.renderNode(m.rootID, 0, true), "\n")
 }
 
 func (m progressModel) renderNode(id uint64, depth int, forceVisible bool) []string {

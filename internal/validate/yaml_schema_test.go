@@ -1,9 +1,42 @@
 package validate
 
 import (
+	"bytes"
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/saltyorg/sb-go/internal/spinners"
 )
+
+func TestAsyncPasswordWarningUsesTaskOutput(t *testing.T) {
+	schema := &Schema{
+		Rules: map[string]*SchemaRule{
+			"password": {
+				Type:     "password",
+				Required: true,
+			},
+		},
+	}
+	var output bytes.Buffer
+	runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: true, Output: &output})
+	err := runner.Run(context.Background(), spinners.TaskSpec{Running: "validating"}, func(ctx context.Context, task *spinners.Task) error {
+		asyncCtx, err := schema.ValidateWithTypeFlexibilityAsync(ctx, task, map[string]any{"password": "pass123"})
+		if err != nil {
+			return err
+		}
+		if errors := asyncCtx.Wait(); len(errors) != 0 {
+			return errors[0]
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rendered := output.String(); !strings.Contains(rendered, "WARNING: Password is shorter than 12 characters (7).") {
+		t.Fatalf("password warning was not routed through task output: %q", rendered)
+	}
+}
 
 func TestSchemaValidateWithTypeFlexibilityNumber(t *testing.T) {
 	schema := &Schema{

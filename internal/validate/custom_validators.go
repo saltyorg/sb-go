@@ -187,12 +187,15 @@ func validatePasswordStrength(value any, _ map[string]any) error {
 		return fmt.Errorf("password cannot be empty")
 	}
 
-	// Non-fatal warning for short passwords
-	if len(str) < 12 {
-		fmt.Fprintf(os.Stderr, "WARNING: Password is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).\n", len(str))
-	}
-
 	return nil
+}
+
+func passwordStrengthWarning(value any) string {
+	password, ok := value.(string)
+	if !ok || len(password) == 0 || len(password) >= 12 {
+		return ""
+	}
+	return fmt.Sprintf("WARNING: Password is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).", len(password))
 }
 
 // validateCloudflareConfigSync validates Cloudflare configuration structure only (no API calls)

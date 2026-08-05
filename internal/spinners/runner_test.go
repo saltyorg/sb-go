@@ -63,9 +63,9 @@ func TestCollapseKeepsChildrenLiveThenHidesThemOnSuccess(t *testing.T) {
 
 	updated, _ = model.Update(progressSuccessMsg{})
 	model = updated.(progressModel)
-	view = model.View().Content
-	if !strings.Contains(view, "restarted") || strings.Contains(view, "stopped") {
-		t.Fatalf("root hierarchy was not collapsed: %q", view)
+	output := model.finalOutput()
+	if !strings.Contains(output, "restarted") || strings.Contains(output, "stopped") {
+		t.Fatalf("root hierarchy was not collapsed: %q", output)
 	}
 }
 
@@ -81,8 +81,8 @@ func TestRetainKeepsCompletedHierarchy(t *testing.T) {
 	model = updated.(progressModel)
 	updated, _ = model.Update(progressSuccessMsg{})
 	model = updated.(progressModel)
-	if view := model.View().Content; !strings.Contains(view, "root done") || !strings.Contains(view, "child done") {
-		t.Fatalf("retained hierarchy missing: %q", view)
+	if output := model.finalOutput(); !strings.Contains(output, "root done") || !strings.Contains(output, "child done") {
+		t.Fatalf("retained hierarchy missing: %q", output)
 	}
 }
 
@@ -95,8 +95,8 @@ func TestRetainIsTheDefaultChildDisplay(t *testing.T) {
 	updated, _ = model.Update(progressSuccessMsg{})
 	model = updated.(progressModel)
 
-	if view := model.View().Content; !strings.Contains(view, "child done") {
-		t.Fatalf("default child display did not retain completed child: %q", view)
+	if output := model.finalOutput(); !strings.Contains(output, "child done") {
+		t.Fatalf("default child display did not retain completed child: %q", output)
 	}
 	if model.nodes[1].detached {
 		t.Fatal("default child display detached completed child")
@@ -109,8 +109,8 @@ func TestCompletedMarkerUsesTaskResultColor(t *testing.T) {
 	model = updated.(progressModel)
 
 	want := getStyle("40").Render("● done")
-	if view := model.View().Content; !strings.Contains(view, want) {
-		t.Fatalf("completed marker and message were not styled together: %q", view)
+	if output := model.finalOutput(); !strings.Contains(output, want) {
+		t.Fatalf("completed marker and message were not styled together: %q", output)
 	}
 }
 
@@ -126,11 +126,11 @@ func TestFailureRetainsAncestorPathAndOutput(t *testing.T) {
 	updated, _ = model.Update(progressErrorMsg{err: childErr})
 	model = updated.(progressModel)
 
-	view := model.View().Content
-	if !strings.Contains(view, "root: Failed") ||
-		!strings.Contains(view, "child: Failed") ||
-		!strings.Contains(view, "diagnostic output") {
-		t.Fatalf("failure context missing: %q", view)
+	output := model.finalOutput()
+	if !strings.Contains(output, "root: Failed") ||
+		!strings.Contains(output, "child: Failed") ||
+		!strings.Contains(output, "diagnostic output") {
+		t.Fatalf("failure context missing: %q", output)
 	}
 }
 
@@ -150,12 +150,12 @@ func TestFailurePrefersFinalDiagnosticOutput(t *testing.T) {
 	updated, _ = model.Update(progressErrorMsg{err: childErr})
 	model = updated.(progressModel)
 
-	view := model.View().Content
-	if !strings.Contains(view, "E: Unable to locate package invalid") {
-		t.Fatalf("final diagnostic output missing: %q", view)
+	output := model.finalOutput()
+	if !strings.Contains(output, "E: Unable to locate package invalid") {
+		t.Fatalf("final diagnostic output missing: %q", output)
 	}
-	if strings.Contains(view, "Reading package lists") {
-		t.Fatalf("routine progress remained in failed task output: %q", view)
+	if strings.Contains(output, "Reading package lists") {
+		t.Fatalf("routine progress remained in failed task output: %q", output)
 	}
 }
 
@@ -178,21 +178,42 @@ func TestTaskNoticeRemainsAttachedToCompletedTask(t *testing.T) {
 	updated, _ = model.Update(progressSuccessMsg{})
 	model = updated.(progressModel)
 
-	view := model.View().Content
-	taskAt := strings.Index(view, "fact ready")
-	noticeAt := strings.Index(view, "saltbox.fact updated successfully")
+	output := model.finalOutput()
+	taskAt := strings.Index(output, "fact ready")
+	noticeAt := strings.Index(output, "saltbox.fact updated successfully")
 	if taskAt < 0 || noticeAt < taskAt {
-		t.Fatalf("task notice was not retained beneath its task: %q", view)
+		t.Fatalf("task notice was not retained beneath its task: %q", output)
 	}
 	noticeLine := ""
-	for line := range strings.SplitSeq(view, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		if strings.Contains(line, "saltbox.fact updated successfully") {
 			noticeLine = line
 			break
 		}
 	}
 	if !strings.HasPrefix(noticeLine, "    ") {
-		t.Fatalf("task notice did not use task-relative indentation: %q", view)
+		t.Fatalf("task notice did not use task-relative indentation: %q", output)
+	}
+}
+
+func TestFinishedViewClearsTransientFrameBeforeFinalOutput(t *testing.T) {
+	model := newProgressModel(TaskSpec{Running: "root", Success: "root done"}, func() error { return nil })
+	updated, _ := model.Update(progressStartMsg{
+		id:       1,
+		parentID: 0,
+		spec:     TaskSpec{Running: "child", Success: "child done"},
+	})
+	model = updated.(progressModel)
+	updated, _ = model.Update(progressFinishMsg{id: 1})
+	model = updated.(progressModel)
+	updated, _ = model.Update(progressSuccessMsg{})
+	model = updated.(progressModel)
+
+	if view := model.View().Content; view != "" {
+		t.Fatalf("finished view retained transient content: %q", view)
+	}
+	if output := model.finalOutput(); !strings.Contains(output, "root done") || !strings.Contains(output, "child done") {
+		t.Fatalf("final output lost retained tree: %q", output)
 	}
 }
 

@@ -5,8 +5,11 @@ package spinners
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -17,6 +20,95 @@ import (
 )
 
 const ptySpinnerHelperEnv = "SB_GO_PTY_SPINNER_HELPER"
+const ptyFinalTreeHelperEnv = "SB_GO_PTY_FINAL_TREE_HELPER"
+
+func TestFinalTreeDoesNotLeaveLiveFrameInScrollback(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux is required for inline scrollback regression coverage")
+	}
+
+	session := fmt.Sprintf("sb-go-spinner-%d", os.Getpid())
+	defer exec.Command("tmux", "kill-session", "-t", session).Run() //nolint:errcheck,gosec
+	helperCommand := fmt.Sprintf(
+		"env %s=1 TERM=xterm-256color %s -test.run=^TestFinalTreePTYHelper$; sleep 1",
+		ptyFinalTreeHelperEnv,
+		strconv.Quote(os.Args[0]),
+	)
+	command := helperCommand
+	if zsh, err := exec.LookPath("zsh"); err == nil {
+		command = fmt.Sprintf("%s -c %s", strconv.Quote(zsh), strconv.Quote(helperCommand))
+	}
+	if output, err := exec.Command(
+		"tmux", "new-session", "-d", "-s", session, "-x", "80", "-y", "12", command,
+	).CombinedOutput(); err != nil {
+		t.Fatalf("start tmux regression session: %v: %s", err, output)
+	}
+
+	var capture []byte
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		output, err := exec.Command("tmux", "capture-pane", "-t", session, "-p", "-S", "-").Output()
+		if err == nil {
+			capture = output
+			if bytes.Contains(output, []byte("Validated tree")) {
+				break
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	rendered := string(capture)
+	if !strings.Contains(rendered, "Validated tree") || !strings.Contains(rendered, "Validated settings") {
+		t.Fatalf("final retained tree missing from terminal capture: %q", rendered)
+	}
+	if !strings.Contains(rendered, "WARNING: Password is shorter than 12 characters (7).") {
+		t.Fatalf("task warning missing from terminal capture: %q", rendered)
+	}
+	for _, stale := range []string{"Validating tree", "Validating accounts", "Validating settings"} {
+		if strings.Contains(rendered, stale) {
+			t.Fatalf("live frame %q was stranded in scrollback: %q", stale, rendered)
+		}
+	}
+}
+
+func TestFinalTreePTYHelper(t *testing.T) {
+	if os.Getenv(ptyFinalTreeHelperEnv) != "1" {
+		t.Skip("PTY subprocess helper")
+	}
+	for i := range 12 {
+		fmt.Printf("history %02d\n", i)
+	}
+	runner := NewRunner(RunnerOptions{})
+	err := runner.Run(context.Background(), TaskSpec{
+		Running: "Validating tree",
+		Success: "Validated tree",
+	}, func(ctx context.Context, root *Task) error {
+		if err := root.Run(ctx, TaskSpec{
+			Running: "Validating accounts",
+			Success: "Validated accounts",
+		}, func(ctx context.Context, accounts *Task) error {
+			time.Sleep(150 * time.Millisecond)
+			accounts.Warning("WARNING: Password is shorter than 12 characters (7).")
+			return accounts.Run(ctx, TaskSpec{
+				Running: "Validating API credentials",
+				Success: "API credentials validated",
+			}, func(context.Context, *Task) error {
+				time.Sleep(100 * time.Millisecond)
+				return nil
+			})
+		}); err != nil {
+			return err
+		}
+		return root.Run(ctx, TaskSpec{
+			Running: "Validating settings",
+			Success: "Validated settings",
+		}, func(context.Context, *Task) error {
+			return nil
+		})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestFastSpinnerConsumesDelayedTerminalCapabilityResponses(t *testing.T) {
 	master, slave, err := pty.Open()
