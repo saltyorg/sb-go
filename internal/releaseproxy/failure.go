@@ -50,8 +50,7 @@ func Describe(err error) string {
 		return "unknown failure"
 	}
 
-	var failure *Failure
-	if errors.As(err, &failure) {
+	if failure, ok := errors.AsType[*Failure](err); ok {
 		if failure.StatusCode != 0 {
 			return fmt.Sprintf("returned HTTP %d", failure.StatusCode)
 		}
@@ -67,14 +66,12 @@ func Describe(err error) string {
 		return "timed out"
 	}
 
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if netErr, ok := errors.AsType[net.Error](err); ok {
 		if netErr.Timeout() {
 			return "timed out"
 		}
 
-		var dnsErr *net.DNSError
-		if errors.As(err, &dnsErr) {
+		if dnsErr, ok := errors.AsType[*net.DNSError](err); ok {
 			if dnsErr.Name != "" {
 				return fmt.Sprintf("DNS lookup failed for %s (%s)", dnsErr.Name, cleanDetail(dnsErr.Err))
 			}

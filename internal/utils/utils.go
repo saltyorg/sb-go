@@ -16,8 +16,8 @@ import (
 	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 
+	"go.yaml.in/yaml/v3"
 	"golang.org/x/sys/unix"
-	"gopkg.in/yaml.v3"
 )
 
 const (

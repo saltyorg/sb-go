@@ -291,13 +291,11 @@ func TestRunnerSupportsConcurrentExplicitSiblings(t *testing.T) {
 		var wg sync.WaitGroup
 		errs := make(chan error, 2)
 		for _, name := range []string{"first", "second"} {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				errs <- root.Run(ctx, TaskSpec{Running: name}, func(context.Context, *Task) error {
 					return nil
 				})
-			}()
+			})
 		}
 		wg.Wait()
 		close(errs)

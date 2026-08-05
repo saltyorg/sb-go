@@ -11,7 +11,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/logging"
 	"github.com/saltyorg/sb-go/internal/spinners"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // configValidationJob represents a single config file validation task

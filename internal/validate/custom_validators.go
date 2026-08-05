@@ -577,10 +577,11 @@ func validateCloudflareCredentials(ctx context.Context, apiKey, email, domain st
 	}
 
 	// Check for incompatible SSL modes
-	if sslSettings != nil && sslSettings.Value != nil {
-		if sslValue, ok := sslSettings.Value.(zones.SettingGetResponseZonesSchemasSSLValue); ok {
-			if sslValue == zones.SettingGetResponseZonesSchemasSSLValueFlexible ||
-				sslValue == zones.SettingGetResponseZonesSchemasSSLValueOff {
+	if sslSettings != nil {
+		if sslSetting, ok := sslSettings.AsUnion().(zones.SettingGetResponseZonesSSL2); ok {
+			sslValue := sslSetting.Value
+			if sslValue == zones.SettingGetResponseZonesSSL2ValueFlexible ||
+				sslValue == zones.SettingGetResponseZonesSSL2ValueOff {
 				return fmt.Errorf("incompatible SSL/TLS mode detected: '%s'\n"+
 					"  This SSL/TLS mode is not compatible with Saltbox."+
 					"  Please update your Cloudflare settings:"+

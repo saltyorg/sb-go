@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"go.yaml.in/yaml/v3"
 	"golang.org/x/sys/unix"
-	"gopkg.in/yaml.v3"
 )
 
 func TestCheckUbuntuSupport(t *testing.T) {
