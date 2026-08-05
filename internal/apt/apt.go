@@ -563,33 +563,3 @@ func addRepo(repoLine, sourcesFile string) error {
 
 	return writer.Flush()
 }
-
-// AddPPA returns a function that adds a Personal Package Archive (PPA) to the system using "add-apt-repository".
-// When executed, the returned function constructs the command "add-apt-repository <ppa> --yes"
-// and runs it with non-interactive settings. The verbose flag controls whether command output is streamed
-// directly to the console or discarded.
-// If the command fails, an error is returned with details including the exit code.
-// The context parameter allows for cancellation of the operation.
-func AddPPA(ctx context.Context, ppa string, verbose bool) func() error {
-	return func() error {
-		// Wait for apt lock to be available
-		if err := WaitForAptLock(ctx, verbose); err != nil {
-			return fmt.Errorf("failed waiting for apt lock: %w", err)
-		}
-
-		err := executor.RunVerbose(ctx, "add-apt-repository", []string{ppa, "--yes"}, verbose,
-			executor.WithInheritEnv(nonInteractiveEnvironment()...))
-
-		// Handle errors during PPA addition.
-		if err != nil {
-			return fmt.Errorf("failed to add PPA '%s': %w", ppa, err)
-		}
-
-		// Print a success message if in verbose mode.
-		if verbose {
-			fmt.Printf("PPA '%s' added successfully.\n", ppa)
-		}
-
-		return nil
-	}
-}

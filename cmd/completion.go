@@ -687,7 +687,7 @@ func isZshInstalled() bool {
 
 // InstallOrRegenerateCompletion installs or regenerates a completion file
 // This is used by the update command to auto-install or update completions
-func InstallOrRegenerateCompletion(shellName, targetPath string, generateFunc func(string) error) error {
+func InstallOrRegenerateCompletion(targetPath string, generateFunc func(string) error) error {
 	// Check if we have write permissions
 	targetDir := filepath.Dir(targetPath)
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
@@ -700,34 +700,6 @@ func InstallOrRegenerateCompletion(shellName, targetPath string, generateFunc fu
 		// Generation failed, skip silently
 		return nil
 	}
-
-	return nil
-}
-
-// RegenerateCompletion regenerates a completion file if it exists
-// This is used by the update command to keep completions in sync
-func RegenerateCompletion(shellName, targetPath string, generateFunc func(string) error) error {
-	// Check if the completion file exists
-	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
-		// File doesn't exist, skip silently
-		return nil
-	}
-
-	// Check if we have write permissions
-	targetDir := filepath.Dir(targetPath)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		// Can't write, skip silently
-		return nil
-	}
-
-	// Generate the completion file
-	if err := generateFunc(targetPath); err != nil {
-		// Generation failed, skip silently
-		return nil
-	}
-
-	// Success - could add verbose logging here later
-	// fmt.Printf("Updated %s completion at %s\n", shellName, targetPath)
 
 	return nil
 }

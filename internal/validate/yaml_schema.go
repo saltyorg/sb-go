@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -64,18 +65,6 @@ func LoadSchema(schemaPath string) (*Schema, error) {
 	return &Schema{Rules: rules}, nil
 }
 
-// Validate validates a configuration against the schema
-func (s *Schema) Validate(config map[string]any) error {
-	logging.DebugBool(verboseMode, "Schema.Validate called with config keys: %v", getKeys(config))
-	return s.validateObject(config, s.Rules, "")
-}
-
-// ValidateStructure performs lightweight structure validation (checks for unknown fields, required fields, but skips type checking)
-func (s *Schema) ValidateStructure(config map[string]any) error {
-	logging.DebugBool(verboseMode, "Schema.ValidateStructure called with config keys: %v", getKeys(config))
-	return s.validateObjectStructure(config, s.Rules, "")
-}
-
 // ValidateWithTypeFlexibility performs full validation including custom validators but ignores type mismatches
 func (s *Schema) ValidateWithTypeFlexibility(config map[string]any) error {
 	logging.DebugBool(verboseMode, "Schema.ValidateWithTypeFlexibility called with config keys: %v", getKeys(config))
@@ -92,82 +81,6 @@ func (s *Schema) ValidateWithTypeFlexibilityAsync(
 	asyncCtx := NewAsyncValidationContext(ctx, task)
 	err := s.validateObjectWithTypeFlexibility(config, s.Rules, "", asyncCtx)
 	return asyncCtx, err
-}
-
-// validateObject validates an object against schema rules
-func (s *Schema) validateObject(obj map[string]any, rules map[string]*SchemaRule, path string) error {
-	logging.DebugBool(verboseMode, "validateObject called with path: '%s', rules: %v", path, getKeys(rules))
-
-	// Check required fields
-	for fieldName, rule := range rules {
-		fieldPath := appendPath(path, fieldName)
-		value, exists := obj[fieldName]
-		isRequired := s.isFieldRequired(rule, obj)
-
-		logging.DebugBool(verboseMode, "Checking field '%s', exists: %t, required: %t", fieldPath, exists, isRequired)
-
-		if isRequired && !exists {
-			return fmt.Errorf("field '%s' is required", fieldPath)
-		}
-
-		if !exists {
-			continue // Optional field not present
-		}
-
-		if !s.shouldValidateField(rule, obj) {
-			continue
-		}
-
-		if err := s.validateField(value, rule, fieldPath, obj); err != nil {
-			return err
-		}
-	}
-
-	// Check for unknown fields
-	for fieldName := range obj {
-		if _, known := rules[fieldName]; !known {
-			return fmt.Errorf("unknown field '%s'", appendPath(path, fieldName))
-		}
-	}
-
-	return nil
-}
-
-// validateObjectStructure validates object structure without strict type checking
-func (s *Schema) validateObjectStructure(obj map[string]any, rules map[string]*SchemaRule, path string) error {
-	logging.DebugBool(verboseMode, "validateObjectStructure called with path: '%s', rules: %v", path, getKeys(rules))
-
-	// Check for unknown fields
-	for fieldName := range obj {
-		if _, known := rules[fieldName]; !known {
-			return fmt.Errorf("unknown field '%s'", appendPath(path, fieldName))
-		}
-	}
-
-	// Check required fields
-	for fieldName, rule := range rules {
-		fieldPath := appendPath(path, fieldName)
-		value, exists := obj[fieldName]
-		isRequired := s.isFieldRequired(rule, obj)
-
-		if isRequired && !exists {
-			return fmt.Errorf("field '%s' is required", fieldPath)
-		}
-
-		if !exists || !s.shouldValidateField(rule, obj) {
-			continue
-		}
-
-		if rule.Type == "object" && rule.Properties != nil {
-			if objMap, ok := value.(map[string]any); ok {
-				if err := s.validateObjectStructure(objMap, rule.Properties, fieldPath); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
 }
 
 // validateObjectWithTypeFlexibility validates an object but skips type checking while running custom validators
@@ -268,7 +181,7 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 	if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
 		logging.DebugBool(verboseMode, "Running built-in %s validator for field '%s'", rule.Type, path)
 		if validator, exists := customValidators[validatorName]; exists {
-			if err := validator(value, parentConfig); err != nil {
+			if err := runCustomValidator(validator, value, parentConfig, asyncCtx); err != nil {
 				return fmt.Errorf("field '%s': %w", path, err)
 			}
 			if validatorName == "validate_password_strength" {
@@ -287,7 +200,7 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 			asyncCtx.AddAPIValidation(path, asyncValidator, value, parentConfig)
 		} else if validator, exists := customValidators[rule.CustomValidator]; exists {
 			// Run synchronous validator
-			if err := validator(value, parentConfig); err != nil {
+			if err := runCustomValidator(validator, value, parentConfig, asyncCtx); err != nil {
 				return fmt.Errorf("field '%s': %w", path, err)
 			}
 		} else {
@@ -317,128 +230,18 @@ func (s *Schema) validateFieldWithTypeFlexibility(value any, rule *SchemaRule, p
 	return nil
 }
 
-// validateField validates a single field value
-func (s *Schema) validateField(value any, rule *SchemaRule, path string, parentConfig map[string]any) error {
-	logging.DebugBool(verboseMode, "validateField called for '%s' with value type: %T", path, value)
-
-	// Basic type validation
-	if err := s.validateType(value, rule, path); err != nil {
+func runCustomValidator(
+	validator CustomValidator,
+	value any,
+	config map[string]any,
+	asyncCtx *AsyncValidationContext,
+) error {
+	err := validator(value, config)
+	var warning *nonFatalValidationWarning
+	if !errors.As(err, &warning) {
 		return err
 	}
-
-	// Format validation
-	if err := s.validateFormat(value, rule, path); err != nil {
-		return err
-	}
-
-	// Length validation
-	if err := s.validateLength(value, rule, path); err != nil {
-		return err
-	}
-
-	// Not equals validation
-	if err := s.validateNotEquals(value, rule, path); err != nil {
-		return err
-	}
-
-	// Required with validation
-	if err := s.validateRequiredWith(value, rule, path, parentConfig); err != nil {
-		return err
-	}
-
-	// Fast path for common built-in validators to reduce map lookups
-	switch rule.Type {
-	case "ansible_bool":
-		if !rule.Required && isEmptyValue(value) {
-			logging.DebugBool(verboseMode, "Skipping ansible_bool validator for non-required empty field '%s'", path)
-		} else {
-			logging.DebugBool(verboseMode, "Running built-in ansible_bool validator for field '%s'", path)
-			if err := validateAnsibleBoolValue(value); err != nil {
-				return fmt.Errorf("field '%s': %w", path, err)
-			}
-		}
-	case "subdomain":
-		if !rule.Required && isEmptyValue(value) {
-			logging.DebugBool(verboseMode, "Skipping subdomain validator for non-required empty field '%s'", path)
-		} else {
-			logging.DebugBool(verboseMode, "Running built-in subdomain validator for field '%s'", path)
-			if validator, exists := customValidators["validate_subdomain"]; exists {
-				if err := validator(value, parentConfig); err != nil {
-					return fmt.Errorf("field '%s': %w", path, err)
-				}
-			}
-		}
-	case "timezone":
-		if !rule.Required && isEmptyValue(value) {
-			logging.DebugBool(verboseMode, "Skipping timezone validator for non-required empty field '%s'", path)
-		} else {
-			logging.DebugBool(verboseMode, "Running built-in timezone validator for field '%s'", path)
-			if validator, exists := customValidators["validate_timezone"]; exists {
-				if err := validator(value, parentConfig); err != nil {
-					return fmt.Errorf("field '%s': %w", path, err)
-				}
-			}
-		}
-	default:
-		// Fallback to map lookup for less common validators
-		builtInValidators := map[string]string{
-			"hostname":        "validate_hostname",
-			"directory_path":  "validate_directory_path",
-			"url":             "validate_url",
-			"cron_time":       "validate_cron_time",
-			"rclone_template": "validate_rclone_template",
-			"ssh_key_or_url":  "validate_ssh_key_or_url",
-			"password":        "validate_password_strength",
-		}
-
-		if validatorName, isBuiltIn := builtInValidators[rule.Type]; isBuiltIn {
-			if !rule.Required && isEmptyValue(value) {
-				logging.DebugBool(verboseMode, "Skipping built-in %s validator for non-required empty field '%s'", rule.Type, path)
-			} else {
-				logging.DebugBool(verboseMode, "Running built-in %s validator for field '%s'", rule.Type, path)
-				if validator, exists := customValidators[validatorName]; exists {
-					if err := validator(value, parentConfig); err != nil {
-						return fmt.Errorf("field '%s': %w", path, err)
-					}
-					if validatorName == "validate_password_strength" {
-						emitPasswordStrengthWarning(value, nil)
-					}
-				}
-			}
-		}
-	}
-
-	// Custom validator
-	if rule.CustomValidator != "" {
-		logging.DebugBool(verboseMode, "Running custom validator '%s' for field '%s'", rule.CustomValidator, path)
-		if validator, exists := customValidators[rule.CustomValidator]; exists {
-			if err := validator(value, parentConfig); err != nil {
-				return fmt.Errorf("field '%s': %w", path, err)
-			}
-		} else {
-			return fmt.Errorf("unknown custom validator '%s' for field '%s'", rule.CustomValidator, path)
-		}
-	}
-
-	// Nested object validation
-	if rule.Type == "object" && rule.Properties != nil {
-		if objMap, ok := value.(map[string]any); ok {
-			return s.validateObject(objMap, rule.Properties, path)
-		}
-	}
-
-	// Array validation
-	if rule.Type == "array" && rule.Items != nil {
-		if arr, ok := value.([]any); ok {
-			for i, item := range arr {
-				itemPath := fmt.Sprintf("%s[%d]", path, i)
-				if err := s.validateField(item, rule.Items, itemPath, parentConfig); err != nil {
-					return err
-				}
-			}
-		}
-	}
-
+	emitValidationWarning(warning.Error(), asyncCtx)
 	return nil
 }
 
@@ -447,94 +250,15 @@ func emitPasswordStrengthWarning(value any, asyncCtx *AsyncValidationContext) {
 	if warning == "" {
 		return
 	}
+	emitValidationWarning(warning, asyncCtx)
+}
+
+func emitValidationWarning(warning string, asyncCtx *AsyncValidationContext) {
 	if asyncCtx != nil && asyncCtx.task != nil {
 		asyncCtx.task.Warning(warning)
 		return
 	}
 	fmt.Fprintln(os.Stderr, warning)
-}
-
-// validateType validates the basic type of a value
-func (s *Schema) validateType(value any, rule *SchemaRule, path string) error {
-	if rule.Type == "" {
-		return nil // No type constraint
-	}
-
-	// Skip type validation if field is not required and value is empty
-	if !rule.Required && isEmptyValue(value) {
-		logging.DebugBool(verboseMode, "validateType - skipping type check for non-required empty field '%s'", path)
-		return nil
-	}
-
-	valueType := getValueType(value)
-	logging.DebugBool(verboseMode, "validateType for '%s': expected=%s, actual=%s, custom_validator=%s", path, rule.Type, valueType, rule.CustomValidator)
-
-	// Handle special types that have built-in validation
-	if rule.Type == "ansible_bool" {
-		// "ansible_bool" type accepts strings and booleans, validation happens automatically
-		if valueType == "string" || valueType == "boolean" {
-			logging.DebugBool(verboseMode, "validateType - ansible_bool field accepts string/boolean, allowing %s", valueType)
-			return nil
-		}
-	}
-
-	// Handle built-in validator types that accept strings
-	builtInStringTypes := map[string]bool{
-		"subdomain":       true,
-		"hostname":        true,
-		"directory_path":  true,
-		"url":             true,
-		"timezone":        true,
-		"cron_time":       true,
-		"rclone_template": true,
-		"ssh_key_or_url":  true,
-		"password":        true,
-	}
-
-	if builtInStringTypes[rule.Type] {
-		// Built-in validator types accept strings, validation happens automatically
-		if valueType == "string" {
-			logging.DebugBool(verboseMode, "validateType - built-in type '%s' accepts string, allowing %s", rule.Type, valueType)
-			return nil
-		}
-	}
-
-	// Handle flexible numeric types
-	if rule.Type == "number" {
-		// "number" type accepts strings and integers, but NOT floats (for whole numbers with flexibility)
-		if valueType == "string" || valueType == "integer" {
-			if err := validateNumberValue(value); err != nil {
-				return fmt.Errorf("field '%s': %w", path, err)
-			}
-			logging.DebugBool(verboseMode, "validateType - number field accepts string/integer, allowing %s", valueType)
-			return nil
-		}
-	}
-
-	if rule.Type == "integer" {
-		// "integer" type only accepts actual integers (strict)
-		if valueType == "integer" {
-			logging.DebugBool(verboseMode, "validateType - integer field accepts only integer, allowing %s", valueType)
-			return nil
-		}
-	}
-
-	if rule.Type == "float" {
-		// "float" type accepts strings and actual floats, but not integers (to be explicit about decimals)
-		if valueType == "string" || valueType == "float" {
-			if err := validateFloatValue(value); err != nil {
-				return fmt.Errorf("field '%s': %w", path, err)
-			}
-			logging.DebugBool(verboseMode, "validateType - float field accepts string/float, allowing %s", valueType)
-			return nil
-		}
-	}
-
-	if valueType != rule.Type {
-		return fmt.Errorf("field '%s' must be of type '%s', got '%s'", path, rule.Type, valueType)
-	}
-
-	return nil
 }
 
 // validateFormat validates the format of a string value
@@ -722,29 +446,6 @@ func getKeys(m any) []string {
 		return keys
 	default:
 		return []string{}
-	}
-}
-
-func getValueType(value any) string {
-	if value == nil {
-		return "null"
-	}
-
-	switch value.(type) {
-	case string:
-		return "string"
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		return "integer"
-	case float32, float64:
-		return "float"
-	case bool:
-		return "boolean"
-	case []any:
-		return "array"
-	case map[string]any:
-		return "object"
-	default:
-		return fmt.Sprintf("%T", value)
 	}
 }
 

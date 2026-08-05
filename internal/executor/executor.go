@@ -96,21 +96,6 @@
 //	    return detailedErr
 //	}
 //
-// # Testing
-//
-// The package provides a MockExecutor for easy testing:
-//
-//	mock := executor.NewMockExecutor()
-//	mock.WithMockResult(&executor.Result{
-//	    ExitCode: 0,
-//	    Combined: []byte("success"),
-//	}, nil)
-//
-//	result, err := mock.Execute(&executor.Config{
-//	    Context: context.Background(),
-//	    Command: "test",
-//	})
-//
 // # Performance Considerations
 //
 // - Use OutputModeDiscard instead of capturing output when working with spinners
@@ -312,24 +297,6 @@ func WithManagedOutput(ctx context.Context, stdout, stderr io.Writer) context.Co
 //	    executor.WithWorkingDir("/tmp"),
 //	    executor.WithOutputMode(executor.OutputModeStream))
 type Option func(*Config)
-
-// WithContext sets the context for command execution.
-// The context is used for cancellation and timeout support.
-// If the context is cancelled, the command will be terminated.
-//
-// This option is typically not needed when using Run(), as it accepts
-// a context parameter. Use this when configuring a Config directly for Execute().
-//
-// Example:
-//
-//	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-//	defer cancel()
-//	result, err := executor.Run(ctx, "command")
-func WithContext(ctx context.Context) Option {
-	return func(c *Config) {
-		c.Context = ctx
-	}
-}
 
 // WithArgs sets the command-line arguments for the command.
 // Arguments should not include the command name itself.

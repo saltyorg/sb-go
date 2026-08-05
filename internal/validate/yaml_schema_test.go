@@ -38,6 +38,38 @@ func TestAsyncPasswordWarningUsesTaskOutput(t *testing.T) {
 	}
 }
 
+func TestAsyncRcloneWarningUsesTaskOutput(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	schema := &Schema{
+		Rules: map[string]*SchemaRule{
+			"remote": {
+				Type:            "string",
+				Required:        true,
+				CustomValidator: "validate_rclone_remote",
+			},
+		},
+	}
+	var output bytes.Buffer
+	runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: true, Output: &output})
+	err := runner.Run(context.Background(), spinners.TaskSpec{Running: "validating"}, func(ctx context.Context, task *spinners.Task) error {
+		asyncCtx, err := schema.ValidateWithTypeFlexibilityAsync(ctx, task, map[string]any{"remote": "media:path"})
+		if err != nil {
+			return err
+		}
+		if errors := asyncCtx.Wait(); len(errors) != 0 {
+			return errors[0]
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rendered := output.String(); !strings.Contains(rendered, "Warning: rclone remote validation skipped: rclone is not installed") {
+		t.Fatalf("rclone warning was not routed through task output: %q", rendered)
+	}
+}
+
 func TestSchemaValidateWithTypeFlexibilityNumber(t *testing.T) {
 	schema := &Schema{
 		Rules: map[string]*SchemaRule{

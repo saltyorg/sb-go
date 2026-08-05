@@ -33,6 +33,14 @@ type CustomValidator func(value any, config map[string]any) error
 // AsyncAPIValidator function type for async API validation
 type AsyncAPIValidator func(context.Context, any, map[string]any) error
 
+type nonFatalValidationWarning struct {
+	message string
+}
+
+func (w *nonFatalValidationWarning) Error() string {
+	return w.message
+}
+
 // APIValidationResult holds the result of an async API validation
 type APIValidationResult struct {
 	Name  string
@@ -493,11 +501,9 @@ func validateRcloneRemote(value any, _ map[string]any) error {
 	if err := sbconfig.ValidateRcloneRemote(remoteName, verboseMode); err != nil {
 		switch {
 		case errors.Is(err, sbconfig.ErrRcloneNotInstalled):
-			fmt.Printf("Warning: rclone remote validation skipped: rclone is not installed")
-			return nil
+			return &nonFatalValidationWarning{message: "Warning: rclone remote validation skipped: rclone is not installed"}
 		case errors.Is(err, sbconfig.ErrSystemUserNotFound), errors.Is(err, sbconfig.ErrRcloneConfigNotFound):
-			fmt.Printf("Warning: rclone remote validation skipped: %v", err)
-			return nil
+			return &nonFatalValidationWarning{message: fmt.Sprintf("Warning: rclone remote validation skipped: %v", err)}
 		default:
 			return err
 		}

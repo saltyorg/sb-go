@@ -18,7 +18,6 @@ require (
 	github.com/cloudflare/cloudflare-go/v7 v7.7.0
 	github.com/creack/pty v1.1.24
 	github.com/creativeprojects/go-selfupdate v1.6.0
-	github.com/go-playground/validator/v10 v10.30.3
 	github.com/mattn/go-isatty v0.0.23
 	github.com/mattn/go-runewidth v0.0.24
 	github.com/moby/moby/api v1.55.0
@@ -62,12 +61,9 @@ require (
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.14 // indirect
 	github.com/go-fed/httpsig v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-playground/locales v0.14.1 // indirect
-	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/google/go-github/v86 v86.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
@@ -75,7 +71,6 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect

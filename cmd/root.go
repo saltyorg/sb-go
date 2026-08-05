@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-
 	"github.com/saltyorg/sb-go/internal/errors"
 
 	"github.com/spf13/cobra"
@@ -21,14 +19,6 @@ var rootCmd = &cobra.Command{
 // GetRootCommand returns the root command for use with fang.Execute
 func GetRootCommand() *cobra.Command {
 	return rootCmd
-}
-
-// ExecuteContext adds all child commands to the root command and sets flags appropriately.
-// It accepts a context that will be available to all commands via cmd.Context() for cancellation and timeouts.
-// This is called by main.main() and only needs to happen once to the rootCmd.
-// Returns an error if command execution fails.
-func ExecuteContext(ctx context.Context) error {
-	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {

@@ -64,34 +64,6 @@ func (e *RealCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, nam
 	return err
 }
 
-// MockCommandExecutor is a mock implementation for testing
-type MockCommandExecutor struct {
-	ExecuteContextFunc func(ctx context.Context, dir string, name string, args ...string) ([]byte, error)
-	ExecuteWithIOFunc  func(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error
-}
-
-// ExecuteContext mock implementation
-func (m *MockCommandExecutor) ExecuteContext(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
-	if m.ExecuteContextFunc != nil {
-		return m.ExecuteContextFunc(ctx, dir, name, args...)
-	}
-	return []byte{}, nil
-}
-
-// ExecuteWithIO mock implementation
-func (m *MockCommandExecutor) ExecuteWithIO(ctx context.Context, dir string, name string, args []string, stdout, stderr, stdin any) error {
-	if m.ExecuteWithIOFunc != nil {
-		return m.ExecuteWithIOFunc(ctx, dir, name, args, stdout, stderr, stdin)
-	}
-	// Write some mock output if stdout is provided
-	if stdout != nil {
-		if w, ok := stdout.(io.Writer); ok {
-			_, _ = w.Write([]byte("mock output")) // Ignore write errors in mock
-		}
-	}
-	return nil
-}
-
 // defaultExecutor is the default executor used by the package
 var defaultExecutor CommandExecutor = &RealCommandExecutor{
 	executor: executor.NewExecutor(),

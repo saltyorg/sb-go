@@ -394,19 +394,18 @@ func regenerateInstalledCompletions() {
 	// Install/regenerate completion for all names (binary + symlinks)
 	for _, cmdName := range getAllBinaryNames() {
 		bashPath := fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
-		_ = InstallOrRegenerateCompletion("bash", bashPath, func(path string) error {
+		_ = InstallOrRegenerateCompletion(bashPath, func(path string) error {
 			return generateStaticBashCompletion(path, cmdName)
 		})
 
 		// Only install or regenerate zsh completion if zsh is installed
 		if isZshInstalled() {
 			zshPath := fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
-			_ = InstallOrRegenerateCompletion("zsh", zshPath, func(path string) error {
+			_ = InstallOrRegenerateCompletion(zshPath, func(path string) error {
 				return generateStaticZshCompletion(path, cmdName)
 			})
 		}
 	}
 
 	// Silent execution - errors are ignored
-	// To enable verbose output in the future, uncomment the print statements in InstallOrRegenerateCompletion()
 }

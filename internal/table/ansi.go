@@ -9,18 +9,6 @@ import (
 
 type ansiBlob []ansiSegment
 
-func (a ansiBlob) Strip() string {
-	var output strings.Builder
-	for _, segment := range a {
-		output.WriteString(segment.value)
-	}
-	return output.String()
-}
-
-func (a ansiBlob) TrimSpace() ansiBlob {
-	return newANSI(strings.TrimSpace(a.String()))
-}
-
 func (a ansiBlob) Len() int {
 	var c int
 	for _, segment := range a {
@@ -36,58 +24,6 @@ func (a ansiBlob) String() string {
 		output.WriteString(segment.value)
 	}
 	return output.String()
-}
-
-func (a ansiBlob) ANSI() string {
-	var output strings.Builder
-	for _, segment := range a {
-		output.WriteString(segment.style)
-	}
-	return simplifyANSI(output.String())
-}
-
-func simplifyANSI(input string) string {
-	parts := strings.Split(input, "\x1b[0m")
-	return parts[len(parts)-1]
-}
-
-func (a ansiBlob) Cut(index int) (ansiBlob, ansiBlob) {
-	var current int
-	var outputBefore strings.Builder
-	var outputAfter string
-	var found bool
-	for _, segment := range a {
-		if found {
-			outputAfter += segment.style + segment.value
-			continue
-		}
-		if index < current+utf8.RuneCountInString(segment.value) {
-			localIndex := index - current
-			outputBefore.WriteString(string([]rune(segment.value)[:localIndex]))
-			outputAfter = segment.style + string([]rune(segment.value)[localIndex:])
-			found = true
-			continue
-		}
-		outputBefore.WriteString(segment.style)
-		outputBefore.WriteString(segment.value)
-		current += utf8.RuneCountInString(segment.value)
-	}
-	return newANSI(outputBefore.String()), newANSI(outputAfter)
-}
-
-func (a ansiBlob) Words() []ansiBlob {
-	var output []ansiBlob
-	words := strings.Split(a.String(), " ")
-	var ansi string
-	for _, word := range words {
-		w := newANSI(word).TrimSpace()
-		ansi = simplifyANSI(ansi + w.ANSI())
-		if w.Len() == 0 {
-			continue
-		}
-		output = append(output, w)
-	}
-	return output
 }
 
 type ansiSegment struct {
