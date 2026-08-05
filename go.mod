@@ -11,17 +11,17 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/agnivade/levenshtein v1.2.1
 	github.com/aquasecurity/table v1.11.0
-	github.com/autobrr/go-qbittorrent v1.16.0
+	github.com/autobrr/go-qbittorrent v1.17.0
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260720091843-3eef36eaaa28
-	github.com/cloudflare/cloudflare-go/v7 v7.7.0
+	github.com/cloudflare/cloudflare-go/v7 v7.8.0
 	github.com/creack/pty v1.1.24
 	github.com/creativeprojects/go-selfupdate v1.6.0
-	github.com/mattn/go-isatty v0.0.23
-	github.com/mattn/go-runewidth v0.0.24
+	github.com/mattn/go-isatty v0.0.24
+	github.com/mattn/go-runewidth v0.0.27
 	github.com/moby/moby/api v1.55.0
-	github.com/moby/moby/client v0.5.0
+	github.com/moby/moby/client v0.5.1
 	github.com/saltydk/go-rtorrent v1.0.1
 	github.com/sj14/jellyfin-go v0.4.4
 	github.com/spf13/cobra v1.10.2
