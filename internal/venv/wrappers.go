@@ -1,8 +1,10 @@
 package venv
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,30 +12,46 @@ import (
 	"github.com/saltyorg/sb-go/internal/constants"
 )
 
-func installWrappers(venvPath string, commands []string, removeStale bool) error {
-	wanted := make(map[string]bool, len(commands))
+const managedWrapperHeader = "#!/bin/sh\n" + wrapperMarker + "\n"
+
+func installWrappers(commands []string) error {
+	return installWrappersAt("/usr/local/bin", commands)
+}
+
+func installWrappersAt(directory string, commands []string) error {
 	for _, command := range commands {
 		content, err := managedWrapperContent(command)
 		if err != nil {
 			return err
 		}
-		wanted[command] = true
-		if err := writeWrapper(filepath.Join("/usr/local/bin", command), content); err != nil {
+		path, err := wrapperPath(directory, command)
+		if err != nil {
+			return err
+		}
+		if err := writeWrapper(path, content); err != nil {
 			return err
 		}
 	}
-	if !removeStale {
-		return nil
+	return nil
+}
+
+func removeStaleWrappers(previousCommands, currentCommands []string) error {
+	return removeStaleWrappersAt("/usr/local/bin", previousCommands, currentCommands)
+}
+
+func removeStaleWrappersAt(directory string, previousCommands, currentCommands []string) error {
+	wanted := make(map[string]bool, len(currentCommands))
+	for _, command := range currentCommands {
+		wanted[command] = true
 	}
-	entries, err := os.ReadDir("/usr/local/bin")
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if wanted[entry.Name()] {
+	for _, command := range previousCommands {
+		if wanted[command] {
 			continue
 		}
-		path := filepath.Join("/usr/local/bin", entry.Name())
+		path, err := wrapperPath(directory, command)
+		if err != nil {
+			return err
+		}
 		managed, err := isManagedWrapper(path)
 		if err != nil {
 			return err
@@ -47,13 +65,20 @@ func installWrappers(venvPath string, commands []string, removeStale bool) error
 	return nil
 }
 
-func managedWrapperContent(command string) ([]byte, error) {
+func wrapperPath(directory, command string) (string, error) {
 	if filepath.Base(command) != command || strings.ContainsAny(command, "\n\r") {
-		return nil, fmt.Errorf("unsafe venv command name %q", command)
+		return "", fmt.Errorf("unsafe venv command name %q", command)
+	}
+	return filepath.Join(directory, command), nil
+}
+
+func managedWrapperContent(command string) ([]byte, error) {
+	if _, err := wrapperPath("/usr/local/bin", command); err != nil {
+		return nil, err
 	}
 	content := fmt.Sprintf(
-		"#!/bin/sh\n%s\nvenv_bin=$(/usr/bin/readlink -f %s/bin) || exit 1\nPATH=\"${venv_bin}${PATH:+:${PATH}}\"\nexport PATH\nexec %s \"$@\"\n",
-		wrapperMarker,
+		"%svenv_bin=$(/usr/bin/readlink -f %s/bin) || exit 1\nPATH=\"${venv_bin}${PATH:+:${PATH}}\"\nexport PATH\nexec %s \"$@\"\n",
+		managedWrapperHeader,
 		filepath.Join(constants.AnsibleVenvPath, "venv"),
 		filepath.Join(constants.AnsibleVenvPath, "venv", "bin", command),
 	)
@@ -85,12 +110,21 @@ func writeWrapper(path string, content []byte) error {
 }
 
 func isManagedWrapper(path string) (bool, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	return strings.Contains(string(data), wrapperMarker), nil
+	defer func() { _ = file.Close() }()
+
+	header := make([]byte, len(managedWrapperHeader))
+	if _, err := io.ReadFull(file, header); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return false, nil
+		}
+		return false, err
+	}
+	return bytes.Equal(header, []byte(managedWrapperHeader)), nil
 }

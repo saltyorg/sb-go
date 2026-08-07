@@ -130,7 +130,7 @@ func Reconcile(ctx context.Context, task *spinners.Task, options Options) error 
 		return err
 	}
 	if state.Healthy && !options.ForceVenv && !options.ForcePython {
-		if err := installWrappers(state.VenvPath, state.Manifest.ExportedCommands, true); err != nil {
+		if err := installWrappers(state.Manifest.ExportedCommands); err != nil {
 			return fmt.Errorf("refresh Ansible command wrappers: %w", err)
 		}
 		if err := cleanupGenerations(); err != nil {
@@ -206,7 +206,7 @@ func Reconcile(ctx context.Context, task *spinners.Task, options Options) error 
 	if err := writeManifest(generationDir, manifest); err != nil {
 		return err
 	}
-	if err := installWrappers(venvPath, commands, false); err != nil {
+	if err := installWrappers(commands); err != nil {
 		return fmt.Errorf("install Ansible command wrappers: %w", err)
 	}
 	if err := activateGeneration(venvPath); err != nil {
@@ -214,7 +214,11 @@ func Reconcile(ctx context.Context, task *spinners.Task, options Options) error 
 	}
 	activated = true
 
-	if err := installWrappers(venvPath, commands, true); err != nil {
+	previousCommands := []string(nil)
+	if state.Manifest != nil {
+		previousCommands = state.Manifest.ExportedCommands
+	}
+	if err := removeStaleWrappers(previousCommands, commands); err != nil {
 		return fmt.Errorf("remove stale Ansible command wrappers: %w", err)
 	}
 	if err := cleanupGenerations(); err != nil {

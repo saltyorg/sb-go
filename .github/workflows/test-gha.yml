@@ -67,6 +67,9 @@ jobs:
 
       - name: Verify installation
         run: |
+          echo "=== Checking sb CLI ==="
+          test -x /usr/local/bin/sb
+          /usr/local/bin/sb version
           echo "=== Checking Python venv ==="
           ls -la /srv/ansible/venv/bin/
           /srv/ansible/venv/bin/python3 --version

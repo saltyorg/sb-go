@@ -134,6 +134,66 @@ func TestManagedWrapperSetsResolvedVenvPath(t *testing.T) {
 	}
 }
 
+func TestManagedWrapperDetectionRequiresExactHeader(t *testing.T) {
+	managedPath := filepath.Join(t.TempDir(), "managed")
+	content, err := managedWrapperContent("ansible-lint")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(managedPath, content, 0755); err != nil {
+		t.Fatal(err)
+	}
+	managed, err := isManagedWrapper(managedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !managed {
+		t.Fatal("generated wrapper was not recognized as managed")
+	}
+
+	binaryPath := filepath.Join(t.TempDir(), "sb")
+	binaryContent := append([]byte("\x7fELF compiled program data: "), []byte(wrapperMarker)...)
+	if err := os.WriteFile(binaryPath, binaryContent, 0755); err != nil {
+		t.Fatal(err)
+	}
+	managed, err = isManagedWrapper(binaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if managed {
+		t.Fatal("binary containing the marker was incorrectly recognized as a managed wrapper")
+	}
+}
+
+func TestStaleWrapperCleanupOnlyUsesPreviousManifest(t *testing.T) {
+	directory := t.TempDir()
+	for _, command := range []string{"current", "stale", "unrelated"} {
+		content, err := managedWrapperContent(command)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(directory, command), content, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := removeStaleWrappersAt(
+		directory,
+		[]string{"current", "stale"},
+		[]string{"current"},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "stale")); !os.IsNotExist(err) {
+		t.Fatalf("stale managed wrapper was not removed: %v", err)
+	}
+	for _, command := range []string{"current", "unrelated"} {
+		if _, err := os.Stat(filepath.Join(directory, command)); err != nil {
+			t.Fatalf("wrapper %q should remain: %v", command, err)
+		}
+	}
+}
+
 func TestEnvironmentStatusTaskSpec(t *testing.T) {
 	tests := []struct {
 		name    string
