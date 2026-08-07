@@ -15,6 +15,7 @@ readonly TEMP_DIR=$(mktemp -d)
 readonly MIN_BINARY_SIZE=1000000  # 1MB minimum size for sanity check
 DOWNLOAD_TOOL=""  # Will be set by check_dependencies
 FORCE_DOWNLOAD_TOOL=""  # Can be set by command-line argument
+REPAIR_MODE=false
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -364,6 +365,10 @@ parse_args() {
                 FORCE_DOWNLOAD_TOOL="wget"
                 shift
                 ;;
+            --repair)
+                REPAIR_MODE=true
+                shift
+                ;;
             -h|--help)
                 echo "Usage: $0 [OPTIONS]"
                 echo ""
@@ -371,6 +376,7 @@ parse_args() {
                 echo "  -v, --verbose      Enable verbose output in setup command"
                 echo "  --force-curl       Force using curl for downloads"
                 echo "  --force-wget       Force using wget for downloads"
+                echo "  --repair           Restore only the sb binary on an existing installation"
                 echo "  -h, --help         Show this help message"
                 exit 0
                 ;;
@@ -391,7 +397,9 @@ main() {
     log_info "Saltbox CLI Installer"
 
     check_privileges
-    check_saltbox_exists
+    if [[ "${REPAIR_MODE}" != "true" ]]; then
+        check_saltbox_exists
+    fi
     detect_platform
     check_dependencies
 
@@ -409,6 +417,12 @@ main() {
 
     # Install binary
     install_binary "${temp_binary}"
+
+    if [[ "${REPAIR_MODE}" == "true" ]]; then
+        log_success "Saltbox CLI repair complete!"
+        log_info "Installed ${BINARY_NAME} to ${INSTALL_PATH} with mode 0755"
+        return
+    fi
 
     # Run setup
     run_setup "${VERBOSE_MODE}"

@@ -92,3 +92,13 @@ jobs:
 
           echo ""
           echo "Installation verified successfully with ${{ matrix.download-tool }}!"
+
+      - name: Test binary repair
+        run: |
+          sudo mv /usr/local/bin/sb /tmp/sb-before-repair
+          sudo ./install.sh --repair --force-${{ matrix.download-tool }} --verbose
+
+          test -x /usr/local/bin/sb
+          test "$(stat -c '%U:%G %a' /usr/local/bin/sb)" = "root:root 755"
+          cmp /tmp/sb-before-repair /usr/local/bin/sb
+          /usr/local/bin/sb version
