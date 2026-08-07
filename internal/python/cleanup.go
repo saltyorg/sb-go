@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/apt"
-	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/ubuntu"
 )
@@ -183,6 +182,11 @@ func ShouldCleanupDeadsnakes() (bool, error) {
 // CleanupDeadsnakesIfNeeded checks if cleanup is needed and performs it.
 // This function removes both deadsnakes packages and their apt repository files.
 func CleanupDeadsnakesIfNeeded(ctx context.Context, verbose bool) (bool, error) {
+	return CleanupDeadsnakesIfNeededForVersion(ctx, "3.12", verbose)
+}
+
+// CleanupDeadsnakesIfNeededForVersion removes legacy packages for the configured Python minor.
+func CleanupDeadsnakesIfNeededForVersion(ctx context.Context, pythonVersion string, verbose bool) (bool, error) {
 	shouldCleanup, err := ShouldCleanupDeadsnakes()
 	if err != nil {
 		return false, fmt.Errorf("error checking if cleanup is needed: %w", err)
@@ -195,7 +199,6 @@ func CleanupDeadsnakesIfNeeded(ctx context.Context, verbose bool) (bool, error) 
 	var cleanedUp bool
 
 	// Check if any deadsnakes packages are installed
-	pythonVersion := constants.AnsibleVenvPythonVersion
 	packages := DeadsnakesPackages(pythonVersion)
 
 	var installedPackages []string

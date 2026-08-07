@@ -1,0 +1,35 @@
+name: Update Saltbox Python
+description: Open a Saltbox Python update PR using versions supported by the released uv
+
+inputs:
+  token:
+    description: Token with permission to create Saltbox branches and pull requests
+    required: true
+  saltbox-repository:
+    description: Saltbox repository
+    required: false
+    default: saltyorg/Saltbox
+  python-minor:
+    description: Python minor release to track
+    required: false
+    default: '3.12'
+  sb-go-release:
+    description: Published sb-go release containing the uv pin
+    required: true
+  dry-run:
+    description: Discover and preflight without creating a pull request
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Discover supported Python and update Saltbox
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        SALTBOX_REPOSITORY: ${{ inputs.saltbox-repository }}
+        PYTHON_MINOR: ${{ inputs.python-minor }}
+        SB_GO_RELEASE: ${{ inputs.sb-go-release }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: '"$GITHUB_ACTION_PATH/update.sh"'

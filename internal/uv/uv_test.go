@@ -1,47 +1,79 @@
 package uv
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/saltyorg/sb-go/internal/runtime"
 )
 
-// TestUVBinaryPath tests that the UV binary path constant is correct
 func TestUVBinaryPath(t *testing.T) {
-	expected := "/usr/local/bin/uv"
+	const expected = "/usr/local/bin/uv"
 	if UVBinaryPath != expected {
-		t.Errorf("Expected UVBinaryPath to be %s, got %s", expected, UVBinaryPath)
+		t.Fatalf("UVBinaryPath = %q, want %q", UVBinaryPath, expected)
 	}
 }
 
-// TestExtractUVBinary tests the extraction logic with a mock
 func TestExtractUVBinary(t *testing.T) {
-	// This is a basic structure test - full integration testing would require
-	// a real tarball or mock file system
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+	dir := t.TempDir()
+	archivePath := filepath.Join(dir, "uv.tar.gz")
+	want := []byte("test uv binary")
+
+	var archive bytes.Buffer
+	gzipWriter := gzip.NewWriter(&archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	header := &tar.Header{Name: "uv-x86_64-unknown-linux-gnu/uv", Mode: 0755, Size: int64(len(want))}
+	if err := tarWriter.WriteHeader(header); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tarWriter.Write(want); err != nil {
+		t.Fatal(err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(archivePath, archive.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	destination := filepath.Join(dir, "uv")
+	if err := os.WriteFile(destination, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := extractUVBinary(archivePath, destination, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("extracted uv = %q, want %q", got, want)
 	}
 }
 
-// TestDownloadAndInstallUV tests the download and install with context
-func TestDownloadAndInstallUV(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+func TestEnsureVersionRejectsFloatingVersion(t *testing.T) {
+	err := EnsureVersion(context.Background(), "latest", filepath.Join(t.TempDir(), "uv"), false)
+	if err == nil || !strings.Contains(err.Error(), "exact release") {
+		t.Fatalf("EnsureVersion() error = %v, want exact-release rejection", err)
 	}
+}
 
-	// Only run if we're on Linux and have write access to /usr/local/bin
-	if os.Getenv("CI") == "" {
-		t.Skip("Skipping download test outside CI environment")
-	}
-
-	ctx := context.Background()
-	err := DownloadAndInstallUV(ctx, true)
+func TestRuntimeUVVersionMatchesVersionFile(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", ".uv-version"))
 	if err != nil {
-		t.Errorf("Expected no error downloading and installing uv, got: %v", err)
+		t.Fatal(err)
 	}
-
-	// Verify the binary exists
-	if _, err := os.Stat(UVBinaryPath); os.IsNotExist(err) {
-		t.Errorf("Expected uv binary to exist at %s after installation", UVBinaryPath)
+	if got := strings.TrimSpace(string(data)); got != runtime.UVVersion {
+		t.Fatalf(".uv-version = %q, runtime.UVVersion = %q", got, runtime.UVVersion)
 	}
 }

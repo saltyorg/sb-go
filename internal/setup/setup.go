@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
@@ -15,7 +14,6 @@ import (
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/spinners"
-	"github.com/saltyorg/sb-go/internal/uv"
 )
 
 // InitialSetup performs the initial setup tasks.
@@ -187,59 +185,6 @@ func ConfigureLocale(ctx context.Context, task *spinners.Task) error {
 	return nil
 }
 
-// PythonVenv installs Python using uv and creates the Ansible venv.
-// The context parameter allows for cancellation of long-running operations.
-func PythonVenv(ctx context.Context, task *spinners.Task, verbose bool) error {
-	// Download and install uv
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Downloading and installing uv"}, func(taskCtx context.Context) error {
-		return uv.DownloadAndInstallUV(taskCtx, verbose)
-	}); err != nil {
-		return fmt.Errorf("error installing uv: %w", err)
-	}
-
-	// Create /srv/python directory
-	pythonDir := constants.PythonInstallDir
-	if err := task.Run(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Creating directory %s", pythonDir)}, func(context.Context, *spinners.Task) error {
-		return os.MkdirAll(pythonDir, 0755)
-	}); err != nil {
-		return fmt.Errorf("error creating %s: %w", pythonDir, err)
-	}
-
-	// Install Python using uv
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Installing Python %s using uv", constants.AnsibleVenvPythonVersion)}, func(taskCtx context.Context) error {
-		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
-	}); err != nil {
-		return fmt.Errorf("error installing Python %s: %w", constants.AnsibleVenvPythonVersion, err)
-	}
-
-	// Create venv using uv
-	venvPath := filepath.Join(constants.AnsibleVenvPath, "venv")
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Creating venv"}, func(taskCtx context.Context, _ *spinners.Task) error {
-		return uv.CreateVenv(taskCtx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
-	}); err != nil {
-		return fmt.Errorf("error creating venv: %w", err)
-	}
-
-	// --- Check for venv Python and wait ---
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Checking for venv Python"}, func(context.Context, *spinners.Task) error {
-		venvPythonPath := constants.AnsibleVenvPythonPath()
-		maxWait := 10 * time.Second
-		startTime := time.Now()
-
-		for time.Since(startTime) < maxWait {
-			if _, err := os.Stat(venvPythonPath); err == nil {
-				return nil // File exists, exit loop
-			}
-			time.Sleep(1 * time.Second)
-		}
-
-		return fmt.Errorf("virtual environment Python still not found after waiting")
-	}); err != nil {
-		return fmt.Errorf("error checking for venv Python: %w", err)
-	}
-	return nil
-}
-
 // SaltboxRepo checks out the master branch of the Saltbox GitHub repository.
 // Resets the existing git repository folder if present.
 // Runs submodule update.
@@ -381,121 +326,6 @@ func InitializeGitHooks(ctx context.Context, task *spinners.Task) error {
 		return fmt.Errorf("error activating Git hooks: %w", err)
 	}
 
-	return nil
-}
-
-// InstallPipDependencies installs pip dependencies in the Ansible virtual environment.
-// The context parameter allows for cancellation of long-running operations.
-func InstallPipDependencies(ctx context.Context, task *spinners.Task, verbose bool) error {
-	venvPythonPath := constants.AnsibleVenvPythonPath()
-	python3Cmd := []string{venvPythonPath, "-m", "pip", "install", "--timeout=360", "--no-cache-dir", "--disable-pip-version-check", "--upgrade"}
-
-	// Install pip, setuptools, and wheel
-	if err := task.RunOutput(ctx, spinners.TaskSpec{Running: "Installing pip, setuptools, and wheel"}, func(ctx context.Context, stdout, stderr io.Writer) error {
-		installBaseDeps := append(python3Cmd, "pip", "setuptools", "wheel")
-		if verbose {
-			fmt.Println("Running command:", installBaseDeps)
-		}
-		_, err := executor.Run(ctx, installBaseDeps[0],
-			executor.WithArgs(installBaseDeps[1:]...),
-			executor.WithOutputMode(executor.OutputModeStream),
-			executor.WithStdout(stdout),
-			executor.WithStderr(stderr),
-			executor.WithPseudoTerminal(),
-		)
-		if err != nil {
-			return fmt.Errorf("command failed: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error installing pip, setuptools, and wheel: %w", err)
-	}
-
-	// Install requirements from requirements-saltbox.txt
-	if err := task.RunOutput(ctx, spinners.TaskSpec{Running: "Installing requirements from requirements-saltbox.txt"}, func(ctx context.Context, stdout, stderr io.Writer) error {
-		requirementsPath := filepath.Join(constants.SaltboxRepoPath, "requirements", "requirements-saltbox.txt")
-		installRequirements := append(python3Cmd, "--requirement", requirementsPath)
-		if verbose {
-			fmt.Println("Running command:", installRequirements)
-		}
-		_, err := executor.Run(ctx, installRequirements[0],
-			executor.WithArgs(installRequirements[1:]...),
-			executor.WithOutputMode(executor.OutputModeStream),
-			executor.WithStdout(stdout),
-			executor.WithStderr(stderr),
-			executor.WithPseudoTerminal(),
-		)
-		if err != nil {
-			return fmt.Errorf("command failed: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error installing requirements from requirements-saltbox.txt: %w", err)
-	}
-
-	return nil
-}
-
-// copyBinaryFile copies a single binary file from src to dest with proper permissions
-func copyBinaryFile(srcPath, destPath string) error {
-	// Get file info from the source to read its permissions.
-	sourceFileInfo, err := os.Stat(srcPath)
-	if err != nil {
-		return fmt.Errorf("could not stat source file: %w", err)
-	}
-
-	srcFile, err := os.Open(srcPath)
-	if err != nil {
-		return fmt.Errorf("error opening source file %s: %w", srcPath, err)
-	}
-	defer func() { _ = srcFile.Close() }()
-
-	destFile, err := os.Create(destPath)
-	if err != nil {
-		return fmt.Errorf("error creating destination file %s: %w", destPath, err)
-	}
-	defer func() { _ = destFile.Close() }()
-
-	// Copy contents
-	if _, err := io.Copy(destFile, srcFile); err != nil {
-		return fmt.Errorf("error copying file: %w", err)
-	}
-
-	// Apply the original file's permissions to the new file.
-	err = os.Chmod(destPath, sourceFileInfo.Mode())
-	if err != nil {
-		return fmt.Errorf("could not set permissions on destination file: %w", err)
-	}
-
-	return nil
-}
-
-// CopyRequiredBinaries copies select binaries from the virtual environment to /usr/local/bin.
-func CopyRequiredBinaries(ctx context.Context, task *spinners.Task) error {
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Copying required binaries to /usr/local/bin"}, func(context.Context, *spinners.Task) error {
-		venvBinDir := filepath.Join(constants.AnsibleVenvPath, "venv", "bin")
-		destDir := "/usr/local/bin"
-		files, err := os.ReadDir(venvBinDir)
-		if err != nil {
-			return fmt.Errorf("error reading virtual environment bin directory: %w", err)
-		}
-
-		for _, file := range files {
-			fileName := file.Name()
-			// Check for ansible, certbot, or apprise binaries
-			if strings.HasPrefix(fileName, "ansible") || strings.HasPrefix(fileName, "certbot") || strings.HasPrefix(fileName, "apprise") {
-				srcPath := filepath.Join(venvBinDir, fileName)
-				destPath := filepath.Join(destDir, fileName)
-
-				if err := copyBinaryFile(srcPath, destPath); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error copying required binaries: %w", err)
-	}
 	return nil
 }
 

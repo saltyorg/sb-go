@@ -45,6 +45,20 @@ func RunAptGet(ctx context.Context, args []string, verbose bool) error {
 		executor.WithInheritEnv(nonInteractiveEnvironment()...))
 }
 
+// IsPackageInstalled reports whether dpkg considers a package fully installed and configured.
+func IsPackageInstalled(ctx context.Context, packageName string) (bool, error) {
+	result, err := executor.Run(ctx, "dpkg-query",
+		executor.WithArgs("-W", "-f=${db:Status-Abbrev}", packageName),
+		executor.WithOutputMode(executor.OutputModeCapture))
+	if err != nil {
+		if result != nil && result.ExitCode == 1 {
+			return false, nil
+		}
+		return false, fmt.Errorf("query package %s: %w", packageName, err)
+	}
+	return strings.TrimSpace(string(result.Stdout)) == "ii", nil
+}
+
 // isAptLocked checks if the apt/dpkg lock file is currently held by another process.
 // It attempts to acquire a non-blocking exclusive lock on the lock file.
 // Returns true if the lock is held by another process, false if available.

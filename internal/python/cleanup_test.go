@@ -3,13 +3,11 @@ package python
 import (
 	"slices"
 	"testing"
-
-	"github.com/saltyorg/sb-go/internal/constants"
 )
 
 // TestDeadsnakesPackages tests that the correct package list is generated
 func TestDeadsnakesPackages(t *testing.T) {
-	pythonVersion := constants.AnsibleVenvPythonVersion
+	pythonVersion := "3.12"
 	packages := DeadsnakesPackages(pythonVersion)
 
 	// Check that we have the expected packages
@@ -46,7 +44,7 @@ func TestDeadsnakesPackagesWithVersion(t *testing.T) {
 	}{
 		{"3.10", "python3.10"},
 		{"3.11", "python3.11"},
-		{constants.AnsibleVenvPythonVersion, "python" + constants.AnsibleVenvPythonVersion},
+		{"3.12", "python3.12"},
 	}
 
 	for _, tc := range testCases {

@@ -2,22 +2,60 @@ package venv
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/runtime"
 	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/toolchain"
 	"github.com/saltyorg/sb-go/internal/uv"
 )
 
-// ManageAnsibleVenv manages the Ansible virtual environment.
-// The context parameter allows for cancellation of long-running operations.
-// The verbose parameter is passed to the global spinner mode - when true, spinners print text instead of animating.
+const (
+	manifestSchemaVersion = 1
+	manifestFileName      = "manifest.json"
+	wrapperMarker         = "# Managed by sb-go Saltbox venv"
+)
+
+type Options struct {
+	ForceVenv   bool
+	ForcePython bool
+	SaltboxUser string
+	Verbose     bool
+}
+
+type Manifest struct {
+	SchemaVersion    int      `json:"schema_version"`
+	GenerationID     string   `json:"generation_id"`
+	PythonVersion    string   `json:"python_version"`
+	PythonPath       string   `json:"python_path"`
+	PythonInstall    string   `json:"python_install,omitempty"`
+	UVVersion        string   `json:"uv_version"`
+	LockSHA256       string   `json:"lock_sha256"`
+	SaltboxCommit    string   `json:"saltbox_commit"`
+	CreatedAt        string   `json:"created_at"`
+	ExportedCommands []string `json:"exported_commands"`
+}
+
+type activeState struct {
+	Manifest      *Manifest
+	GenerationDir string
+	VenvPath      string
+	Healthy       bool
+}
+
 func ManageAnsibleVenv(
 	ctx context.Context,
 	task *spinners.Task,
@@ -25,314 +63,417 @@ func ManageAnsibleVenv(
 	saltboxUser string,
 	verbose bool,
 ) error {
-	return manageAnsibleVenv(ctx, task, forceRecreate, saltboxUser, verbose)
+	return Reconcile(ctx, task, Options{
+		ForceVenv:   forceRecreate,
+		SaltboxUser: saltboxUser,
+		Verbose:     verbose,
+	})
 }
 
-func manageAnsibleVenv(ctx context.Context, task *spinners.Task, forceRecreate bool, saltboxUser string, verbose bool) error {
-	ansibleVenvPath := constants.AnsibleVenvPath
-	venvPythonPath := constants.AnsibleVenvPythonPath()
-	pythonMissing := false
-
-	// Check the Python version
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Checking Python version"}, func(context.Context, *spinners.Task) error {
-		var err error
-		pythonMissing, err = checkPythonVersion(ctx, ansibleVenvPath, venvPythonPath)
+func Reconcile(ctx context.Context, task *spinners.Task, options Options) error {
+	config, err := toolchain.Load()
+	if err != nil {
+		return fmt.Errorf("load Saltbox Python toolchain: %w", err)
+	}
+	compatible, err := toolchain.AtLeast(runtime.UVVersion, config.MinimumUV)
+	if err != nil {
 		return err
+	}
+	if !compatible {
+		return fmt.Errorf(
+			"Saltbox requires uv %s or newer, but this sb release provides %s; run sb self-update",
+			config.MinimumUV,
+			runtime.UVVersion,
+		)
+	}
+
+	lockDigest, err := fileSHA256(constants.AnsibleRequirementsPath)
+	if err != nil {
+		return fmt.Errorf("hash Saltbox requirements lock: %w", err)
+	}
+	commit, err := saltboxCommit(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Ensuring uv %s is installed", runtime.UVVersion)}, func(taskCtx context.Context) error {
+		return uv.DownloadAndInstallUV(taskCtx, options.Verbose)
 	}); err != nil {
-		return fmt.Errorf("error checking python version: %w", err)
+		return fmt.Errorf("install pinned uv: %w", err)
 	}
 
-	recreate := forceRecreate || pythonMissing
-
-	if !forceRecreate && pythonMissing {
-		task.Warning(fmt.Sprintf("Python %s not detected in venv, recreation required", constants.AnsibleVenvPythonVersion))
+	libpqInstalled, err := apt.IsPackageInstalled(ctx, "libpq-dev")
+	if err != nil {
+		return fmt.Errorf("check native Python build prerequisites: %w", err)
 	}
-
-	if recreate {
-		// Remove existing venv
-		if err := task.Run(ctx, spinners.TaskSpec{Running: "Removing existing venv"}, func(context.Context, *spinners.Task) error {
-			return removeExistingVenv(ctx, ansibleVenvPath)
+	if !libpqInstalled {
+		if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Updating apt package cache"}, func(taskCtx context.Context) error {
+			return apt.UpdatePackageLists(taskCtx, options.Verbose)()
 		}); err != nil {
-			return fmt.Errorf("error removing existing venv: %w", err)
+			return fmt.Errorf("update apt cache for native Python build prerequisites: %w", err)
+		}
+		if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Installing native Python build prerequisites"}, func(taskCtx context.Context) error {
+			return apt.InstallPackage(taskCtx, []string{"libpq-dev"}, options.Verbose)()
+		}); err != nil {
+			return fmt.Errorf("install native Python build prerequisites: %w", err)
 		}
 	}
 
-	if _, err := os.Stat(ansibleVenvPath); os.IsNotExist(err) {
-		// Create venv
-		if err := task.Run(ctx, spinners.TaskSpec{
-			Running:      "Creating virtual environment",
-			ChildDisplay: spinners.RetainChildTasks,
-		}, func(ctx context.Context, child *spinners.Task) error {
-			return createVirtualEnv(ctx, child, ansibleVenvPath, verbose)
-		}); err != nil {
-			return fmt.Errorf("error creating virtual environment: %w", err)
+	state, err := inspectActive(ctx, config.Python, lockDigest)
+	if err != nil {
+		return fmt.Errorf("inspect active Ansible environment: %w", err)
+	}
+	if err := task.Run(ctx, environmentStatusTaskSpec(state.Healthy, options), func(context.Context, *spinners.Task) error {
+		return nil
+	}); err != nil {
+		return err
+	}
+	if state.Healthy && !options.ForceVenv && !options.ForcePython {
+		if err := installWrappers(state.VenvPath, state.Manifest.ExportedCommands, true); err != nil {
+			return fmt.Errorf("refresh Ansible command wrappers: %w", err)
+		}
+		if err := cleanupGenerations(); err != nil {
+			return fmt.Errorf("clean old Ansible generations: %w", err)
+		}
+		return nil
+	}
+
+	pythonPath := ""
+	pythonInstall := ""
+	if !options.ForcePython && state.Manifest != nil && state.Manifest.PythonVersion == config.Python {
+		if err := validatePython(ctx, state.Manifest.PythonPath, config.Python); err == nil {
+			pythonPath = state.Manifest.PythonPath
+			pythonInstall = state.Manifest.PythonInstall
 		}
 	}
-
-	// Upgrade pip
-	if err := task.RunOutput(ctx, spinners.TaskSpec{Running: "Upgrading pip"}, func(ctx context.Context, stdout, stderr io.Writer) error {
-		return upgradePip(ctx, ansibleVenvPath, verbose, stdout, stderr)
-	}); err != nil {
-		return fmt.Errorf("error upgrading pip: %w", err)
-	}
-
-	// Install libpq-dev dependency
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Installing libpq-dev"}, func(taskCtx context.Context) error {
-		return apt.InstallPackage(taskCtx, []string{"libpq-dev"}, verbose)()
-	}); err != nil {
-		return fmt.Errorf("error installing libpq-dev: %w", err)
-	}
-
-	// Install requirements
-	if err := task.RunOutput(ctx, spinners.TaskSpec{Running: "Installing pip requirements"}, func(ctx context.Context, stdout, stderr io.Writer) error {
-		return installRequirements(ctx, ansibleVenvPath, verbose, stdout, stderr)
-	}); err != nil {
-		return fmt.Errorf("error installing pip requirements: %w", err)
-	}
-
-	// Copy binaries
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Copying binaries"}, func(context.Context, *spinners.Task) error {
-		return copyBinaries(ansibleVenvPath, task.Verbose())
-	}); err != nil {
-		return fmt.Errorf("error copying binaries: %w", err)
-	}
-
-	// Set ownership
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Setting ownership"}, func(context.Context, *spinners.Task) error {
-		return setOwnership(ctx, ansibleVenvPath, saltboxUser, verbose)
-	}); err != nil {
-		return fmt.Errorf("error setting ownership: %w", err)
-	}
-
-	return nil
-}
-
-// checkPythonVersion checks if the Python version is correct.
-// Returns true if Python is missing or pointing to wrong version (needs recreation).
-func checkPythonVersion(ctx context.Context, ansibleVenvPath, venvPythonPath string) (bool, error) {
-	// Check if venv bin directory exists
-	if _, err := os.Stat(filepath.Join(ansibleVenvPath, "venv", "bin")); err != nil {
-		// Venv doesn't exist, needs creation
-		return false, nil
-	}
-
-	// Check if Python binary exists at expected path
-	if _, err := os.Stat(venvPythonPath); os.IsNotExist(err) {
-		// Python binary missing, needs recreation
-		return true, nil
-	} else if err != nil {
-		return false, fmt.Errorf("error checking python path: %w", err)
-	}
-
-	// Python binary exists, now verify it's the correct version from uv
-	// Run python --version to get the actual version
-	result, err := executor.Run(ctx, venvPythonPath,
-		executor.WithArgs("--version"))
-	if err != nil {
-		// Can't run Python, needs recreation
-		return true, nil
-	}
-
-	// Parse version output (format: "Python X.YZ.x")
-	versionStr := strings.TrimSpace(string(result.Combined))
-	if !strings.HasPrefix(versionStr, "Python "+constants.AnsibleVenvPythonVersion) {
-		// Wrong Python version, needs recreation
-		return true, nil
-	}
-
-	// Check if Python is from uv installation by checking if it resolves to /srv/python
-	// Follow symlinks to find the real path
-	realPath, err := filepath.EvalSymlinks(venvPythonPath)
-	if err != nil {
-		// Can't resolve symlink, needs recreation
-		return true, nil
-	}
-
-	// If Python is from uv, it should be in /srv/python directory
-	if !strings.HasPrefix(realPath, constants.PythonInstallDir) {
-		// Not from uv installation (probably deadsnakes), needs recreation
-		return true, nil
-	}
-
-	// Final check: verify Python can actually import modules (not just run --version)
-	// This catches broken venv that have correct symlinks but broken Python paths
-	_, err = executor.Run(ctx, venvPythonPath,
-		executor.WithArgs("-c", "import encodings, sys; sys.exit(0)"))
-	if err != nil {
-		// Python can't import basic modules, venv is broken, needs recreation
-		return true, nil
-	}
-
-	// All checks passed, venv is good
-	return false, nil
-}
-
-// removeExistingVenv removes the existing virtual environment.
-func removeExistingVenv(ctx context.Context, ansibleVenvPath string) error {
-	_, err := executor.Run(ctx, "rm",
-		executor.WithArgs("-rf", ansibleVenvPath))
-	return err
-}
-
-// createVirtualEnv creates the virtual environment using uv.
-func createVirtualEnv(ctx context.Context, task *spinners.Task, ansibleVenvPath string, verbose bool) error {
-	// Ensure uv is installed
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Ensuring uv is installed"}, func(taskCtx context.Context) error {
-		return uv.DownloadAndInstallUV(taskCtx, verbose)
-	}); err != nil {
-		return fmt.Errorf("error installing uv: %w", err)
-	}
-
-	// Create /srv/python directory if it doesn't exist
-	if err := os.MkdirAll(constants.PythonInstallDir, 0755); err != nil {
-		return fmt.Errorf("error creating python install dir: %w", err)
-	}
-
-	// Install Python using uv
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion)}, func(taskCtx context.Context) error {
-		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
-	}); err != nil {
-		return fmt.Errorf("error installing python: %w", err)
-	}
-
-	// Create the venv directory
-	if err := os.MkdirAll(ansibleVenvPath, 0755); err != nil {
-		return fmt.Errorf("error creating venv dir: %w", err)
-	}
-
-	// Create venv using uv
-	venvPath := filepath.Join(ansibleVenvPath, "venv")
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Creating virtual environment files"}, func(taskCtx context.Context, _ *spinners.Task) error {
-		return uv.CreateVenv(taskCtx, venvPath, constants.AnsibleVenvPythonVersion, verbose)
-	}); err != nil {
-		return fmt.Errorf("error creating venv: %w", err)
-	}
-
-	return nil
-}
-
-// upgradePip upgrades pip, setuptools, and wheel.
-func upgradePip(ctx context.Context, ansibleVenvPath string, verbose bool, stdout, stderr io.Writer) error {
-	pythonPath := filepath.Join(ansibleVenvPath, "venv", "bin", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion))
-	command := []string{pythonPath, "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--upgrade", "pip", "setuptools", "wheel"}
-	env := os.Environ() // Inherit current environment
-
-	return runCommand(ctx, command, env, verbose, stdout, stderr)
-}
-
-// installRequirements installs the requirements.
-func installRequirements(ctx context.Context, ansibleVenvPath string, verbose bool, stdout, stderr io.Writer) error {
-	pythonPath := filepath.Join(ansibleVenvPath, "venv", "bin", fmt.Sprintf("python%s", constants.AnsibleVenvPythonVersion))
-	command := []string{pythonPath, "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", "--upgrade", "--requirement", constants.AnsibleRequirementsPath}
-	env := os.Environ()
-
-	return runCommand(ctx, command, env, verbose, stdout, stderr)
-}
-
-// copyBinaries copies the binaries in a robust and error-checked way.
-func copyBinaries(ansibleVenvPath string, verbose bool) error {
-	venvBinDir := filepath.Join(ansibleVenvPath, "venv", "bin")
-	destDir := "/usr/local/bin/"
-
-	// A list of patterns to find. "ansible*" is a glob pattern.
-	patterns := []string{"ansible*", "certbot", "apprise"}
-	var sourcesToCopy []string
-
-	// --- Step 1: Find all the files that match the patterns ---
-	for _, pattern := range patterns {
-		// Construct the full path for the pattern
-		fullPattern := filepath.Join(venvBinDir, pattern)
-
-		// Use filepath.Glob to find all matching files.
-		// This is safer than relying on shell expansion.
-		matches, err := filepath.Glob(fullPattern)
+	if pythonPath == "" {
+		pythonInstall, pythonPath, err = createPythonRelease(ctx, task, config.Python, options)
 		if err != nil {
-			return fmt.Errorf("error finding files for pattern %s: %w", pattern, err)
-		}
-
-		// If a pattern (like "certbot") matches no files, Glob returns an empty slice.
-		// We should treat this as an error.
-		if len(matches) == 0 {
-			// Provide a specific error if a required binary is missing.
-			return fmt.Errorf("required binary not found in venv: %s", pattern)
-		}
-
-		sourcesToCopy = append(sourcesToCopy, matches...)
-	}
-
-	// --- Step 2: Copy each file individually ---
-	for _, srcPath := range sourcesToCopy {
-		// Get the base filename (e.g., "ansible-playbook")
-		fileName := filepath.Base(srcPath)
-		destPath := filepath.Join(destDir, fileName)
-
-		if verbose {
-			fmt.Printf("  Copying %s to %s\n", srcPath, destPath)
-		}
-
-		// Perform the copy using Go's native functions.
-		if err := copyFile(srcPath, destPath); err != nil {
-			return fmt.Errorf("failed to copy %s: %w", fileName, err)
+			return err
 		}
 	}
 
+	generationID := generationID(lockDigest)
+	generationDir := filepath.Join(constants.AnsibleReleasesPath, generationID)
+	venvPath := filepath.Join(generationDir, "venv")
+	activated := false
+	defer func() {
+		if !activated {
+			_ = os.RemoveAll(generationDir)
+			if pythonInstall != "" && strings.HasPrefix(pythonInstall, constants.PythonReleasesPath+string(os.PathSeparator)) {
+				_ = removePythonIfUnreferenced(pythonInstall)
+			}
+		}
+	}()
+
+	if err := os.MkdirAll(generationDir, 0755); err != nil {
+		return fmt.Errorf("create Ansible generation %s: %w", generationID, err)
+	}
+	if err := task.Run(ctx, spinners.TaskSpec{Running: "Creating Ansible virtual environment"}, func(taskCtx context.Context, _ *spinners.Task) error {
+		return uv.CreateVenvWithPython(taskCtx, venvPath, pythonPath, options.Verbose)
+	}); err != nil {
+		return err
+	}
+
+	venvPython := filepath.Join(venvPath, "bin", "python3")
+	if err := task.RunOutput(ctx, spinners.TaskSpec{Running: "Syncing hashed Saltbox requirements"}, func(taskCtx context.Context, stdout, stderr io.Writer) error {
+		return uv.SyncRequirements(taskCtx, venvPython, constants.AnsibleRequirementsPath, options.Verbose, stdout, stderr)
+	}); err != nil {
+		return err
+	}
+
+	commands, err := discoverCommands(venvPath)
+	if err != nil {
+		return err
+	}
+	if err := validateEnvironment(ctx, venvPath, config.Python); err != nil {
+		return fmt.Errorf("validate staged Ansible environment: %w", err)
+	}
+
+	manifest := &Manifest{
+		SchemaVersion:    manifestSchemaVersion,
+		GenerationID:     generationID,
+		PythonVersion:    config.Python,
+		PythonPath:       pythonPath,
+		PythonInstall:    pythonInstall,
+		UVVersion:        runtime.UVVersion,
+		LockSHA256:       lockDigest,
+		SaltboxCommit:    commit,
+		CreatedAt:        time.Now().UTC().Format(time.RFC3339Nano),
+		ExportedCommands: commands,
+	}
+	if err := writeManifest(generationDir, manifest); err != nil {
+		return err
+	}
+	if err := setOwnership(ctx, generationDir, options.SaltboxUser, options.Verbose); err != nil {
+		return err
+	}
+	if err := installWrappers(venvPath, commands, false); err != nil {
+		return fmt.Errorf("install Ansible command wrappers: %w", err)
+	}
+	if err := activateGeneration(venvPath); err != nil {
+		return err
+	}
+	activated = true
+
+	if err := installWrappers(venvPath, commands, true); err != nil {
+		return fmt.Errorf("remove stale Ansible command wrappers: %w", err)
+	}
+	if err := cleanupGenerations(); err != nil {
+		return fmt.Errorf("clean old Ansible generations: %w", err)
+	}
 	return nil
 }
 
-// copyFile is a helper function to copy a single file and apply the source's permissions.
-func copyFile(src, dst string) error {
-	// Get file info from the source to read its permissions.
-	sourceFileInfo, err := os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("could not stat source file: %w", err)
+func environmentStatusTaskSpec(healthy bool, options Options) spinners.TaskSpec {
+	success := "Ansible virtual environment update required"
+	if healthy && !options.ForceVenv && !options.ForcePython {
+		success = "Ansible virtual environment was already up to date"
+	} else if options.ForcePython {
+		success = "Python and Ansible virtual environment recreation requested"
+	} else if options.ForceVenv {
+		success = "Ansible virtual environment recreation requested"
 	}
-
-	// Open the source file for reading.
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("could not open source file: %w", err)
+	return spinners.TaskSpec{
+		Running: "Checking Ansible virtual environment for updates",
+		Success: success,
 	}
-	defer func() { _ = sourceFile.Close() }()
+}
 
-	// Create the destination file.
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("could not create destination file: %w", err)
+func createPythonRelease(ctx context.Context, task *spinners.Task, version string, options Options) (string, string, error) {
+	id := "python-" + strings.ReplaceAll(version, ".", "-") + "-" + time.Now().UTC().Format("20060102T150405.000000000")
+	installDir := filepath.Join(constants.PythonReleasesPath, id)
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		return "", "", fmt.Errorf("create Python release directory: %w", err)
 	}
-	defer func() { _ = destFile.Close() }()
-
-	// Copy the contents.
-	_, err = io.Copy(destFile, sourceFile)
-	if err != nil {
-		return fmt.Errorf("could not copy file contents: %w", err)
+	success := false
+	defer func() {
+		if !success {
+			_ = os.RemoveAll(installDir)
+		}
+	}()
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Installing Python %s", version)}, func(taskCtx context.Context) error {
+		return uv.InstallPythonAt(taskCtx, version, installDir, options.ForcePython, options.Verbose)
+	}); err != nil {
+		return "", "", fmt.Errorf("install Python release: %w", err)
 	}
-
-	// Apply the original file's permissions to the new file.
-	err = os.Chmod(dst, sourceFileInfo.Mode())
+	pythonPath, err := uv.FindPythonAt(ctx, version, installDir)
 	if err != nil {
-		return fmt.Errorf("could not set permissions on destination file: %w", err)
+		return "", "", err
 	}
+	if err := validatePython(ctx, pythonPath, version); err != nil {
+		return "", "", err
+	}
+	if err := setOwnership(ctx, installDir, options.SaltboxUser, options.Verbose); err != nil {
+		return "", "", err
+	}
+	success = true
+	return installDir, pythonPath, nil
+}
 
+func inspectActive(ctx context.Context, pythonVersion, lockDigest string) (activeState, error) {
+	activePath := filepath.Join(constants.AnsibleVenvPath, "venv")
+	info, err := os.Lstat(activePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return activeState{}, nil
+	}
+	if err != nil {
+		return activeState{}, err
+	}
+	if info.IsDir() {
+		return activeState{VenvPath: activePath}, nil
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return activeState{}, fmt.Errorf("%s is neither a directory nor a symlink", activePath)
+	}
+	target, err := filepath.EvalSymlinks(activePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return activeState{}, nil
+		}
+		return activeState{}, err
+	}
+	generationDir := filepath.Dir(target)
+	manifest, err := readManifest(generationDir)
+	if err != nil {
+		return activeState{}, err
+	}
+	state := activeState{Manifest: manifest, GenerationDir: generationDir, VenvPath: target}
+	if manifest.SchemaVersion != manifestSchemaVersion || manifest.PythonVersion != pythonVersion || manifest.LockSHA256 != lockDigest {
+		return state, nil
+	}
+	if err := validateEnvironment(ctx, target, pythonVersion); err != nil {
+		return state, nil
+	}
+	state.Healthy = true
+	return state, nil
+}
+
+func validatePython(ctx context.Context, path, version string) error {
+	if path == "" {
+		return fmt.Errorf("Python path is empty")
+	}
+	result, err := executor.Run(ctx, path, executor.WithArgs("--version"))
+	if err != nil {
+		return fmt.Errorf("run Python at %s: %w", path, err)
+	}
+	if got := strings.TrimSpace(string(result.Combined)); got != "Python "+version {
+		return fmt.Errorf("Python at %s reports %q, expected %q", path, got, "Python "+version)
+	}
+	_, err = executor.Run(ctx, path, executor.WithArgs("-c", "import encodings, sys; sys.exit(0)"))
+	if err != nil {
+		return fmt.Errorf("Python at %s cannot import its standard library: %w", path, err)
+	}
 	return nil
 }
 
-// setOwnership sets the ownership.
-func setOwnership(ctx context.Context, ansibleVenvPath, saltboxUser string, verbose bool) error {
-	command := []string{"chown", "-R", fmt.Sprintf("%s:%s", saltboxUser, saltboxUser), ansibleVenvPath}
-	env := os.Environ()
-
-	return runCommand(ctx, command, env, verbose, nil, nil)
+func validateEnvironment(ctx context.Context, venvPath, version string) error {
+	pythonPath := filepath.Join(venvPath, "bin", "python3")
+	if err := validatePython(ctx, pythonPath, version); err != nil {
+		return err
+	}
+	if err := uv.CheckPackages(ctx, pythonPath); err != nil {
+		return err
+	}
+	if _, err := executor.Run(ctx, pythonPath, executor.WithArgs("-c", "import ansible, apprise, certbot")); err != nil {
+		return fmt.Errorf("import Saltbox Python packages: %w", err)
+	}
+	checks := [][]string{
+		{filepath.Join(venvPath, "bin", "ansible"), "--version"},
+		{filepath.Join(venvPath, "bin", "certbot"), "--version"},
+		{filepath.Join(venvPath, "bin", "apprise"), "--version"},
+	}
+	commandPath := filepath.Join(venvPath, "bin")
+	if currentPath := os.Getenv("PATH"); currentPath != "" {
+		commandPath += string(os.PathListSeparator) + currentPath
+	}
+	for _, check := range checks {
+		if _, err := executor.Run(
+			ctx,
+			check[0],
+			executor.WithArgs(check[1:]...),
+			executor.WithInheritEnv("PATH="+commandPath),
+		); err != nil {
+			return fmt.Errorf("run %s health check: %w", filepath.Base(check[0]), err)
+		}
+	}
+	return nil
 }
 
-// runCommand runs a command with the given environment.
-// The verbose parameter controls executor output mode (stream vs discard).
-func runCommand(ctx context.Context, command []string, env []string, verbose bool, stdout, stderr io.Writer) error {
-	options := []executor.Option{executor.WithEnv(env)}
-	if stdout != nil {
-		options = append(options, executor.WithStdout(stdout), executor.WithPseudoTerminal())
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
 	}
-	if stderr != nil {
-		options = append(options, executor.WithStderr(stderr))
+	defer func() { _ = file.Close() }()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
 	}
-	return executor.RunVerbose(ctx, command[0], command[1:], verbose, options...)
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func saltboxCommit(ctx context.Context) (string, error) {
+	result, err := executor.Run(ctx, "git",
+		executor.WithArgs("rev-parse", "HEAD"),
+		executor.WithWorkingDir(constants.SaltboxRepoPath),
+	)
+	if err != nil {
+		return "", fmt.Errorf("read Saltbox commit: %w", err)
+	}
+	return strings.TrimSpace(string(result.Combined)), nil
+}
+
+func generationID(lockDigest string) string {
+	return time.Now().UTC().Format("20060102T150405.000000000") + "-" + lockDigest[:12]
+}
+
+func writeManifest(generationDir string, manifest *Manifest) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode generation manifest: %w", err)
+	}
+	data = append(data, '\n')
+	path := filepath.Join(generationDir, manifestFileName)
+	temporary, err := os.CreateTemp(generationDir, ".manifest-*.json")
+	if err != nil {
+		return fmt.Errorf("create generation manifest: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer func() { _ = os.Remove(temporaryPath) }()
+	if _, err := temporary.Write(data); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("write generation manifest: %w", err)
+	}
+	if err := temporary.Chmod(0644); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("chmod generation manifest: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close generation manifest: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("activate generation manifest: %w", err)
+	}
+	return nil
+}
+
+func readManifest(generationDir string) (*Manifest, error) {
+	path := filepath.Join(generationDir, manifestFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read generation manifest %s: %w", path, err)
+	}
+	var manifest Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, fmt.Errorf("parse generation manifest %s: %w", path, err)
+	}
+	return &manifest, nil
+}
+
+func discoverCommands(venvPath string) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(venvPath, "bin"))
+	if err != nil {
+		return nil, fmt.Errorf("read venv commands: %w", err)
+	}
+	commands := make([]string, 0)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "ansible") && name != "certbot" && name != "apprise" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, fmt.Errorf("inspect venv command %s: %w", name, err)
+		}
+		if info.Mode().IsRegular() && info.Mode().Perm()&0111 != 0 {
+			commands = append(commands, name)
+		}
+	}
+	sort.Strings(commands)
+	for _, required := range []string{"ansible", "certbot", "apprise"} {
+		if !contains(commands, required) {
+			return nil, fmt.Errorf("required command %s is missing from staged venv", required)
+		}
+	}
+	return commands, nil
+}
+
+func contains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func setOwnership(ctx context.Context, path, owner string, verbose bool) error {
+	if owner == "" {
+		return nil
+	}
+	if err := executor.RunVerbose(ctx, "chown", []string{"-R", owner + ":" + owner, path}, verbose); err != nil {
+		return fmt.Errorf("set ownership of %s: %w", path, err)
+	}
+	return nil
 }

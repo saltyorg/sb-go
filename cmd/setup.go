@@ -12,6 +12,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/setup"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/utils"
+	"github.com/saltyorg/sb-go/internal/venv"
 
 	"github.com/spf13/cobra"
 )
@@ -118,15 +119,6 @@ func runSetup(ctx context.Context, task *spinners.Task, verbose bool, branch str
 		return err
 	}
 
-	if err := runSetupPhase(ctx, task, "Installing Python runtime", func(ctx context.Context, phase *spinners.Task) error {
-		if err := setup.PythonVenv(ctx, phase, verbose); err != nil {
-			return fmt.Errorf("error setting up Python venv: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
 	if err := runSetupPhase(ctx, task, "Preparing Saltbox repository", func(ctx context.Context, phase *spinners.Task) error {
 		if err := setup.SaltboxRepo(ctx, phase, verbose, branch); err != nil {
 			return fmt.Errorf("error setting up Saltbox repository: %w", err)
@@ -139,14 +131,12 @@ func runSetup(ctx context.Context, task *spinners.Task, verbose bool, branch str
 		return err
 	}
 
-	if err := runSetupPhase(ctx, task, "Installing Ansible dependencies", func(ctx context.Context, phase *spinners.Task) error {
-		if err := setup.InstallPipDependencies(ctx, phase, verbose); err != nil {
-			return fmt.Errorf("error installing pip dependencies: %w", err)
+	if err := runSetupPhase(ctx, task, "Installing Python runtime", func(ctx context.Context, phase *spinners.Task) error {
+		saltboxUser, err := utils.GetSaltboxUser()
+		if err != nil {
+			return fmt.Errorf("get Saltbox user: %w", err)
 		}
-		if err := setup.CopyRequiredBinaries(ctx, phase); err != nil {
-			return fmt.Errorf("error copying binaries: %w", err)
-		}
-		return nil
+		return venv.Reconcile(ctx, phase, venv.Options{SaltboxUser: saltboxUser, Verbose: verbose})
 	}); err != nil {
 		return err
 	}

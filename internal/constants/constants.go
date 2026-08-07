@@ -1,7 +1,6 @@
 package constants
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -23,9 +22,12 @@ const (
 	SaltboxInventoryConfigPath        = "/srv/git/saltbox/inventories/host_vars/localhost.yml"
 	SaltboxCacheFile                  = "/srv/git/saltbox/cache.json"
 	AnsibleVenvPath                   = "/srv/ansible"
+	AnsibleReleasesPath               = "/srv/ansible/releases"
 	AnsibleRequirementsPath           = "/srv/git/saltbox/requirements/requirements-saltbox.txt"
-	AnsibleVenvPythonVersion          = "3.12"
+	SaltboxPythonVersionPath          = "/srv/git/saltbox/.python-version"
+	SaltboxUVVersionPath              = "/srv/git/saltbox/.uv-version"
 	PythonInstallDir                  = "/srv/python"
+	PythonReleasesPath                = "/srv/python/releases"
 	SupportedUbuntuReleases           = "22.04,24.04"
 	DockerControllerServiceFile       = "/etc/systemd/system/saltbox_managed_docker_controller.service"
 	DockerControllerAPIURL            = "http://127.0.0.1:3377"
@@ -55,7 +57,7 @@ func SaltboxModPlaybookPath() string {
 
 // AnsibleVenvPythonPath returns the full path to the Python binary in the Ansible virtual environment.
 func AnsibleVenvPythonPath() string {
-	return filepath.Join(AnsibleVenvPath, "venv", "bin", fmt.Sprintf("python%s", AnsibleVenvPythonVersion))
+	return filepath.Join(AnsibleVenvPath, "venv", "bin", "python3")
 }
 
 // GetSupportedUbuntuReleases returns a slice of supported Ubuntu release codenames.

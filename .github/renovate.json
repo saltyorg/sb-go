@@ -91,5 +91,20 @@
     "prBodyTemplate": "{{{header}}}{{{table}}}{{{notes}}}{{{changelogs}}}{{{configDescription}}}{{{controls}}}{{{footer}}}",
     "lockFileMaintenance": {
         "enabled": true
-    }
+    },
+    "customManagers": [
+        {
+            "customType": "regex",
+            "description": "Pinned uv runtime",
+            "managerFilePatterns": [
+                "/(^|/)\\.uv-version$/"
+            ],
+            "matchStrings": [
+                "^(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)$"
+            ],
+            "depNameTemplate": "uv",
+            "datasourceTemplate": "pypi",
+            "versioningTemplate": "pep440"
+        }
+    ]
 }

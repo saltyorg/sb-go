@@ -1,238 +1,155 @@
 package venv
 
 import (
-	"bytes"
-	"context"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
+	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/creack/pty"
-	"github.com/saltyorg/sb-go/internal/apt"
-	"github.com/saltyorg/sb-go/internal/spinners"
 )
 
-const invalidPackageTestName = "sb-go-intentionally-invalid-package-7f42d9"
+func TestFileSHA256(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "requirements.txt")
+	if err := os.WriteFile(path, []byte("saltbox\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
-func TestRunCommandProvidesTerminalToVenvPython(t *testing.T) {
-	python, err := exec.LookPath("python3")
+	digest, err := fileSHA256(path)
 	if err != nil {
-		t.Skip("python3 is not installed")
+		t.Fatal(err)
 	}
-
-	venvPath := filepath.Join(t.TempDir(), "venv")
-	if output, err := exec.Command(python, "-m", "venv", venvPath).CombinedOutput(); err != nil {
-		t.Fatalf("create test venv: %v\n%s", err, output)
-	}
-
-	var output bytes.Buffer
-	command := []string{
-		filepath.Join(venvPath, "bin", "python"),
-		"-c",
-		"import sys; print(sys.stdout.isatty()); print(sys.stderr.isatty(), file=sys.stderr)",
-	}
-	if err := runCommand(context.Background(), command, nil, false, &output, &output); err != nil {
-		t.Fatalf("run venv Python with managed output: %v", err)
-	}
-
-	if got := strings.ReplaceAll(output.String(), "\r\n", "\n"); got != "True\nTrue\n" {
-		t.Fatalf("venv Python did not see a terminal: %q", got)
+	const expected = "2b419ef6f04a92c1ddabebef7e9c2f87d95e26640cbd88d98d32a7dc69f6a7a8"
+	if digest != expected {
+		t.Fatalf("fileSHA256() = %q, want %q", digest, expected)
 	}
 }
 
-func TestRunCommandPreservesRealPipProgress(t *testing.T) {
-	if os.Getenv("SB_REAL_PIP_TEST") == "" {
-		t.Skip("set SB_REAL_PIP_TEST=1 to run the networked pip integration test")
+func TestManifestRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	want := &Manifest{
+		SchemaVersion:    manifestSchemaVersion,
+		GenerationID:     "20260807T120000.000000000-0123456789ab",
+		PythonVersion:    "3.12.13",
+		PythonPath:       "/srv/python/releases/python-3-12-13/bin/python3.12",
+		PythonInstall:    "/srv/python/releases/python-3-12-13",
+		UVVersion:        "0.12.3",
+		LockSHA256:       strings.Repeat("a", 64),
+		SaltboxCommit:    strings.Repeat("b", 40),
+		CreatedAt:        "2026-08-07T12:00:00Z",
+		ExportedCommands: []string{"ansible", "ansible-playbook", "apprise", "certbot"},
+	}
+	if err := writeManifest(dir, want); err != nil {
+		t.Fatal(err)
 	}
 
-	python, err := exec.LookPath("python3")
+	got, err := readManifest(dir)
 	if err != nil {
-		t.Skip("python3 is not installed")
+		t.Fatal(err)
 	}
-	venvPath := filepath.Join(t.TempDir(), "venv")
-	if output, err := exec.Command(python, "-m", "venv", venvPath).CombinedOutput(); err != nil {
-		t.Fatalf("create test venv: %v\n%s", err, output)
-	}
-
-	var output bytes.Buffer
-	command := []string{
-		filepath.Join(venvPath, "bin", "python"),
-		"-m", "pip", "install",
-		"--disable-pip-version-check",
-		"--no-cache-dir",
-		"--force-reinstall",
-		"--progress-bar", "on",
-		"ansible-core",
-		"requests",
-		"rich",
-		"docker",
-		"cryptography",
-		"PyYAML",
-		"Jinja2",
-		"packaging",
-		"setuptools",
-		"wheel",
-	}
-	if err := runCommand(context.Background(), command, os.Environ(), false, &output, &output); err != nil {
-		t.Fatalf("run pip in test venv: %v\n%s", err, output.String())
-	}
-
-	if !bytes.Contains(output.Bytes(), []byte{'\r'}) {
-		t.Fatalf("pip did not emit terminal progress updates: %q", output.String())
-	}
-	if !bytes.Contains(output.Bytes(), []byte("\x1b[?25l")) {
-		t.Fatalf("pip did not enable its terminal progress renderer: %q", output.String())
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("readManifest() = %#v, want %#v", got, want)
 	}
 }
 
-func TestRealPipThroughSpinner(t *testing.T) {
-	if os.Getenv("SB_REAL_PIP_SPINNER_TEST") == "" {
-		t.Skip("set SB_REAL_PIP_SPINNER_TEST=1 to run the interactive pip spinner test")
+func TestDiscoverCommands(t *testing.T) {
+	venvPath := t.TempDir()
+	binPath := filepath.Join(venvPath, "bin")
+	if err := os.Mkdir(binPath, 0755); err != nil {
+		t.Fatal(err)
 	}
-	if os.Getenv("SB_REAL_PIP_SPINNER_HELPER") == "" {
-		command := exec.Command(os.Args[0], "-test.run", "^TestRealPipThroughSpinner$", "-test.v")
-		command.Env = append(os.Environ(), "SB_REAL_PIP_SPINNER_HELPER=1")
-		terminal, err := pty.StartWithSize(command, &pty.Winsize{Rows: 30, Cols: 120})
-		if err != nil {
-			t.Fatalf("start spinner test in terminal: %v", err)
+	for _, name := range []string{"ansible", "ansible-playbook", "apprise", "certbot", "unrelated"} {
+		if err := os.WriteFile(filepath.Join(binPath, name), []byte("#!/bin/sh\n"), 0755); err != nil {
+			t.Fatal(err)
 		}
-		rendered, _ := io.ReadAll(terminal)
-		if err := command.Wait(); err != nil {
-			t.Fatalf("spinner test failed: %v\n%s", err, rendered)
-		}
+	}
 
-		if !bytes.Contains(rendered, []byte("  Collecting wheel")) ||
-			!bytes.Contains(rendered, []byte("  Successfully installed")) {
-			t.Fatalf("pip output was not rendered with child indentation:\n%q", rendered)
+	got, err := discoverCommands(venvPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"ansible", "ansible-playbook", "apprise", "certbot"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("discoverCommands() = %v, want %v", got, want)
+	}
+}
+
+func TestDiscoverCommandsRequiresEntrypoints(t *testing.T) {
+	venvPath := t.TempDir()
+	binPath := filepath.Join(venvPath, "bin")
+	if err := os.Mkdir(binPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binPath, "ansible"), []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := discoverCommands(venvPath)
+	if err == nil || !strings.Contains(err.Error(), "certbot") {
+		t.Fatalf("discoverCommands() error = %v, want missing certbot", err)
+	}
+}
+
+func TestGenerationIDIncludesLockDigest(t *testing.T) {
+	digest := strings.Repeat("c", 64)
+	id := generationID(digest)
+	if !strings.HasSuffix(id, "-"+digest[:12]) {
+		t.Fatalf("generationID() = %q, want digest suffix", id)
+	}
+}
+
+func TestManagedWrapperSetsResolvedVenvPath(t *testing.T) {
+	content, err := managedWrapperContent("ansible-lint")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, expected := range []string{
+		"venv_bin=$(/usr/bin/readlink -f /srv/ansible/venv/bin) || exit 1",
+		"PATH=\"${venv_bin}${PATH:+:${PATH}}\"",
+		"exec /srv/ansible/venv/bin/ansible-lint \"$@\"",
+	} {
+		if !strings.Contains(string(content), expected) {
+			t.Fatalf("wrapper content does not contain %q:\n%s", expected, content)
 		}
-		if !bytes.Contains(rendered, []byte("\x1b[?2026h")) ||
-			!bytes.Contains(rendered, []byte("\x1b[?2026l")) {
-			t.Fatalf("spinner frames were not rendered atomically:\n%q", rendered)
-		}
-		finalFrame := regexp.MustCompile(`(?:\x1b\[[0-9]+A|\r)\x1b\[J● Installing test package`)
-		if !finalFrame.Match(rendered) {
-			t.Fatalf("successful pip output was not collapsed into the final task:\n%q", rendered)
-		}
-		liveOutputAt := bytes.Index(rendered, []byte("  Collecting wheel"))
-		animated := false
-		if liveOutputAt >= 0 {
-			for _, marker := range []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"} {
-				liveOutput := rendered[liveOutputAt:]
-				if bytes.Contains(liveOutput, []byte("\r"+marker+" ")) ||
-					bytes.Contains(liveOutput, []byte("A"+marker+" ")) {
-					animated = true
-					break
-				}
+	}
+}
+
+func TestEnvironmentStatusTaskSpec(t *testing.T) {
+	tests := []struct {
+		name    string
+		healthy bool
+		options Options
+		want    string
+	}{
+		{
+			name:    "already current",
+			healthy: true,
+			want:    "Ansible virtual environment was already up to date",
+		},
+		{
+			name: "update required",
+			want: "Ansible virtual environment update required",
+		},
+		{
+			name:    "forced venv recreation",
+			healthy: true,
+			options: Options{ForceVenv: true},
+			want:    "Ansible virtual environment recreation requested",
+		},
+		{
+			name:    "forced Python recreation",
+			healthy: true,
+			options: Options{ForceVenv: true, ForcePython: true},
+			want:    "Python and Ansible virtual environment recreation requested",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			spec := environmentStatusTaskSpec(test.healthy, test.options)
+			if spec.Success != test.want {
+				t.Fatalf("Success = %q, want %q", spec.Success, test.want)
 			}
-		}
-		if !animated {
-			t.Fatalf("active task stopped animating while pip output was visible:\n%q", rendered)
-		}
-		return
-	}
-
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 is not installed")
-	}
-	venvPath := filepath.Join(t.TempDir(), "venv")
-	if output, err := exec.Command(python, "-m", "venv", venvPath).CombinedOutput(); err != nil {
-		t.Fatalf("create test venv: %v\n%s", err, output)
-	}
-
-	runner := spinners.NewRunner(spinners.RunnerOptions{})
-	err = runner.RunOutput(context.Background(), spinners.TaskSpec{Running: "Installing test package"}, func(ctx context.Context, stdout, stderr io.Writer) error {
-		command := []string{
-			filepath.Join(venvPath, "bin", "python"),
-			"-m", "pip", "install",
-			"--disable-pip-version-check",
-			"--no-cache-dir",
-			"--force-reinstall",
-			"--progress-bar", "on",
-			"ansible-core",
-			"requests",
-			"rich",
-			"docker",
-			"cryptography",
-			"PyYAML",
-			"Jinja2",
-			"packaging",
-			"setuptools",
-			"wheel",
-		}
-		return runCommand(ctx, command, os.Environ(), false, stdout, stderr)
-	})
-	if err != nil {
-		t.Fatalf("run real pip through spinner: %v", err)
-	}
-}
-
-func TestRealInvalidPackageFailuresThroughSpinner(t *testing.T) {
-	if os.Getenv("SB_REAL_PACKAGE_FAILURE_TEST") == "" {
-		t.Skip("set SB_REAL_PACKAGE_FAILURE_TEST=1 to run the invalid APT/pip integration test")
-	}
-	if os.Getenv("SB_REAL_PACKAGE_FAILURE_HELPER") == "" {
-		command := exec.Command(os.Args[0], "-test.run", "^TestRealInvalidPackageFailuresThroughSpinner$", "-test.v")
-		command.Env = append(os.Environ(), "SB_REAL_PACKAGE_FAILURE_HELPER=1")
-		terminal, err := pty.StartWithSize(command, &pty.Winsize{Rows: 40, Cols: 120})
-		if err != nil {
-			t.Fatalf("start package failure test in terminal: %v", err)
-		}
-		rendered, _ := io.ReadAll(terminal)
-		if err := command.Wait(); err != nil {
-			t.Fatalf("package failure test failed: %v\n%s", err, rendered)
-		}
-
-		for _, expected := range [][]byte{
-			[]byte("Unable to locate package " + invalidPackageTestName),
-			[]byte("No matching distribution found for " + invalidPackageTestName),
-			[]byte("Installing invalid APT package: Failed"),
-			[]byte("Installing invalid pip package: Failed"),
-		} {
-			if !bytes.Contains(rendered, expected) {
-				t.Fatalf("failure output %q was not retained:\n%q", expected, rendered)
-			}
-		}
-		return
-	}
-
-	ctx := context.Background()
-	aptRunner := spinners.NewRunner(spinners.RunnerOptions{})
-	aptErr := aptRunner.Run(ctx, spinners.TaskSpec{Running: "Testing invalid APT package"}, func(ctx context.Context, task *spinners.Task) error {
-		return task.RunStreaming(ctx, spinners.TaskSpec{Running: "Installing invalid APT package"}, func(taskCtx context.Context) error {
-			return apt.InstallPackage(taskCtx, []string{invalidPackageTestName}, false)()
 		})
-	})
-	if aptErr == nil {
-		t.Fatal("invalid APT package unexpectedly installed")
-	}
-
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 is not installed")
-	}
-	venvPath := filepath.Join(t.TempDir(), "venv")
-	if output, err := exec.Command(python, "-m", "venv", venvPath).CombinedOutput(); err != nil {
-		t.Fatalf("create test venv: %v\n%s", err, output)
-	}
-
-	pipRunner := spinners.NewRunner(spinners.RunnerOptions{})
-	pipErr := pipRunner.Run(ctx, spinners.TaskSpec{Running: "Testing invalid pip package"}, func(ctx context.Context, task *spinners.Task) error {
-		return task.RunOutput(ctx, spinners.TaskSpec{Running: "Installing invalid pip package"}, func(ctx context.Context, stdout, stderr io.Writer) error {
-			command := []string{
-				filepath.Join(venvPath, "bin", "python"),
-				"-m", "pip", "install",
-				"--disable-pip-version-check",
-				invalidPackageTestName,
-			}
-			return runCommand(ctx, command, os.Environ(), false, stdout, stderr)
-		})
-	})
-	if pipErr == nil {
-		t.Fatal("invalid pip package unexpectedly installed")
 	}
 }

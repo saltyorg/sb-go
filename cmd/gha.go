@@ -7,6 +7,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/fact"
 	"github.com/saltyorg/sb-go/internal/setup"
 	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/venv"
 
 	"github.com/spf13/cobra"
 )
@@ -36,14 +37,8 @@ var ghaCmd = &cobra.Command{
 				return fmt.Errorf("error configuring locale: %w", err)
 			}
 
-			// Setup Python venv
-			if err := setup.PythonVenv(ctx, task, true); err != nil {
-				return fmt.Errorf("error setting up Python venv: %w", err)
-			}
-
-			// Install pip3 Dependencies
-			if err := setup.InstallPipDependencies(ctx, task, true); err != nil {
-				return fmt.Errorf("error installing pip dependencies: %w", err)
+			if err := venv.Reconcile(ctx, task, venv.Options{Verbose: true}); err != nil {
+				return fmt.Errorf("error reconciling Python environment: %w", err)
 			}
 
 			if err := task.Run(ctx, spinners.TaskSpec{

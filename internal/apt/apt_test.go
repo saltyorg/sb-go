@@ -2,6 +2,7 @@ package apt
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -67,6 +68,40 @@ exit 23
 		if !strings.Contains(errText, want) {
 			t.Errorf("RunAptGet() error does not contain %q:\n%s", want, errText)
 		}
+	}
+}
+
+func TestIsPackageInstalled(t *testing.T) {
+	tests := []struct {
+		name      string
+		output    string
+		exitCode  int
+		installed bool
+		wantError bool
+	}{
+		{name: "installed", output: "ii ", installed: true},
+		{name: "not fully installed", output: "iU ", installed: false},
+		{name: "missing", exitCode: 1, installed: false},
+		{name: "query failure", exitCode: 2, wantError: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			testBin := t.TempDir()
+			script := "#!/bin/sh\nprintf '%s' '" + test.output + "'\nexit " + fmt.Sprint(test.exitCode) + "\n"
+			if err := os.WriteFile(filepath.Join(testBin, "dpkg-query"), []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", testBin)
+
+			installed, err := IsPackageInstalled(context.Background(), "libpq-dev")
+			if (err != nil) != test.wantError {
+				t.Fatalf("IsPackageInstalled() error = %v, wantError %v", err, test.wantError)
+			}
+			if installed != test.installed {
+				t.Fatalf("IsPackageInstalled() = %v, want %v", installed, test.installed)
+			}
+		})
 	}
 }
 

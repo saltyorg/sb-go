@@ -62,7 +62,8 @@ jobs:
             OUTPUT_NAME="${APP_NAME}"
           fi
 
-          ldflags="-w -s -X '${GITHUB_REPO}/internal/runtime.Version=${VERSION}' -X '${GITHUB_REPO}/internal/runtime.GitCommit=${GIT_COMMIT}' -X '${GITHUB_REPO}/internal/runtime.DisableSelfUpdate=${DISABLE_SELF_UPDATE}'"
+          UV_VERSION=$(tr -d '[:space:]' < .uv-version)
+          ldflags="-w -s -X '${GITHUB_REPO}/internal/runtime.Version=${VERSION}' -X '${GITHUB_REPO}/internal/runtime.GitCommit=${GIT_COMMIT}' -X '${GITHUB_REPO}/internal/runtime.UVVersion=${UV_VERSION}' -X '${GITHUB_REPO}/internal/runtime.DisableSelfUpdate=${DISABLE_SELF_UPDATE}'"
           go build -trimpath -ldflags="${ldflags}" -o "${OUTPUT_NAME}" .
 
       - name: Verify self-update is disabled
@@ -173,3 +174,10 @@ jobs:
               -H "Content-Type: application/json" \
               -d @discord_payload.json
           fi
+
+      - name: Propose supported Python update for Saltbox
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: ./.github/actions/update-saltbox-python
+        with:
+          token: ${{ secrets.PAT }}
+          sb-go-release: ${{ steps.determine_version.outputs.version }}

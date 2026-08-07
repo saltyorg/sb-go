@@ -15,9 +15,9 @@ import (
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/python"
 	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/internal/toolchain"
 	"github.com/saltyorg/sb-go/internal/tty"
 	"github.com/saltyorg/sb-go/internal/utils"
-	"github.com/saltyorg/sb-go/internal/uv"
 	"github.com/saltyorg/sb-go/internal/validate"
 	"github.com/saltyorg/sb-go/internal/venv"
 
@@ -193,41 +193,6 @@ func updateSaltboxComponents(ctx context.Context, task *spinners.Task, verbose b
 		return fmt.Errorf("error getting saltbox user: %w", err)
 	}
 
-	// Clean up old deadsnakes packages on Ubuntu 20.04 and 22.04
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Checking for old deadsnakes Python packages"}, func(taskCtx context.Context) error {
-		cleaned, err := python.CleanupDeadsnakesIfNeeded(taskCtx, verbose)
-		if err != nil {
-			return err
-		}
-		if cleaned && verbose {
-			fmt.Println("Removed old deadsnakes Python packages")
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error cleaning up deadsnakes packages: %w", err)
-	}
-
-	// Ensure uv is installed
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Ensuring uv is installed"}, func(taskCtx context.Context) error {
-		return uv.DownloadAndInstallUV(taskCtx, verbose)
-	}); err != nil {
-		return fmt.Errorf("error installing uv: %w", err)
-	}
-
-	// Ensure Python install directory exists
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Ensuring Python install directory exists"}, func(context.Context, *spinners.Task) error {
-		return os.MkdirAll(constants.PythonInstallDir, 0755)
-	}); err != nil {
-		return fmt.Errorf("error creating Python install directory: %w", err)
-	}
-
-	// Ensure Python is installed via uv
-	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: fmt.Sprintf("Ensuring Python %s is installed", constants.AnsibleVenvPythonVersion)}, func(taskCtx context.Context) error {
-		return uv.InstallPython(taskCtx, constants.AnsibleVenvPythonVersion, verbose)
-	}); err != nil {
-		return fmt.Errorf("error installing Python %s: %w", constants.AnsibleVenvPythonVersion, err)
-	}
-
 	// Get old commit hash
 	oldCommitHash, err := git.GetGitCommitHash(ctx, constants.SaltboxRepoPath)
 	if err != nil {
@@ -244,6 +209,23 @@ func updateSaltboxComponents(ctx context.Context, task *spinners.Task, verbose b
 		return git.FetchAndResetBranch(ctx, gitTask, constants.SaltboxRepoPath, branch, saltboxUser, nil, "Saltbox")
 	}); err != nil {
 		return fmt.Errorf("error fetching and resetting git: %w", err)
+	}
+
+	config, err := toolchain.Load()
+	if err != nil {
+		return fmt.Errorf("error loading Saltbox Python toolchain: %w", err)
+	}
+	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Checking for old deadsnakes Python packages"}, func(taskCtx context.Context) error {
+		cleaned, err := python.CleanupDeadsnakesIfNeededForVersion(taskCtx, config.PythonMinor, verbose)
+		if err != nil {
+			return err
+		}
+		if cleaned && verbose {
+			fmt.Println("Removed old deadsnakes Python packages")
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("error cleaning up deadsnakes packages: %w", err)
 	}
 
 	// Manage Ansible venv - this function already has internal spinners
