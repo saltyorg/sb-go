@@ -17,6 +17,7 @@ import (
 	"github.com/saltyorg/sb-go/internal/apt"
 	"github.com/saltyorg/sb-go/internal/constants"
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/ownership"
 	"github.com/saltyorg/sb-go/internal/runtime"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/toolchain"
@@ -135,7 +136,7 @@ func Reconcile(ctx context.Context, task *spinners.Task, options Options) error 
 		if err := cleanupGenerations(); err != nil {
 			return fmt.Errorf("clean old Ansible generations: %w", err)
 		}
-		return nil
+		return ensureManagedOwnership(options.SaltboxUser)
 	}
 
 	pythonPath := ""
@@ -205,9 +206,6 @@ func Reconcile(ctx context.Context, task *spinners.Task, options Options) error 
 	if err := writeManifest(generationDir, manifest); err != nil {
 		return err
 	}
-	if err := setOwnership(ctx, generationDir, options.SaltboxUser, options.Verbose); err != nil {
-		return err
-	}
 	if err := installWrappers(venvPath, commands, false); err != nil {
 		return fmt.Errorf("install Ansible command wrappers: %w", err)
 	}
@@ -222,7 +220,7 @@ func Reconcile(ctx context.Context, task *spinners.Task, options Options) error 
 	if err := cleanupGenerations(); err != nil {
 		return fmt.Errorf("clean old Ansible generations: %w", err)
 	}
-	return nil
+	return ensureManagedOwnership(options.SaltboxUser)
 }
 
 func environmentStatusTaskSpec(healthy bool, options Options) spinners.TaskSpec {
@@ -262,9 +260,6 @@ func createPythonRelease(ctx context.Context, task *spinners.Task, version strin
 		return "", "", err
 	}
 	if err := validatePython(ctx, pythonPath, version); err != nil {
-		return "", "", err
-	}
-	if err := setOwnership(ctx, installDir, options.SaltboxUser, options.Verbose); err != nil {
 		return "", "", err
 	}
 	success = true
@@ -473,12 +468,14 @@ func contains(values []string, wanted string) bool {
 	return false
 }
 
-func setOwnership(ctx context.Context, path, owner string, verbose bool) error {
-	if owner == "" {
-		return nil
+func ensureManagedOwnership(owner string) error {
+	if err := ownership.EnsureForExistingUser(owner, constants.SaltboxGitPath); err != nil {
+		return err
 	}
-	if err := executor.RunVerbose(ctx, "chown", []string{"-R", owner + ":" + owner, path}, verbose); err != nil {
-		return fmt.Errorf("set ownership of %s: %w", path, err)
-	}
-	return nil
+	return ownership.EnsureRecursiveForExistingUser(
+		owner,
+		constants.SaltboxRepoPath,
+		constants.AnsibleVenvPath,
+		constants.PythonInstallDir,
+	)
 }

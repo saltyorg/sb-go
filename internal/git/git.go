@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/internal/ownership"
 	"github.com/saltyorg/sb-go/internal/spinners"
 	"github.com/saltyorg/sb-go/internal/tty"
 )
@@ -162,10 +163,6 @@ func FetchAndResetBranch(
 	submoduleCommands := [][]string{
 		{"git", "submodule", "update", "--progress", "--init", "--recursive"},
 	}
-	ownershipCommands := [][]string{
-		{"chown", "-R", fmt.Sprintf("%s:%s", user, user), repoPath},
-	}
-
 	runCommands := func(commandCtx context.Context, commands [][]string) error {
 		for _, command := range commands {
 			result, err := executor.Run(commandCtx, command[0],
@@ -185,7 +182,6 @@ func FetchAndResetBranch(
 		{name: "Fetching repository changes", commands: fetchCommands},
 		{name: fmt.Sprintf("Resetting repository to %s", branch), commands: resetCommands},
 		{name: "Updating git submodules", commands: submoduleCommands},
-		{name: "Setting repository ownership", commands: ownershipCommands},
 	}
 	for _, step := range steps {
 		if err := parent.RunStreaming(ctx, spinners.TaskSpec{Running: step.name}, func(taskCtx context.Context) error {
@@ -193,6 +189,11 @@ func FetchAndResetBranch(
 		}); err != nil {
 			return err
 		}
+	}
+	if err := parent.Run(ctx, spinners.TaskSpec{Running: "Setting repository ownership"}, func(context.Context, *spinners.Task) error {
+		return ownership.EnsureRecursiveForExistingUser(user, repoPath)
+	}); err != nil {
+		return err
 	}
 
 	if len(customCommands) > 0 {
