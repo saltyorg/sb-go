@@ -13,6 +13,7 @@ UV_VERSION := $(shell tr -d '[:space:]' < .uv-version)
 # Go build flags
 CGO_ENABLED := 0
 GO_FLAGS := -trimpath
+GO_TEST_FLAGS ?=
 LDFLAGS := -w -s \
 	-X '$(MODULE)/internal/runtime.Version=$(VERSION)' \
 	-X '$(MODULE)/internal/runtime.GitCommit=$(GIT_COMMIT)' \
@@ -64,7 +65,7 @@ build-release: ## Build optimized release binary (use VERSION= to override)
 
 test: ## Run all tests with verbose output
 	@echo "$(GREEN)Running tests...$(NC)"
-	CGO_ENABLED=$(CGO_ENABLED) go test -v ./...
+	CGO_ENABLED=$(CGO_ENABLED) go test $(GO_TEST_FLAGS) -v ./...
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(GREEN)Running tests with coverage...$(NC)"

@@ -47,7 +47,7 @@ jobs:
 
       - name: Run tests
         working-directory: sb-go
-        run: sudo make test
+        run: make test GO_TEST_FLAGS='-exec sudo'
 
       - name: Build sb binary
         working-directory: sb-go
