@@ -338,6 +338,10 @@ func validateEnvironment(ctx context.Context, venvPath, version string) error {
 	if _, err := executor.Run(ctx, pythonPath, executor.WithArgs("-c", "import ansible, apprise, certbot")); err != nil {
 		return fmt.Errorf("import Saltbox Python packages: %w", err)
 	}
+	return validateEntrypoints(ctx, venvPath)
+}
+
+func validateEntrypoints(ctx context.Context, venvPath string) error {
 	checks := [][]string{
 		{filepath.Join(venvPath, "bin", "ansible"), "--version"},
 		{filepath.Join(venvPath, "bin", "certbot"), "--version"},
@@ -353,6 +357,7 @@ func validateEnvironment(ctx context.Context, venvPath, version string) error {
 			check[0],
 			executor.WithArgs(check[1:]...),
 			executor.WithInheritEnv("PATH="+commandPath),
+			executor.WithWorkingDir(venvPath),
 		); err != nil {
 			return fmt.Errorf("run %s health check: %w", filepath.Base(check[0]), err)
 		}

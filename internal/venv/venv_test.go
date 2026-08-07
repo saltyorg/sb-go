@@ -1,6 +1,7 @@
 package venv
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -86,6 +87,25 @@ func TestDiscoverCommandsRequiresEntrypoints(t *testing.T) {
 	_, err := discoverCommands(venvPath)
 	if err == nil || !strings.Contains(err.Error(), "certbot") {
 		t.Fatalf("discoverCommands() error = %v, want missing certbot", err)
+	}
+}
+
+func TestValidateEntrypointsUsesVenvWorkingDirectory(t *testing.T) {
+	venvPath := t.TempDir()
+	binPath := filepath.Join(venvPath, "bin")
+	if err := os.Mkdir(binPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EXPECTED_VENV_CWD", venvPath)
+	for _, name := range []string{"ansible", "certbot", "apprise"} {
+		content := []byte("#!/bin/sh\n[ \"$PWD\" = \"$EXPECTED_VENV_CWD\" ]\n")
+		if err := os.WriteFile(filepath.Join(binPath, name), content, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := validateEntrypoints(context.Background(), venvPath); err != nil {
+		t.Fatalf("validateEntrypoints() error = %v", err)
 	}
 }
 
