@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/saltyorg/sb-go/internal/executor"
 	"github.com/saltyorg/sb-go/internal/runtime"
 )
 
@@ -75,5 +76,28 @@ func TestRuntimeUVVersionMatchesVersionFile(t *testing.T) {
 	}
 	if got := strings.TrimSpace(string(data)); got != runtime.UVVersion {
 		t.Fatalf(".uv-version = %q, runtime.UVVersion = %q", got, runtime.UVVersion)
+	}
+}
+
+func TestSyncRequirementsUsesNonInteractiveProgressFreeOutput(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	config := executor.Config{OutputMode: executor.OutputModeCombined}
+	for _, option := range syncRequirementsOptions("/venv/bin/python", "/requirements.txt", true, &stdout, &stderr) {
+		option(&config)
+	}
+
+	wantArgs := []string{"pip", "sync", "--no-progress", "--python", "/venv/bin/python", "--require-hashes", "/requirements.txt"}
+	if strings.Join(config.Args, "\x00") != strings.Join(wantArgs, "\x00") {
+		t.Fatalf("sync arguments = %q, want %q", config.Args, wantArgs)
+	}
+	if config.PseudoTerminal {
+		t.Fatal("uv sync unexpectedly enables a pseudo-terminal")
+	}
+	if config.OutputMode != executor.OutputModeStream {
+		t.Fatalf("output mode = %v, want stream", config.OutputMode)
+	}
+	if config.Stdout != &stdout || config.Stderr != &stderr {
+		t.Fatal("uv sync did not retain managed output writers")
 	}
 }

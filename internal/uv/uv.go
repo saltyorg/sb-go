@@ -219,11 +219,19 @@ func CreateVenvWithPython(ctx context.Context, venvPath, pythonPath string, verb
 }
 
 func SyncRequirements(ctx context.Context, pythonPath, requirementsPath string, verbose bool, stdout, stderr io.Writer) error {
+	options := syncRequirementsOptions(pythonPath, requirementsPath, verbose, stdout, stderr)
+	if _, err := executor.Run(ctx, UVBinaryPath, options...); err != nil {
+		return fmt.Errorf("error syncing requirements: %w", err)
+	}
+	return nil
+}
+
+func syncRequirementsOptions(pythonPath, requirementsPath string, verbose bool, stdout, stderr io.Writer) []executor.Option {
 	options := []executor.Option{
-		executor.WithArgs("pip", "sync", "--python", pythonPath, "--require-hashes", requirementsPath),
+		executor.WithArgs("pip", "sync", "--no-progress", "--python", pythonPath, "--require-hashes", requirementsPath),
 	}
 	if stdout != nil {
-		options = append(options, executor.WithOutputMode(executor.OutputModeStream), executor.WithStdout(stdout), executor.WithPseudoTerminal())
+		options = append(options, executor.WithOutputMode(executor.OutputModeStream), executor.WithStdout(stdout))
 	}
 	if stderr != nil {
 		options = append(options, executor.WithStderr(stderr))
@@ -231,10 +239,7 @@ func SyncRequirements(ctx context.Context, pythonPath, requirementsPath string, 
 	if verbose && stdout == nil {
 		options = append(options, executor.WithOutputMode(executor.OutputModeStream))
 	}
-	if _, err := executor.Run(ctx, UVBinaryPath, options...); err != nil {
-		return fmt.Errorf("error syncing requirements: %w", err)
-	}
-	return nil
+	return options
 }
 
 func CheckPackages(ctx context.Context, pythonPath string) error {
