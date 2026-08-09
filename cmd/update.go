@@ -15,7 +15,6 @@ import (
 	"github.com/saltyorg/sb-go/internal/git"
 	"github.com/saltyorg/sb-go/internal/python"
 	"github.com/saltyorg/sb-go/internal/spinners"
-	"github.com/saltyorg/sb-go/internal/toolchain"
 	"github.com/saltyorg/sb-go/internal/tty"
 	"github.com/saltyorg/sb-go/internal/utils"
 	"github.com/saltyorg/sb-go/internal/validate"
@@ -211,12 +210,8 @@ func updateSaltboxComponents(ctx context.Context, task *spinners.Task, verbose b
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
-	config, err := toolchain.Load()
-	if err != nil {
-		return fmt.Errorf("error loading Saltbox Python toolchain: %w", err)
-	}
 	if err := task.RunStreaming(ctx, spinners.TaskSpec{Running: "Checking for old deadsnakes Python packages"}, func(taskCtx context.Context) error {
-		cleaned, err := python.CleanupDeadsnakesIfNeededForVersion(taskCtx, config.PythonMinor, verbose)
+		cleaned, err := python.CleanupDeadsnakesIfNeeded(taskCtx, verbose)
 		if err != nil {
 			return err
 		}
