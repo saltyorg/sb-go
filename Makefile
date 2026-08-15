@@ -100,7 +100,7 @@ lint: ## Run golangci-lint (always uses latest version)
 	@echo "$(GREEN)Running golangci-lint (latest version)...$(NC)"
 	@go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run ./...
 
-check: fmt vet lint ## Run all code quality checks (fmt, vet, lint)
+check: modernize fmt vet lint ## Run all code quality checks (modernize, fmt, vet, lint)
 
 modernize: ## Run Go modernization tool to update code to latest patterns
 	@echo "$(GREEN)Running Go modernization tool...$(NC)"
