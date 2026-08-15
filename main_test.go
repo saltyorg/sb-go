@@ -8,19 +8,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/saltyorg/sb-go/layout"
 	"github.com/saltyorg/sb-go/signals"
 )
 
 func TestMainPackageStructure(t *testing.T) {
 	t.Run("verify supported versions", func(t *testing.T) {
-		supportedVersions := []string{"20.04", "22.04", "24.04"}
+		runtimeVersions := layout.GetSupportedUbuntuRuntimeReleases()
+		setupVersions := layout.GetSupportedUbuntuSetupReleases()
 
-		if len(supportedVersions) == 0 {
-			t.Error("Supported versions should not be empty")
+		if !slices.Equal(runtimeVersions, []string{"22.04", "24.04", "26.04"}) {
+			t.Fatalf("runtime Ubuntu versions = %v, want [22.04 24.04 26.04]", runtimeVersions)
+		}
+		if !slices.Equal(setupVersions, []string{"24.04", "26.04"}) {
+			t.Fatalf("setup Ubuntu versions = %v, want [24.04 26.04]", setupVersions)
 		}
 
 		// Verify all versions are properly formatted
-		for _, version := range supportedVersions {
+		for _, version := range append(runtimeVersions, setupVersions...) {
 			if version == "" {
 				t.Error("Version string should not be empty")
 			}
@@ -217,45 +222,48 @@ func TestContextCancellation(t *testing.T) {
 
 func TestUbuntuVersionValidation(t *testing.T) {
 	tests := []struct {
-		name    string
-		version string
-		valid   bool
+		name         string
+		version      string
+		runtimeValid bool
+		setupValid   bool
 	}{
 		{
 			name:    "Ubuntu 20.04",
 			version: "20.04",
-			valid:   true,
 		},
 		{
-			name:    "Ubuntu 22.04",
-			version: "22.04",
-			valid:   true,
+			name:         "Ubuntu 22.04",
+			version:      "22.04",
+			runtimeValid: true,
 		},
 		{
-			name:    "Ubuntu 24.04",
-			version: "24.04",
-			valid:   true,
+			name:         "Ubuntu 24.04",
+			version:      "24.04",
+			runtimeValid: true,
+			setupValid:   true,
 		},
 		{
 			name:    "Ubuntu 18.04",
 			version: "18.04",
-			valid:   false,
 		},
 		{
-			name:    "Ubuntu 26.04",
-			version: "26.04",
-			valid:   false,
+			name:         "Ubuntu 26.04",
+			version:      "26.04",
+			runtimeValid: true,
+			setupValid:   true,
 		},
 	}
 
-	supportedVersions := []string{"20.04", "22.04", "24.04"}
+	runtimeVersions := layout.GetSupportedUbuntuRuntimeReleases()
+	setupVersions := layout.GetSupportedUbuntuSetupReleases()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isSupported := slices.Contains(supportedVersions, tt.version)
-
-			if isSupported != tt.valid {
-				t.Errorf("Expected version %s to be valid=%v, got %v", tt.version, tt.valid, isSupported)
+			if got := slices.Contains(runtimeVersions, tt.version); got != tt.runtimeValid {
+				t.Errorf("runtime support for %s = %v, want %v", tt.version, got, tt.runtimeValid)
+			}
+			if got := slices.Contains(setupVersions, tt.version); got != tt.setupValid {
+				t.Errorf("setup support for %s = %v, want %v", tt.version, got, tt.setupValid)
 			}
 		})
 	}
@@ -351,7 +359,7 @@ func TestMainFlowStructure(t *testing.T) {
 			_ = args // Would be used in relaunch
 		} else {
 			// Root - would proceed with normal execution
-			supportedVersions := []string{"20.04", "22.04", "24.04"}
+			supportedVersions := layout.GetSupportedUbuntuRuntimeReleases()
 			if len(supportedVersions) == 0 {
 				t.Error("Supported versions should be defined")
 			}

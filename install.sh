@@ -11,11 +11,14 @@ readonly GITHUB_REPO="saltyorg/sb-go"
 readonly BINARY_NAME="sb"
 readonly INSTALL_PATH="/usr/local/bin/${BINARY_NAME}"
 readonly DOWNLOAD_BINARY_NAME="sb_linux_amd64"
-readonly TEMP_DIR=$(mktemp -d)
 readonly MIN_BINARY_SIZE=1000000  # 1MB minimum size for sanity check
+readonly FRESH_INSTALL_UBUNTU_VERSIONS="24.04, 26.04"
+readonly RUNTIME_UBUNTU_VERSIONS="22.04, 24.04, 26.04"
 DOWNLOAD_TOOL=""  # Will be set by check_dependencies
 FORCE_DOWNLOAD_TOOL=""  # Can be set by command-line argument
 REPAIR_MODE=false
+TEMP_DIR=""
+OS_RELEASE_FILE="/etc/os-release"
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -26,7 +29,7 @@ readonly NC='\033[0m' # No Color
 
 # Cleanup function
 cleanup() {
-    if [[ -d "${TEMP_DIR}" ]]; then
+    if [[ -n "${TEMP_DIR}" && -d "${TEMP_DIR}" ]]; then
         rm -rf "${TEMP_DIR}"
     fi
 }
@@ -86,6 +89,78 @@ detect_platform() {
     fi
 
     log_info "Detected platform: ${os}/${arch}"
+}
+
+# Read a value from os-release without executing the file as shell code.
+read_os_release_value() {
+    local wanted_key="$1"
+    local key=""
+    local value=""
+
+    while IFS='=' read -r key value; do
+        if [[ "${key}" == "${wanted_key}" ]]; then
+            value="${value%\"}"
+            value="${value#\"}"
+            value="${value%\'}"
+            value="${value#\'}"
+            printf '%s\n' "${value}"
+            return 0
+        fi
+    done < "${OS_RELEASE_FILE}"
+
+    return 1
+}
+
+# Validate the Ubuntu release before creating temporary files, downloading, or installing.
+check_ubuntu_support() {
+    local distribution_id=""
+    local version_id=""
+    local supported_versions=""
+
+    if [[ ! -r "${OS_RELEASE_FILE}" ]]; then
+        log_error "Unable to read ${OS_RELEASE_FILE}"
+        log_error "This installer only supports Ubuntu"
+        exit 1
+    fi
+
+    distribution_id=$(read_os_release_value "ID" || true)
+    version_id=$(read_os_release_value "VERSION_ID" || true)
+
+    if [[ "${distribution_id}" != "ubuntu" ]]; then
+        log_error "Unsupported Linux distribution: ${distribution_id:-unknown}"
+        log_error "This installer only supports Ubuntu"
+        exit 1
+    fi
+
+    if [[ "${REPAIR_MODE}" == "true" ]]; then
+        supported_versions="${RUNTIME_UBUNTU_VERSIONS}"
+        case "${version_id}" in
+            22.04|24.04|26.04)
+                ;;
+            *)
+                log_error "Unsupported Ubuntu version for repair: ${version_id:-unknown}"
+                log_error "Supported repair versions: ${supported_versions}"
+                exit 1
+                ;;
+        esac
+    else
+        supported_versions="${FRESH_INSTALL_UBUNTU_VERSIONS}"
+        case "${version_id}" in
+            24.04|26.04)
+                ;;
+            *)
+                log_error "Unsupported Ubuntu version for fresh installation: ${version_id:-unknown}"
+                log_error "Supported fresh-install versions: ${supported_versions}"
+                exit 1
+                ;;
+        esac
+    fi
+
+    log_info "Detected supported Ubuntu version: ${version_id}"
+}
+
+initialize_temp_dir() {
+    TEMP_DIR=$(mktemp -d)
 }
 
 # Check for required dependencies
@@ -401,7 +476,9 @@ main() {
         check_saltbox_exists
     fi
     detect_platform
+    check_ubuntu_support
     check_dependencies
+    initialize_temp_dir
 
     # Always get the latest version
     log_info "Fetching latest release information..."
@@ -431,6 +508,10 @@ main() {
     log_info "You can now use the '${BINARY_NAME}' command"
 }
 
-# Parse arguments and run main function
-parse_args "$@"
-main
+# Parse arguments and run main unless focused tests explicitly request sourcing
+# the production functions. This preserves pipe-to-bash and process-substitution
+# installer invocation, where BASH_SOURCE[0] does not equal $0.
+if [[ "${SB_GO_INSTALL_SOURCE_ONLY:-false}" != "true" ]]; then
+    parse_args "$@"
+    main
+fi

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -263,11 +262,9 @@ func UpdatePackageLists(ctx context.Context, verbose bool) func() error {
 	}
 }
 
-// AddAptRepositories configures the system's apt repositories based on the Ubuntu release codename.
-// It first retrieves the current Ubuntu codename using "lsb_release -sc".
-// Then it resets the repository configuration by removing and recreating the "/etc/apt/sources.list.d/" directory.
-// Depending on the codename (e.g., matching "jammy" or "noble"), it adds a predefined list of repository entries
-// to the main sources file ("/etc/apt/sources.list") using the helper function addRepo.
+// AddAptRepositories configures the system's apt repositories based on the exact Ubuntu release codename.
+// It first retrieves the current Ubuntu codename using "lsb_release -sc", then delegates to the release-specific
+// legacy or DEB822 configuration without modifying repository files for unsupported releases.
 // If the release codename is unsupported or any step fails, an error is returned.
 // The context parameter is used for external command execution but not for local file I/O
 // operations, as Go's standard library does not provide context-aware file operations.
@@ -289,14 +286,26 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 		fmt.Printf("Detected Ubuntu release: %s\n", release)
 	}
 
-	sourcesFile := "/etc/apt/sources.list"
+	return addAptRepositoriesForRelease(
+		release,
+		"/etc/apt/sources.list",
+		"/etc/apt/sources.list.d/",
+		verbose,
+	)
+}
 
-	// Define regex patterns to identify specific Ubuntu releases.
-	jammyRegex := regexp.MustCompile(`(jammy)$`)
-	nobleRegex := regexp.MustCompile(`(noble)$`)
+func addAptRepositoriesForRelease(release, sourcesFile, sourcesDir string, verbose bool) error {
+	usesDeb822 := false
+	switch release {
+	case "jammy":
+	case "noble", "resolute":
+		usesDeb822 = true
+	default:
+		return fmt.Errorf("unsupported Ubuntu release: %s", release)
+	}
 
-	// Remove repository configuration files, but preserve ubuntu.sources on Noble
-	sourcesDir := "/etc/apt/sources.list.d/"
+	// Remove repository configuration files, but preserve the installer-provided
+	// ubuntu.sources file on releases that use DEB822 sources by default.
 	if verbose {
 		fmt.Printf("Cleaning up existing repository configuration files in %s\n", sourcesDir)
 	}
@@ -308,10 +317,9 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 	removedCount := 0
 	for _, entry := range entries {
 		filePath := filepath.Join(sourcesDir, entry.Name())
-		// On Noble, skip deleting ubuntu.sources
-		if nobleRegex.MatchString(release) && entry.Name() == "ubuntu.sources" {
+		if usesDeb822 && entry.Name() == "ubuntu.sources" {
 			if verbose {
-				fmt.Printf("  Preserving %s (required for Noble)\n", entry.Name())
+				fmt.Printf("  Preserving %s (required for %s)\n", entry.Name(), release)
 			}
 			continue
 		}
@@ -327,8 +335,8 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 		fmt.Printf("Removed %d repository configuration file(s)\n", removedCount)
 	}
 
-	// Based on the release codename, select and add the appropriate repository lines.
-	if jammyRegex.MatchString(release) {
+	// Based on the release codename, select and add the appropriate repository configuration.
+	if !usesDeb822 {
 		if verbose {
 			fmt.Printf("Configuring repositories for Ubuntu %s\n", release)
 		}
@@ -349,11 +357,11 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 		if verbose {
 			fmt.Printf("Successfully configured %d repositories in %s\n", len(repos), sourcesFile)
 		}
-	} else if nobleRegex.MatchString(release) {
+	} else {
 		if verbose {
 			fmt.Printf("Configuring repositories for Ubuntu %s (using DEB822 format)\n", release)
 		}
-		// On Noble, check if the existing ubuntu.sources uses the official archive
+		// Check whether the preserved ubuntu.sources uses the official archive.
 		ubuntuSourcesFile := filepath.Join(sourcesDir, "ubuntu.sources")
 		if verbose {
 			fmt.Printf("Checking existing mirror configuration in %s\n", ubuntuSourcesFile)
@@ -386,8 +394,8 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 			}
 			archiveSourcesFile := filepath.Join(sourcesDir, "ubuntu-archive.sources")
 
-			// Create DEB822 format content for official Ubuntu archives
-			deb822Content := buildNobleSourcesContent(release)
+			// Create DEB822 format content for official Ubuntu archives.
+			deb822Content := buildUbuntuArchiveSourcesContent(release)
 
 			if verbose {
 				fmt.Println("\nWriting ubuntu-archive.sources with content:")
@@ -408,17 +416,15 @@ func AddAptRepositories(ctx context.Context, verbose bool) error {
 				fmt.Println("Already using official Ubuntu archive, no additional configuration needed")
 			}
 		}
-		// If already using archive mirror, skip adding - ubuntu.sources already has what we need
-	} else {
-		return fmt.Errorf("unsupported Ubuntu release: %s", release)
+		// If already using an archive mirror, ubuntu.sources already has what we need.
 	}
 
 	return nil
 }
 
-// buildNobleSourcesContent generates DEB822 format content for Noble Ubuntu archives.
+// buildUbuntuArchiveSourcesContent generates DEB822 format content for Ubuntu archives.
 // It returns a properly formatted .sources file content string.
-func buildNobleSourcesContent(release string) string {
+func buildUbuntuArchiveSourcesContent(release string) string {
 	return fmt.Sprintf(
 		"Types: deb\n"+
 			"URIs: http://archive.ubuntu.com/ubuntu/\n"+

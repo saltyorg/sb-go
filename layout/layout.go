@@ -27,7 +27,8 @@ const (
 	SaltboxUVVersionPath              = "/srv/git/saltbox/.uv-version"
 	PythonInstallDir                  = "/srv/python"
 	PythonReleasesPath                = "/srv/python/releases"
-	SupportedUbuntuReleases           = "22.04,24.04"
+	SupportedUbuntuRuntimeReleases    = "22.04,24.04,26.04"
+	SupportedUbuntuSetupReleases      = "24.04,26.04"
 	DockerControllerServiceFile       = "/etc/systemd/system/saltbox_managed_docker_controller.service"
 	DockerControllerAPIURL            = "http://127.0.0.1:3377"
 	SVMVersionProxyURL                = "https://svm.saltbox.dev/version"
@@ -50,7 +51,12 @@ func AnsibleVenvPythonPath() string {
 	return filepath.Join(AnsibleVenvPath, "venv", "bin", "python3")
 }
 
-// GetSupportedUbuntuReleases returns a slice of supported Ubuntu release codenames.
-func GetSupportedUbuntuReleases() []string {
-	return strings.Split(SupportedUbuntuReleases, ",")
+// GetSupportedUbuntuRuntimeReleases returns the Ubuntu versions on which sb-go can run.
+func GetSupportedUbuntuRuntimeReleases() []string {
+	return strings.Split(SupportedUbuntuRuntimeReleases, ",")
+}
+
+// GetSupportedUbuntuSetupReleases returns the Ubuntu versions supported for fresh Saltbox setup.
+func GetSupportedUbuntuSetupReleases() []string {
+	return strings.Split(SupportedUbuntuSetupReleases, ",")
 }

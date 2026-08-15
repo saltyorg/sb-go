@@ -6,10 +6,12 @@ on:
       - main
     paths:
       - 'install.sh'
+      - 'scripts/test-install-os-policy.sh'
       - '.github/workflows/test-install.yml'
   pull_request:
     paths:
       - 'install.sh'
+      - 'scripts/test-install-os-policy.sh'
       - '.github/workflows/test-install.yml'
   workflow_dispatch:
 
@@ -27,6 +29,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
+      - name: Test installer Ubuntu policy
+        run: ./scripts/test-install-os-policy.sh
 
       - name: Test install script with ${{ matrix.download-tool }}
         run: |

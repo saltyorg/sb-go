@@ -15,6 +15,7 @@ import (
 	"github.com/saltyorg/sb-go/cmd"
 	gitops "github.com/saltyorg/sb-go/git"
 	"github.com/saltyorg/sb-go/host"
+	"github.com/saltyorg/sb-go/layout"
 	"github.com/saltyorg/sb-go/signals"
 
 	"charm.land/fang/v2"
@@ -69,7 +70,7 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	supportedVersions := []string{"20.04", "22.04", "24.04"}
+	supportedVersions := layout.GetSupportedUbuntuRuntimeReleases()
 
 	if err := host.CheckSupport(supportedVersions); err != nil {
 		fmt.Println(err)

@@ -33,7 +33,7 @@ NC := \033[0m # No Color
 .DEFAULT_GOAL := build
 
 # Phony targets (don't produce files with these names)
-.PHONY: all build test test-deadsnakes-container clean fmt vet lint run help version deps tidy update update-patch check modernize
+.PHONY: all build test test-deadsnakes-container test-install-policy clean fmt vet lint run help version deps tidy update update-patch check modernize
 
 ##@ General
 
@@ -81,6 +81,9 @@ test-race: ## Run tests with race detector
 
 test-deadsnakes-container: ## Test legacy deadsnakes cleanup in Ubuntu 22.04 containers
 	./scripts/test-deadsnakes-cleanup-container.sh
+
+test-install-policy: ## Test install.sh Ubuntu fresh-install and repair policies without downloading
+	./scripts/test-install-os-policy.sh
 
 bench: ## Run benchmarks
 	@echo "$(GREEN)Running benchmarks...$(NC)"

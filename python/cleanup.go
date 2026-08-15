@@ -325,11 +325,13 @@ func shouldCleanupDeadsnakesFromFile(path string) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	return versionID == "20.04" || versionID == "22.04", nil
+	return versionID == "22.04", nil
 }
 
 // CleanupDeadsnakesIfNeeded removes the legacy deadsnakes Python 3.12
-// packages and apt repositories from Ubuntu 20.04 and 22.04 systems.
+// packages and apt repositories from supported Ubuntu 22.04 systems. Package
+// version evidence from an earlier Ubuntu 20.04 installation is still
+// recognized so upgrades from Focal can be cleaned safely.
 func CleanupDeadsnakesIfNeeded(ctx context.Context, verbose bool) (bool, error) {
 	shouldCleanup, err := ShouldCleanupDeadsnakes()
 	if err != nil {

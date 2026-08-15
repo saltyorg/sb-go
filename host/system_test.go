@@ -5,23 +5,31 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/saltyorg/sb-go/layout"
 
 	"go.yaml.in/yaml/v3"
 	"golang.org/x/sys/unix"
 )
 
 func TestCheckUbuntuSupport(t *testing.T) {
-	// This test verifies the logic structure of CheckUbuntuSupport
-	// Actual OS detection would require system-level mocking
-	t.Run("function structure", func(t *testing.T) {
-		err := CheckUbuntuSupport()
-		// The error will depend on the actual OS running the test
-		// We just verify the function executes
-		_ = err
-	})
+	var capturedVersions []string
+	check := func(supportedVersions []string) error {
+		capturedVersions = slices.Clone(supportedVersions)
+		return nil
+	}
+
+	if err := checkUbuntuSupport(check); err != nil {
+		t.Fatalf("checkUbuntuSupport() error = %v", err)
+	}
+	want := layout.GetSupportedUbuntuSetupReleases()
+	if !slices.Equal(capturedVersions, want) {
+		t.Fatalf("CheckUbuntuSupport() selected %v, want setup policy %v", capturedVersions, want)
+	}
 }
 
 func TestGetSaltboxUser(t *testing.T) {

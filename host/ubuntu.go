@@ -17,13 +17,20 @@ func CheckSupport(supportedVersions []string) error {
 		return fmt.Errorf("error getting OS name: %w", err)
 	}
 	if osName != "linux" {
-		return fmt.Errorf("not running on Linux (detected OS: %s)", osName)
+		return validateUbuntuSupport(osName, nil, supportedVersions)
 	}
 
 	// Parse /etc/os-release
 	osRelease, err := ParseOSRelease("/etc/os-release")
 	if err != nil {
 		return fmt.Errorf("error parsing /etc/os-release: %w", err)
+	}
+	return validateUbuntuSupport(osName, osRelease, supportedVersions)
+}
+
+func validateUbuntuSupport(osName string, osRelease map[string]string, supportedVersions []string) error {
+	if osName != "linux" {
+		return fmt.Errorf("not running on Linux (detected OS: %s)", osName)
 	}
 
 	// Check if ID is ubuntu

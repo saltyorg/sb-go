@@ -196,3 +196,174 @@ func TestInstallPackage_VerboseMode(t *testing.T) {
 
 	t.Logf("Verbose mode error message:\n%s", errMsg)
 }
+
+func TestAddAptRepositoriesRejectsUnsupportedReleaseBeforeMutation(t *testing.T) {
+	root := t.TempDir()
+	sourcesFile := filepath.Join(root, "sources.list")
+	sourcesDir := filepath.Join(root, "sources.list.d")
+	if err := os.Mkdir(sourcesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeAptTestFile(t, sourcesFile, "deb http://mirror.example.invalid/ubuntu focal main\n")
+	writeAptTestFile(t, filepath.Join(sourcesDir, "ubuntu.sources"), "official source content\n")
+	writeAptTestFile(t, filepath.Join(sourcesDir, "third-party.list"), "third-party source content\n")
+	before := snapshotAptTestTree(t, root)
+
+	err := addAptRepositoriesForRelease("focal", sourcesFile, sourcesDir, false)
+	if err == nil || err.Error() != "unsupported Ubuntu release: focal" {
+		t.Fatalf("addAptRepositoriesForRelease() error = %v, want unsupported focal error", err)
+	}
+
+	after := snapshotAptTestTree(t, root)
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("unsupported release mutated apt sources:\nbefore: %#v\nafter:  %#v", before, after)
+	}
+}
+
+func TestAddAptRepositoriesPreservesOfficialDeb822Sources(t *testing.T) {
+	for _, release := range []string{"noble", "resolute"} {
+		t.Run(release, func(t *testing.T) {
+			root := t.TempDir()
+			sourcesFile := filepath.Join(root, "sources.list")
+			sourcesDir := filepath.Join(root, "sources.list.d")
+			if err := os.Mkdir(sourcesDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			officialSources := fmt.Sprintf("Types: deb\nURIs: http://archive.ubuntu.com/ubuntu/\nSuites: %s %s-updates\n", release, release)
+			ubuntuSourcesFile := filepath.Join(sourcesDir, "ubuntu.sources")
+			writeAptTestFile(t, ubuntuSourcesFile, officialSources)
+			thirdPartyFile := filepath.Join(sourcesDir, "third-party.list")
+			writeAptTestFile(t, thirdPartyFile, "deb https://packages.example.invalid stable main\n")
+
+			if err := addAptRepositoriesForRelease(release, sourcesFile, sourcesDir, false); err != nil {
+				t.Fatalf("addAptRepositoriesForRelease() error = %v", err)
+			}
+
+			if got := readAptTestFile(t, ubuntuSourcesFile); got != officialSources {
+				t.Fatalf("ubuntu.sources was changed:\ngot:  %q\nwant: %q", got, officialSources)
+			}
+			if _, err := os.Stat(thirdPartyFile); !os.IsNotExist(err) {
+				t.Fatalf("third-party source was not removed: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(sourcesDir, "ubuntu-archive.sources")); !os.IsNotExist(err) {
+				t.Fatalf("unexpected ubuntu-archive.sources: %v", err)
+			}
+		})
+	}
+}
+
+func TestAddAptRepositoriesAddsOfficialArchiveForCustomDeb822Mirror(t *testing.T) {
+	for _, release := range []string{"noble", "resolute"} {
+		t.Run(release, func(t *testing.T) {
+			root := t.TempDir()
+			sourcesFile := filepath.Join(root, "sources.list")
+			sourcesDir := filepath.Join(root, "sources.list.d")
+			if err := os.Mkdir(sourcesDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			customSources := fmt.Sprintf("Types: deb\nURIs: https://mirror.example.invalid/ubuntu/\nSuites: %s\n", release)
+			ubuntuSourcesFile := filepath.Join(sourcesDir, "ubuntu.sources")
+			writeAptTestFile(t, ubuntuSourcesFile, customSources)
+
+			if err := addAptRepositoriesForRelease(release, sourcesFile, sourcesDir, false); err != nil {
+				t.Fatalf("addAptRepositoriesForRelease() error = %v", err)
+			}
+
+			if got := readAptTestFile(t, ubuntuSourcesFile); got != customSources {
+				t.Fatalf("custom ubuntu.sources was changed:\ngot:  %q\nwant: %q", got, customSources)
+			}
+			wantArchive := fmt.Sprintf(
+				"Types: deb\n"+
+					"URIs: http://archive.ubuntu.com/ubuntu/\n"+
+					"Suites: %s %s-updates %s-backports\n"+
+					"Components: main restricted universe multiverse\n"+
+					"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n"+
+					"\n"+
+					"Types: deb\n"+
+					"URIs: http://security.ubuntu.com/ubuntu/\n"+
+					"Suites: %s-security\n"+
+					"Components: main restricted universe multiverse\n"+
+					"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n",
+				release, release, release, release,
+			)
+			archiveSourcesFile := filepath.Join(sourcesDir, "ubuntu-archive.sources")
+			if got := readAptTestFile(t, archiveSourcesFile); got != wantArchive {
+				t.Fatalf("ubuntu-archive.sources = %q, want %q", got, wantArchive)
+			}
+		})
+	}
+}
+
+func TestAddAptRepositoriesRetainsJammyLegacyConfiguration(t *testing.T) {
+	root := t.TempDir()
+	sourcesFile := filepath.Join(root, "sources.list")
+	sourcesDir := filepath.Join(root, "sources.list.d")
+	if err := os.Mkdir(sourcesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeAptTestFile(t, sourcesFile, "# existing configuration\n")
+	writeAptTestFile(t, filepath.Join(sourcesDir, "ubuntu.sources"), "DEB822 data not used on Jammy\n")
+	writeAptTestFile(t, filepath.Join(sourcesDir, "third-party.list"), "third-party source content\n")
+
+	if err := addAptRepositoriesForRelease("jammy", sourcesFile, sourcesDir, false); err != nil {
+		t.Fatalf("addAptRepositoriesForRelease() error = %v", err)
+	}
+
+	wantSources := "# existing configuration\n" +
+		"deb http://archive.ubuntu.com/ubuntu/ jammy main\n" +
+		"deb http://archive.ubuntu.com/ubuntu/ jammy universe\n" +
+		"deb http://archive.ubuntu.com/ubuntu/ jammy restricted\n" +
+		"deb http://archive.ubuntu.com/ubuntu/ jammy multiverse\n"
+	if got := readAptTestFile(t, sourcesFile); got != wantSources {
+		t.Fatalf("sources.list = %q, want %q", got, wantSources)
+	}
+	entries, err := os.ReadDir(sourcesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("sources.list.d entries = %v, want none", entries)
+	}
+}
+
+func writeAptTestFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func readAptTestFile(t *testing.T, path string) string {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(content)
+}
+
+func snapshotAptTestTree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	snapshot := make(map[string]string)
+	if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relativePath, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		snapshot[relativePath] = fmt.Sprintf("%#o:%s", info.Mode().Perm(), content)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return snapshot
+}

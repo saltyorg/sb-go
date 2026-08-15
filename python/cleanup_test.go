@@ -384,7 +384,7 @@ func TestShouldCleanupDeadsnakesFromFile(t *testing.T) {
 		version string
 		want    bool
 	}{
-		{version: "20.04", want: true},
+		{version: "20.04", want: false},
 		{version: "22.04", want: true},
 		{version: "24.04", want: false},
 		{version: "26.04", want: false},

@@ -92,8 +92,12 @@ func GetSaltboxUser() (string, error) {
 
 // CheckUbuntuSupport checks if the current Ubuntu version is supported.
 func CheckUbuntuSupport() error {
-	supportedVersions := layout.GetSupportedUbuntuReleases()
-	if err := CheckSupport(supportedVersions); err != nil {
+	return checkUbuntuSupport(CheckSupport)
+}
+
+func checkUbuntuSupport(check func([]string) error) error {
+	supportedVersions := layout.GetSupportedUbuntuSetupReleases()
+	if err := check(supportedVersions); err != nil {
 		return fmt.Errorf("UNSUPPORTED OS - Install cancelled: %w. Supported OS versions: %s", err, strings.Join(supportedVersions, ", "))
 	}
 	return nil
