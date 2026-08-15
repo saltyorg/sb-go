@@ -7,46 +7,52 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/layout"
+	"github.com/saltyorg/sb-go/terminal"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
-// stopCmd represents the stop command
-var stopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop Docker containers managed by Saltbox",
-	Long:  `Stop Docker containers managed by Saltbox in dependency order.`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		ignoreContainers, _ := cmd.Flags().GetStringSlice("ignore")
-		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
-		return runDockerStop(ctx, runner, verbose, ignoreContainers, spinners.CollapseChildTasks)
-	},
+func newDockerStopCommand() *cobra.Command {
+	opts := struct {
+		verbose bool
+		ignore  []string
+	}{}
+	stopCmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop Docker containers managed by Saltbox",
+		Long:  `Stop Docker containers managed by Saltbox in dependency order.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: opts.verbose})
+			return runDockerStop(ctx, runner, opts.verbose, opts.ignore, terminal.CollapseChildTasks)
+		},
+	}
+	stopCmd.Flags().BoolVarP(&opts.verbose, "verbose", "v", false, "Enable verbose output")
+	stopCmd.Flags().StringSliceVar(&opts.ignore, "ignore", []string{}, "Containers to ignore during stop operation (can be specified multiple times)")
+	return stopCmd
 }
 
 func runDockerStop(
 	ctx context.Context,
-	runner *spinners.Runner,
+	runner *terminal.Runner,
 	verbose bool,
 	ignoreContainers []string,
-	childDisplay spinners.ChildDisplay,
+	childDisplay terminal.ChildDisplay,
 ) error {
-	return runner.Run(ctx, spinners.TaskSpec{
+	return runner.Run(ctx, terminal.TaskSpec{
 		Running:      "Stopping Docker containers",
 		Success:      "Docker containers stopped",
 		Failure:      "Docker container stop",
 		ChildDisplay: childDisplay,
-	}, func(ctx context.Context, task *spinners.Task) error {
+	}, func(ctx context.Context, task *terminal.Task) error {
 		return performDockerStop(ctx, task, verbose, ignoreContainers)
 	})
 }
 
-func performDockerStop(ctx context.Context, task *spinners.Task, verbose bool, ignoreContainers []string) error {
+func performDockerStop(ctx context.Context, task *terminal.Task, verbose bool, ignoreContainers []string) error {
 	serviceCheckTask := func() error {
 		exists, running, err := isServiceExistAndRunning(ctx)
 		if err != nil {
@@ -66,11 +72,11 @@ func performDockerStop(ctx context.Context, task *spinners.Task, verbose bool, i
 	}
 
 	// Check service with spinner
-	if err := task.Run(ctx, spinners.TaskSpec{
+	if err := task.Run(ctx, terminal.TaskSpec{
 		Running: "Checking Docker controller service",
 		Success: "Docker controller service ready",
 		Failure: "Docker controller service check",
-	}, func(context.Context, *spinners.Task) error {
+	}, func(context.Context, *terminal.Task) error {
 		return serviceCheckTask()
 	}); err != nil {
 		return fmt.Errorf("error: %v", err)
@@ -82,9 +88,9 @@ func performDockerStop(ctx context.Context, task *spinners.Task, verbose bool, i
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	var jobResp JobResponse
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Requesting Docker stop job"}, func(context.Context, *spinners.Task) error {
+	if err := task.Run(ctx, terminal.TaskSpec{Running: "Requesting Docker stop job"}, func(context.Context, *terminal.Task) error {
 		var err error
-		jobResp, err = requestDockerJob(ctx, constants.DockerControllerAPIURL+"/stop", ignoreContainers, client)
+		jobResp, err = requestDockerJob(ctx, layout.DockerControllerAPIURL+"/stop", ignoreContainers, client)
 		return err
 	}); err != nil {
 		return fmt.Errorf("failed to stop containers: %w", err)
@@ -95,7 +101,7 @@ func performDockerStop(ctx context.Context, task *spinners.Task, verbose bool, i
 	}
 
 	var success bool
-	if err := task.Run(ctx, spinners.TaskSpec{Running: "Waiting for Docker stop job"}, func(context.Context, *spinners.Task) error {
+	if err := task.Run(ctx, terminal.TaskSpec{Running: "Waiting for Docker stop job"}, func(context.Context, *terminal.Task) error {
 		var err error
 		success, err = waitForJobCompletion(ctx, jobResp.JobID)
 		return err
@@ -107,12 +113,4 @@ func performDockerStop(ctx context.Context, task *spinners.Task, verbose bool, i
 	}
 
 	return nil
-}
-
-func init() {
-	// Add verbose flag
-	stopCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
-
-	// Add ignore flag
-	stopCmd.Flags().StringSlice("ignore", []string{}, "Containers to ignore during stop operation (can be specified multiple times)")
 }

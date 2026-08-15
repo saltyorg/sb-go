@@ -63,7 +63,7 @@ jobs:
           fi
 
           UV_VERSION=$(tr -d '[:space:]' < .uv-version)
-          ldflags="-w -s -X '${GITHUB_REPO}/internal/runtime.Version=${VERSION}' -X '${GITHUB_REPO}/internal/runtime.GitCommit=${GIT_COMMIT}' -X '${GITHUB_REPO}/internal/runtime.UVVersion=${UV_VERSION}' -X '${GITHUB_REPO}/internal/runtime.DisableSelfUpdate=${DISABLE_SELF_UPDATE}'"
+          ldflags="-w -s -X '${GITHUB_REPO}/buildinfo.version=${VERSION}' -X '${GITHUB_REPO}/buildinfo.gitCommit=${GIT_COMMIT}' -X '${GITHUB_REPO}/buildinfo.uvVersion=${UV_VERSION}' -X '${GITHUB_REPO}/buildinfo.disableSelfUpdate=${DISABLE_SELF_UPDATE}'"
           go build -trimpath -ldflags="${ldflags}" -o "${OUTPUT_NAME}" .
 
       - name: Verify self-update is disabled

@@ -22,137 +22,139 @@ type containerInfo struct {
 	externalPorts []string
 }
 
-// psCmd represents the ps command (previously "ports" command)
-var psCmd = &cobra.Command{
-	Use:   "ps",
-	Short: "List Docker containers with port mappings",
-	Long: `List all Docker containers and their status, displaying their internal
+// newDockerPSCommand builds the ps command (previously "ports").
+func newDockerPSCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "ps",
+		Short: "List Docker containers with port mappings",
+		Long: `List all Docker containers and their status, displaying their internal
 ports (as potentially exposed by Traefik labels) and their external port bindings.`,
-	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		cli, err := client.New(client.FromEnv)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = cli.Close() }()
-
-		containersSummary, err := cli.ContainerList(ctx, client.ContainerListOptions{All: true})
-		if err != nil {
-			return err
-		}
-
-		// Process container information
-		var containers []containerInfo
-		var errs []error
-		for _, cs := range containersSummary.Items {
-			containerInspect, err := cli.ContainerInspect(ctx, cs.ID, client.ContainerInspectOptions{})
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			cli, err := client.New(client.FromEnv)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("error inspecting container %s: %w", shortContainerID(cs.ID), err))
-				continue
+				return err
+			}
+			defer func() { _ = cli.Close() }()
+
+			containersSummary, err := cli.ContainerList(ctx, client.ContainerListOptions{All: true})
+			if err != nil {
+				return err
 			}
 
-			internalPorts := getTraefikInternalPorts(containerInspect.Container.Config.Labels)
-			deduplicatedInternalPorts := deduplicate(internalPorts)
-			externalPorts := getExternalPortBindings(containerInspect.Container.NetworkSettings.Ports)
-
-			containerName := containerDisplayName(cs.ID, cs.Names)
-
-			var statusText string
-			var statusStyle lipgloss.Style
-
-			state := containerInspect.Container.State.Status
-			stateStr := string(state)
-			switch state {
-			case "running":
-				if containerInspect.Container.State.Health != nil {
-					healthStatus := containerInspect.Container.State.Health.Status
-					statusText = fmt.Sprintf("%s (%s)", stateStr, healthStatus)
-					if healthStatus == "healthy" {
-						statusStyle = greenStyle
-					} else {
-						statusStyle = yellowStyle
-					}
-				} else {
-					statusText = stateStr
-					statusStyle = greenStyle
+			// Process container information
+			var containers []containerInfo
+			var errs []error
+			for _, cs := range containersSummary.Items {
+				containerInspect, err := cli.ContainerInspect(ctx, cs.ID, client.ContainerInspectOptions{})
+				if err != nil {
+					errs = append(errs, fmt.Errorf("error inspecting container %s: %w", shortContainerID(cs.ID), err))
+					continue
 				}
-			case "exited", "dead":
-				statusText = stateStr
-				statusStyle = redStyle
-			case "created", "paused":
-				statusText = stateStr
-				statusStyle = yellowStyle
-			case "restarting", "removing":
-				statusText = stateStr
-				statusStyle = yellowStyle
-			default:
-				statusText = stateStr
-				statusStyle = yellowStyle
+
+				internalPorts := getTraefikInternalPorts(containerInspect.Container.Config.Labels)
+				deduplicatedInternalPorts := deduplicate(internalPorts)
+				externalPorts := getExternalPortBindings(containerInspect.Container.NetworkSettings.Ports)
+
+				containerName := containerDisplayName(cs.ID, cs.Names)
+
+				var statusText string
+				var statusStyle lipgloss.Style
+
+				state := containerInspect.Container.State.Status
+				stateStr := string(state)
+				switch state {
+				case "running":
+					if containerInspect.Container.State.Health != nil {
+						healthStatus := containerInspect.Container.State.Health.Status
+						statusText = fmt.Sprintf("%s (%s)", stateStr, healthStatus)
+						if healthStatus == "healthy" {
+							statusStyle = greenStyle
+						} else {
+							statusStyle = yellowStyle
+						}
+					} else {
+						statusText = stateStr
+						statusStyle = greenStyle
+					}
+				case "exited", "dead":
+					statusText = stateStr
+					statusStyle = redStyle
+				case "created", "paused":
+					statusText = stateStr
+					statusStyle = yellowStyle
+				case "restarting", "removing":
+					statusText = stateStr
+					statusStyle = yellowStyle
+				default:
+					statusText = stateStr
+					statusStyle = yellowStyle
+				}
+
+				coloredStatus := statusStyle.Render(statusText)
+
+				if len(deduplicatedInternalPorts) > 0 || len(externalPorts) > 0 {
+					containers = append(containers, containerInfo{
+						name:          containerName,
+						status:        statusText,
+						coloredStatus: coloredStatus,
+						traefikPorts:  deduplicatedInternalPorts,
+						externalPorts: externalPorts,
+					})
+				} else {
+					containers = append(containers, containerInfo{
+						name:          containerName,
+						status:        statusText,
+						coloredStatus: coloredStatus,
+						traefikPorts:  []string{},
+						externalPorts: []string{},
+					})
+				}
 			}
 
-			coloredStatus := statusStyle.Render(statusText)
+			// Sort containers by name
+			sort.Slice(containers, func(i, j int) bool {
+				return containers[i].name < containers[j].name
+			})
 
-			if len(deduplicatedInternalPorts) > 0 || len(externalPorts) > 0 {
-				containers = append(containers, containerInfo{
-					name:          containerName,
-					status:        statusText,
-					coloredStatus: coloredStatus,
-					traefikPorts:  deduplicatedInternalPorts,
-					externalPorts: externalPorts,
-				})
-			} else {
-				containers = append(containers, containerInfo{
-					name:          containerName,
-					status:        statusText,
-					coloredStatus: coloredStatus,
-					traefikPorts:  []string{},
-					externalPorts: []string{},
-				})
-			}
-		}
+			// Create a new table
+			t := table.New(cmd.OutOrStdout())
 
-		// Sort containers by name
-		sort.Slice(containers, func(i, j int) bool {
-			return containers[i].name < containers[j].name
-		})
+			// Configure table settings
+			t.SetHeaders("Container", "Status", "Traefik Port", "Port Bindings")
+			t.SetHeaderStyle(table.StyleBold)
+			t.SetAlignment(table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignRight)
+			t.SetBorders(true)
+			t.SetRowLines(true)
+			t.SetDividers(table.UnicodeRoundedDividers)
+			t.SetLineStyle(table.StyleBlue)
+			t.SetPadding(1)
+			t.SetColumnMaxWidth(100)
 
-		// Create a new table
-		t := table.New(cmd.OutOrStdout())
+			// Add sorted containers to the table
+			for _, container := range containers {
+				traefikPortsStr := strings.Join(container.traefikPorts, ", ")
 
-		// Configure table settings
-		t.SetHeaders("Container", "Status", "Traefik Port", "Port Bindings")
-		t.SetHeaderStyle(table.StyleBold)
-		t.SetAlignment(table.AlignLeft, table.AlignLeft, table.AlignRight, table.AlignRight)
-		t.SetBorders(true)
-		t.SetRowLines(true)
-		t.SetDividers(table.UnicodeRoundedDividers)
-		t.SetLineStyle(table.StyleBlue)
-		t.SetPadding(1)
-		t.SetColumnMaxWidth(100)
+				// Format external ports to have each on its own line
+				externalPortsStr := ""
+				if len(container.externalPorts) > 0 {
+					externalPortsStr = strings.Join(container.externalPorts, "\n")
+				}
 
-		// Add sorted containers to the table
-		for _, container := range containers {
-			traefikPortsStr := strings.Join(container.traefikPorts, ", ")
-
-			// Format external ports to have each on its own line
-			externalPortsStr := ""
-			if len(container.externalPorts) > 0 {
-				externalPortsStr = strings.Join(container.externalPorts, "\n")
+				t.AddRow(container.name, container.coloredStatus, traefikPortsStr, externalPortsStr)
 			}
 
-			t.AddRow(container.name, container.coloredStatus, traefikPortsStr, externalPortsStr)
-		}
+			// Render the table
+			t.Render()
 
-		// Render the table
-		t.Render()
+			if len(errs) > 0 {
+				return fmt.Errorf("failed to inspect %d container(s): %w", len(errs), errors.Join(errs...))
+			}
 
-		if len(errs) > 0 {
-			return fmt.Errorf("failed to inspect %d container(s): %w", len(errs), errors.Join(errs...))
-		}
-
-		return nil
-	},
+			return nil
+		},
+	}
 }
 
 func shortContainerID(id string) string {

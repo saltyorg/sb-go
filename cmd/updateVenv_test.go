@@ -3,6 +3,7 @@ package cmd
 import "testing"
 
 func TestUpdateVenvCommandIsHidden(t *testing.T) {
+	updateVenvCmd := newUpdateVenvCommand()
 	if !updateVenvCmd.Hidden {
 		t.Fatal("update-venv command must remain hidden")
 	}

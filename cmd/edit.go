@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/signals"
+	"github.com/saltyorg/sb-go/layout"
+	"github.com/saltyorg/sb-go/signals"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
@@ -38,6 +38,7 @@ var docStyle = lipgloss.NewStyle().Margin(1, 2)
 
 // ConfigSelectorModel represents the bubbletea model for selecting configuration files
 type ConfigSelectorModel struct {
+	ctx  context.Context
 	list list.Model
 }
 
@@ -52,7 +53,7 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
-			signals.GetGlobalManager().Shutdown(130)
+			signals.Shutdown(m.ctx, 130)
 			return m, tea.Quit
 		}
 		if msg.String() == "q" {
@@ -155,38 +156,38 @@ func runBubbleTeaList(ctx context.Context) error {
 		ConfigItem{
 			title:       "Accounts",
 			description: "accounts.yml",
-			path:        constants.SaltboxAccountsConfigPath,
+			path:        layout.SaltboxAccountsConfigPath,
 		},
 		ConfigItem{
 			title:       "Settings",
 			description: "settings.yml",
-			path:        constants.SaltboxSettingsConfigPath,
+			path:        layout.SaltboxSettingsConfigPath,
 		},
 		ConfigItem{
 			title:       "Advanced Settings",
 			description: "adv_settings.yml",
-			path:        constants.SaltboxAdvancedSettingsConfigPath,
+			path:        layout.SaltboxAdvancedSettingsConfigPath,
 		},
 		ConfigItem{
 			title:       "Backup Settings",
 			description: "backup_config.yml",
-			path:        constants.SaltboxBackupConfigPath,
+			path:        layout.SaltboxBackupConfigPath,
 		},
 		ConfigItem{
 			title:       "Hetzner VLAN Settings",
 			description: "hetzner_vlan.yml",
-			path:        constants.SaltboxHetznerVLANConfigPath,
+			path:        layout.SaltboxHetznerVLANConfigPath,
 		},
 		ConfigItem{
 			title:       "Inventory Settings",
 			description: "localhost.yml",
-			path:        constants.SaltboxInventoryConfigPath,
+			path:        layout.SaltboxInventoryConfigPath,
 		},
 	}
 
 	// Initialize a list with proper dimensions
 	delegate := list.NewDefaultDelegate()
-	m := ConfigSelectorModel{list: list.New(configItems, delegate, 30, 10)} // Set width and height
+	m := ConfigSelectorModel{ctx: ctx, list: list.New(configItems, delegate, 30, 10)} // Set width and height
 	m.list.SetShowTitle(false)
 	m.list.SetShowStatusBar(false)
 	m.list.SetFilteringEnabled(false)
@@ -202,19 +203,16 @@ func runBubbleTeaList(ctx context.Context) error {
 	return nil
 }
 
-// editCmd represents the edit command
-var editCmd = &cobra.Command{
-	Use:   "edit",
-	Short: "Edit Saltbox configuration files",
-	Long:  `Edit Saltbox configuration files using your default editor.`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return runBubbleTeaList(cmd.Context())
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(editCmd)
+func addEditCommand(rootCmd *cobra.Command) {
+	editCmd := &cobra.Command{
+		Use:   "edit",
+		Short: "Edit Saltbox configuration files",
+		Long:  `Edit Saltbox configuration files using your default editor.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runBubbleTeaList(cmd.Context())
+		},
+	}
 
 	// Subcommands for each configuration file
 	editCmd.AddCommand(&cobra.Command{
@@ -222,7 +220,7 @@ func init() {
 		Short: "Accounts",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), constants.SaltboxAccountsConfigPath)
+			return openEditor(cmd.Context(), layout.SaltboxAccountsConfigPath)
 		},
 	})
 
@@ -231,7 +229,7 @@ func init() {
 		Short: "Advanced Settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), constants.SaltboxAdvancedSettingsConfigPath)
+			return openEditor(cmd.Context(), layout.SaltboxAdvancedSettingsConfigPath)
 		},
 	})
 
@@ -240,7 +238,7 @@ func init() {
 		Short: "Backup Settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), constants.SaltboxBackupConfigPath)
+			return openEditor(cmd.Context(), layout.SaltboxBackupConfigPath)
 		},
 	})
 
@@ -249,7 +247,7 @@ func init() {
 		Short: "Hetzner VLAN Settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), constants.SaltboxHetznerVLANConfigPath)
+			return openEditor(cmd.Context(), layout.SaltboxHetznerVLANConfigPath)
 		},
 	})
 
@@ -258,7 +256,7 @@ func init() {
 		Short: "Settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), constants.SaltboxSettingsConfigPath)
+			return openEditor(cmd.Context(), layout.SaltboxSettingsConfigPath)
 		},
 	})
 
@@ -267,7 +265,9 @@ func init() {
 		Short: "Inventory Settings",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), constants.SaltboxInventoryConfigPath)
+			return openEditor(cmd.Context(), layout.SaltboxInventoryConfigPath)
 		},
 	})
+
+	rootCmd.AddCommand(editCmd)
 }

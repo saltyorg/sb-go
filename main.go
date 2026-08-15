@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
+	"github.com/saltyorg/sb-go/ansible"
+	"github.com/saltyorg/sb-go/buildinfo"
 	"github.com/saltyorg/sb-go/cmd"
-	"github.com/saltyorg/sb-go/internal/signals"
-	"github.com/saltyorg/sb-go/internal/ubuntu"
-	"github.com/saltyorg/sb-go/internal/utils"
+	gitops "github.com/saltyorg/sb-go/git"
+	"github.com/saltyorg/sb-go/host"
+	"github.com/saltyorg/sb-go/signals"
 
 	"charm.land/fang/v2"
 	"charm.land/lipgloss/v2"
@@ -57,7 +61,7 @@ func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
 func main() {
 	if os.Geteuid() != 0 {
 		// Relaunch as root with sudo
-		exitCode, err := utils.RelaunchAsRoot()
+		exitCode, err := host.RelaunchAsRoot()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error relaunching as root: %v\n", err)
 		}
@@ -67,7 +71,7 @@ func main() {
 
 	supportedVersions := []string{"20.04", "22.04", "24.04"}
 
-	if err := ubuntu.CheckSupport(supportedVersions); err != nil {
+	if err := host.CheckSupport(supportedVersions); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -103,24 +107,45 @@ func main() {
 	lipgloss.Writer = colorprofile.NewWriter(os.Stdout, os.Environ())
 	lipgloss.Writer.Profile = profile
 
-	// Initialize global signal manager and get context for the application
-	sigManager := signals.GetGlobalManager()
+	// main owns OS signal registration and translates it into application
+	// cancellation plus conventional shell exit codes.
+	sigManager := signals.New()
 	ctx := sigManager.Context()
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signalChannel)
+	go func() {
+		select {
+		case received := <-signalChannel:
+			if received == syscall.SIGTERM {
+				sigManager.Shutdown(143)
+			} else {
+				sigManager.Shutdown(130)
+			}
+		case <-ctx.Done():
+		}
+	}()
 
 	// Execute commands with fang for enhanced CLI UX
 	// Fang provides styled help, formatted errors, and improved presentation
-	if err := fang.Execute(ctx, cmd.GetRootCommand(),
+	executeErr := fang.Execute(ctx, cmd.NewRootCommand(cmd.Dependencies{
+		AnsibleExecutor: ansible.NewCommandExecutor(),
+		GitExecutor:     gitops.NewCommandExecutor(),
+		Shutdown:        sigManager.Shutdown,
+		BuildInfo:       buildinfo.Current(),
+	}),
 		fang.WithErrorHandler(customErrorHandler),
 		fang.WithoutVersion(), // We have a dedicated 'version' command
-	); err != nil {
-		os.Exit(1)
-	}
+	)
+	os.Exit(applicationExitCode(executeErr, sigManager))
+}
 
-	// Exit with appropriate code if shutdown was triggered
-	if sigManager.IsShutdown() {
-		os.Exit(sigManager.ExitCode())
+func applicationExitCode(executeErr error, manager *signals.Manager) int {
+	if manager != nil && manager.IsShutdown() {
+		return manager.ExitCode()
 	}
-
-	// Exit successfully if we got here
-	os.Exit(0)
+	if executeErr != nil {
+		return 1
+	}
+	return 0
 }

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/saltyorg/sb-go/internal/cache"
-	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/ansible"
+	"github.com/saltyorg/sb-go/layout"
 
 	"github.com/spf13/cobra"
 )
@@ -114,15 +114,15 @@ func TestTagParsing(t *testing.T) {
 func TestValidateAndSuggest(t *testing.T) {
 	// Create a temporary cache directory
 	tmpDir := t.TempDir()
-	cacheFile := filepath.Join(tmpDir, "test_cache.json")
+	cacheFile := filepath.Join(tmpDir, "test_ansible.json")
 
 	// Create mock cache data
 	mockCacheData := map[string]any{
-		constants.SaltboxRepoPath: map[string]any{
+		layout.SaltboxRepoPath: map[string]any{
 			"commit": "abc123",
 			"tags":   []any{"plex", "sonarr", "radarr", "tautulli", "nginx"},
 		},
-		constants.SandboxRepoPath: map[string]any{
+		layout.Current().SandboxRepoPath: map[string]any{
 			"commit": "def456",
 			"tags":   []any{"overseerr", "tautulli", "prowlarr", "bazarr"},
 		},
@@ -144,7 +144,7 @@ func TestValidateAndSuggest(t *testing.T) {
 	}{
 		{
 			name:            "valid tags - no suggestions",
-			repoPath:        constants.SaltboxRepoPath,
+			repoPath:        layout.SaltboxRepoPath,
 			providedTags:    []string{"plex", "sonarr"},
 			currentPrefix:   "",
 			otherPrefix:     "sandbox-",
@@ -152,7 +152,7 @@ func TestValidateAndSuggest(t *testing.T) {
 		},
 		{
 			name:            "tag exists in other repo - exact match",
-			repoPath:        constants.SaltboxRepoPath,
+			repoPath:        layout.SaltboxRepoPath,
 			providedTags:    []string{"overseerr"},
 			currentPrefix:   "",
 			otherPrefix:     "sandbox-",
@@ -162,7 +162,7 @@ func TestValidateAndSuggest(t *testing.T) {
 		},
 		{
 			name:            "tag exists in both repos",
-			repoPath:        constants.SaltboxRepoPath,
+			repoPath:        layout.SaltboxRepoPath,
 			providedTags:    []string{"tautulli"},
 			currentPrefix:   "",
 			otherPrefix:     "sandbox-",
@@ -170,7 +170,7 @@ func TestValidateAndSuggest(t *testing.T) {
 		},
 		{
 			name:            "typo in tag - close match",
-			repoPath:        constants.SaltboxRepoPath,
+			repoPath:        layout.SaltboxRepoPath,
 			providedTags:    []string{"plx"},
 			currentPrefix:   "",
 			otherPrefix:     "sandbox-",
@@ -180,7 +180,7 @@ func TestValidateAndSuggest(t *testing.T) {
 		},
 		{
 			name:            "completely invalid tag",
-			repoPath:        constants.SaltboxRepoPath,
+			repoPath:        layout.SaltboxRepoPath,
 			providedTags:    []string{"nonexistent"},
 			currentPrefix:   "",
 			otherPrefix:     "sandbox-",
@@ -188,7 +188,7 @@ func TestValidateAndSuggest(t *testing.T) {
 		},
 		{
 			name:            "multiple invalid tags",
-			repoPath:        constants.SaltboxRepoPath,
+			repoPath:        layout.SaltboxRepoPath,
 			providedTags:    []string{"invalid1", "invalid2"},
 			currentPrefix:   "",
 			otherPrefix:     "sandbox-",
@@ -210,6 +210,10 @@ func TestValidateAndSuggest(t *testing.T) {
 }
 
 func TestForceDiskFullFlagHidden(t *testing.T) {
+	installCmd, _, err := NewRootCommand(Dependencies{}).Find([]string{"install"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	flag := installCmd.Flags().Lookup("force-disk-full")
 	if flag == nil {
 		t.Fatalf("force-disk-full flag not found")
@@ -220,13 +224,10 @@ func TestForceDiskFullFlagHidden(t *testing.T) {
 }
 
 func TestHandleInstallForceDiskFull(t *testing.T) {
-	defer func() { forceDiskFull = false }()
-	forceDiskFull = true
-
 	cmd := &cobra.Command{}
 	cmd.SetContext(context.Background())
 
-	err := handleInstall(cmd, []string{"plex"}, nil, nil, nil, 0, false)
+	err := handleInstall(cmd, []string{"plex"}, nil, nil, nil, 0, false, true)
 	if err == nil {
 		t.Fatalf("expected forced disk full error but got nil")
 	}
@@ -247,7 +248,7 @@ func TestGetValidTags(t *testing.T) {
 	}{
 		{
 			name:        "valid cache with tags",
-			repoPath:    constants.SaltboxRepoPath,
+			repoPath:    layout.SaltboxRepoPath,
 			setupCache:  true,
 			cachedTags:  []any{"tag1", "tag2", "tag3"},
 			expectedLen: 3,
@@ -255,7 +256,7 @@ func TestGetValidTags(t *testing.T) {
 		},
 		{
 			name:        "valid cache with empty tags",
-			repoPath:    constants.SaltboxRepoPath,
+			repoPath:    layout.SaltboxRepoPath,
 			setupCache:  true,
 			cachedTags:  []any{},
 			expectedLen: 0,
@@ -263,7 +264,7 @@ func TestGetValidTags(t *testing.T) {
 		},
 		{
 			name:        "no cache available",
-			repoPath:    constants.SaltboxRepoPath,
+			repoPath:    layout.SaltboxRepoPath,
 			setupCache:  false,
 			expectedLen: 0,
 			expectEmpty: true,
@@ -281,7 +282,7 @@ func TestGetValidTags(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary cache
 			tmpDir := t.TempDir()
-			cacheFile := filepath.Join(tmpDir, "test_cache.json")
+			cacheFile := filepath.Join(tmpDir, "test_ansible.json")
 
 			if tt.setupCache {
 				mockCacheData := map[string]any{
@@ -343,9 +344,9 @@ func TestCacheExistsAndIsValid(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary cache
 			tmpDir := t.TempDir()
-			cacheFile := filepath.Join(tmpDir, "test_cache.json")
+			cacheFile := filepath.Join(tmpDir, "test_ansible.json")
 
-			testCache := &cache.Cache{}
+			testCache := &ansible.Cache{}
 
 			if tt.setupCache {
 				cacheData := map[string]any{
@@ -361,14 +362,14 @@ func TestCacheExistsAndIsValid(t *testing.T) {
 				}
 
 				mockCacheData := map[string]any{
-					constants.SaltboxRepoPath: cacheData,
+					layout.SaltboxRepoPath: cacheData,
 				}
 				data, _ := json.Marshal(mockCacheData)
 				_ = os.WriteFile(cacheFile, data, 0644)
 			}
 
 			// Test the validation logic structure
-			result := cacheExistsAndIsValid(constants.SaltboxRepoPath, testCache, 0)
+			result := cacheExistsAndIsValid(layout.SaltboxRepoPath, testCache, 0)
 			_ = result // Test structure is valid
 		})
 	}
@@ -388,50 +389,50 @@ func TestRunPlaybook(t *testing.T) {
 	}{
 		{
 			name:              "basic playbook run",
-			repoPath:          constants.SaltboxRepoPath,
-			playbookPath:      constants.SaltboxPlaybookPath(),
+			repoPath:          layout.SaltboxRepoPath,
+			playbookPath:      layout.SaltboxPlaybookPath(),
 			tags:              []string{"plex"},
-			ansibleBinaryPath: constants.AnsiblePlaybookBinaryPath,
+			ansibleBinaryPath: layout.AnsiblePlaybookBinaryPath,
 			extraVars:         []string{},
 			skipTags:          []string{},
 			extraArgs:         []string{},
 		},
 		{
 			name:              "playbook with extra vars",
-			repoPath:          constants.SaltboxRepoPath,
-			playbookPath:      constants.SaltboxPlaybookPath(),
+			repoPath:          layout.SaltboxRepoPath,
+			playbookPath:      layout.SaltboxPlaybookPath(),
 			tags:              []string{"plex"},
-			ansibleBinaryPath: constants.AnsiblePlaybookBinaryPath,
+			ansibleBinaryPath: layout.AnsiblePlaybookBinaryPath,
 			extraVars:         []string{"var1=value1", "var2=value2"},
 			skipTags:          []string{},
 			extraArgs:         []string{},
 		},
 		{
 			name:              "playbook with skip tags",
-			repoPath:          constants.SaltboxRepoPath,
-			playbookPath:      constants.SaltboxPlaybookPath(),
+			repoPath:          layout.SaltboxRepoPath,
+			playbookPath:      layout.SaltboxPlaybookPath(),
 			tags:              []string{"plex", "sonarr"},
-			ansibleBinaryPath: constants.AnsiblePlaybookBinaryPath,
+			ansibleBinaryPath: layout.AnsiblePlaybookBinaryPath,
 			extraVars:         []string{},
 			skipTags:          []string{"always"},
 			extraArgs:         []string{},
 		},
 		{
 			name:              "playbook with verbosity",
-			repoPath:          constants.SaltboxRepoPath,
-			playbookPath:      constants.SaltboxPlaybookPath(),
+			repoPath:          layout.SaltboxRepoPath,
+			playbookPath:      layout.SaltboxPlaybookPath(),
 			tags:              []string{"plex"},
-			ansibleBinaryPath: constants.AnsiblePlaybookBinaryPath,
+			ansibleBinaryPath: layout.AnsiblePlaybookBinaryPath,
 			extraVars:         []string{},
 			skipTags:          []string{},
 			extraArgs:         []string{"-vvv"},
 		},
 		{
 			name:              "playbook with all options",
-			repoPath:          constants.SandboxRepoPath,
-			playbookPath:      constants.SandboxPlaybookPath(),
+			repoPath:          layout.Current().SandboxRepoPath,
+			playbookPath:      layout.SandboxPlaybookPath(),
 			tags:              []string{"overseerr", "tautulli"},
-			ansibleBinaryPath: constants.AnsiblePlaybookBinaryPath,
+			ansibleBinaryPath: layout.AnsiblePlaybookBinaryPath,
 			extraVars:         []string{"var1=value1"},
 			skipTags:          []string{"always", "skip"},
 			extraArgs:         []string{"-vv"},

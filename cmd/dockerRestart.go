@@ -7,51 +7,57 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/layout"
+	"github.com/saltyorg/sb-go/terminal"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
-// restartCmd represents the restart command
-var restartCmd = &cobra.Command{
-	Use:   "restart",
-	Short: "Restart Docker containers managed by Saltbox",
-	Long:  `Restart Docker containers managed by Saltbox in dependency order.`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		ignoreContainers, _ := cmd.Flags().GetStringSlice("ignore")
-		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
-		return runDockerRestart(ctx, runner, verbose, ignoreContainers, spinners.CollapseChildTasks)
-	},
+func newDockerRestartCommand() *cobra.Command {
+	opts := struct {
+		verbose bool
+		ignore  []string
+	}{}
+	restartCmd := &cobra.Command{
+		Use:   "restart",
+		Short: "Restart Docker containers managed by Saltbox",
+		Long:  `Restart Docker containers managed by Saltbox in dependency order.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: opts.verbose})
+			return runDockerRestart(ctx, runner, opts.verbose, opts.ignore, terminal.CollapseChildTasks)
+		},
+	}
+	restartCmd.Flags().BoolVarP(&opts.verbose, "verbose", "v", false, "Enable verbose output")
+	restartCmd.Flags().StringSliceVar(&opts.ignore, "ignore", []string{}, "Containers to ignore during restart operation (can be specified multiple times)")
+	return restartCmd
 }
 
 func runDockerRestart(
 	ctx context.Context,
-	runner *spinners.Runner,
+	runner *terminal.Runner,
 	verbose bool,
 	ignoreContainers []string,
-	childDisplay spinners.ChildDisplay,
+	childDisplay terminal.ChildDisplay,
 ) error {
-	return runner.Run(ctx, spinners.TaskSpec{
+	return runner.Run(ctx, terminal.TaskSpec{
 		Running:      "Restarting Docker containers",
 		Success:      "Docker containers restarted",
 		Failure:      "Docker container restart",
 		ChildDisplay: childDisplay,
-	}, func(ctx context.Context, task *spinners.Task) error {
+	}, func(ctx context.Context, task *terminal.Task) error {
 		return performDockerRestart(ctx, task, verbose, ignoreContainers, childDisplay)
 	})
 }
 
 func performDockerRestart(
 	ctx context.Context,
-	task *spinners.Task,
+	task *terminal.Task,
 	verbose bool,
 	ignoreContainers []string,
-	childDisplay spinners.ChildDisplay,
+	childDisplay terminal.ChildDisplay,
 ) error {
 	serviceCheckTask := func() error {
 		exists, running, err := isServiceExistAndRunning(ctx)
@@ -72,27 +78,27 @@ func performDockerRestart(
 	}
 
 	// Check service with spinner
-	if err := task.Run(ctx, spinners.TaskSpec{
+	if err := task.Run(ctx, terminal.TaskSpec{
 		Running: "Checking Docker controller service",
 		Success: "Docker controller service ready",
 		Failure: "Docker controller service check",
-	}, func(context.Context, *spinners.Task) error {
+	}, func(context.Context, *terminal.Task) error {
 		return serviceCheckTask()
 	}); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
 
 	// Create a stop containers task
-	stopContainersTask := func(stopTask *spinners.Task) error {
+	stopContainersTask := func(stopTask *terminal.Task) error {
 		if verbose && len(ignoreContainers) > 0 {
 			stopTask.Info(fmt.Sprintf("Ignoring containers: %s", strings.Join(ignoreContainers, ", ")))
 		}
 
 		client := &http.Client{Timeout: 10 * time.Second}
 		var stopJobResp JobResponse
-		if err := stopTask.Run(ctx, spinners.TaskSpec{Running: "Requesting Docker stop job"}, func(context.Context, *spinners.Task) error {
+		if err := stopTask.Run(ctx, terminal.TaskSpec{Running: "Requesting Docker stop job"}, func(context.Context, *terminal.Task) error {
 			var err error
-			stopJobResp, err = requestDockerJob(ctx, constants.DockerControllerAPIURL+"/stop", ignoreContainers, client)
+			stopJobResp, err = requestDockerJob(ctx, layout.DockerControllerAPIURL+"/stop", ignoreContainers, client)
 			return err
 		}); err != nil {
 			return fmt.Errorf("failed to stop containers: %w", err)
@@ -105,7 +111,7 @@ func performDockerRestart(
 		// Display polling while it is active. The parent stop task collapses
 		// this child on success and retains it when it fails.
 		var success bool
-		if err := stopTask.Run(ctx, spinners.TaskSpec{Running: "Waiting for Docker stop job"}, func(context.Context, *spinners.Task) error {
+		if err := stopTask.Run(ctx, terminal.TaskSpec{Running: "Waiting for Docker stop job"}, func(context.Context, *terminal.Task) error {
 			var err error
 			success, err = waitForJobCompletion(ctx, stopJobResp.JobID)
 			return err
@@ -121,12 +127,12 @@ func performDockerRestart(
 	}
 
 	// Create a start containers task
-	startContainersTask := func(startTask *spinners.Task) error {
+	startContainersTask := func(startTask *terminal.Task) error {
 		client := &http.Client{Timeout: 10 * time.Second}
 		var startJobResp JobResponse
-		if err := startTask.Run(ctx, spinners.TaskSpec{Running: "Requesting Docker start job"}, func(context.Context, *spinners.Task) error {
+		if err := startTask.Run(ctx, terminal.TaskSpec{Running: "Requesting Docker start job"}, func(context.Context, *terminal.Task) error {
 			var err error
-			startJobResp, err = requestDockerJob(ctx, constants.DockerControllerAPIURL+"/start", nil, client)
+			startJobResp, err = requestDockerJob(ctx, layout.DockerControllerAPIURL+"/start", nil, client)
 			return err
 		}); err != nil {
 			return fmt.Errorf("failed to start containers: %w", err)
@@ -139,7 +145,7 @@ func performDockerRestart(
 		// Display polling while it is active. The parent start task collapses
 		// this child on success and retains it when it fails.
 		var success bool
-		if err := startTask.Run(ctx, spinners.TaskSpec{Running: "Waiting for Docker start job"}, func(context.Context, *spinners.Task) error {
+		if err := startTask.Run(ctx, terminal.TaskSpec{Running: "Waiting for Docker start job"}, func(context.Context, *terminal.Task) error {
 			var err error
 			success, err = waitForJobCompletion(ctx, startJobResp.JobID)
 			return err
@@ -155,36 +161,28 @@ func performDockerRestart(
 	}
 
 	// Run spinner for stopping containers
-	stopSpec := spinners.TaskSpec{
+	stopSpec := terminal.TaskSpec{
 		Running:      "Stopping Docker containers",
 		Success:      "Stopped Docker containers",
 		Failure:      "Stop Docker containers",
 		ChildDisplay: childDisplay,
 	}
-	startSpec := spinners.TaskSpec{
+	startSpec := terminal.TaskSpec{
 		Running:      "Starting Docker containers",
 		Success:      "Started Docker containers",
 		Failure:      "Start Docker containers",
 		ChildDisplay: childDisplay,
 	}
 
-	if err := task.Run(ctx, stopSpec, func(_ context.Context, stopTask *spinners.Task) error {
+	if err := task.Run(ctx, stopSpec, func(_ context.Context, stopTask *terminal.Task) error {
 		return stopContainersTask(stopTask)
 	}); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
-	if err := task.Run(ctx, startSpec, func(_ context.Context, startTask *spinners.Task) error {
+	if err := task.Run(ctx, startSpec, func(_ context.Context, startTask *terminal.Task) error {
 		return startContainersTask(startTask)
 	}); err != nil {
 		return fmt.Errorf("error: %v", err)
 	}
 	return nil
-}
-
-func init() {
-	// Add verbose flag
-	restartCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
-
-	// Add ignore flag
-	restartCmd.Flags().StringSlice("ignore", []string{}, "Containers to ignore during restart operation (can be specified multiple times)")
 }

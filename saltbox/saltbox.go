@@ -1,0 +1,294 @@
+package saltbox
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/saltyorg/sb-go/layout"
+	"github.com/saltyorg/sb-go/terminal"
+
+	"go.yaml.in/yaml/v3"
+)
+
+// configValidationJob represents a single config file validation task
+type configValidationJob struct {
+	configPath     string
+	schemaPath     string
+	name           string
+	optional       bool
+	duplicatesOnly bool // Only check for duplicate keys, skip schema validation
+}
+
+// AllSaltboxConfigs validates all Saltbox configuration files using YAML schemas.
+func AllSaltboxConfigs(
+	ctx context.Context,
+	task *terminal.Task,
+	verbose bool,
+) error {
+	return validateAllSaltboxConfigs(ctx, task, verbose)
+}
+
+func validateAllSaltboxConfigs(ctx context.Context, task *terminal.Task, verbose bool) error {
+	// Define all validation jobs
+	jobs := []configValidationJob{
+		{
+			configPath: layout.SaltboxAccountsConfigPath,
+			schemaPath: "/srv/git/saltbox/schema/accounts.schema.yml",
+			name:       "accounts.yml",
+			optional:   false,
+		},
+		{
+			configPath: layout.SaltboxAdvancedSettingsConfigPath,
+			schemaPath: "/srv/git/saltbox/schema/adv_settings.schema.yml",
+			name:       "adv_settings.yml",
+			optional:   false,
+		},
+		{
+			configPath: layout.SaltboxBackupConfigPath,
+			schemaPath: "/srv/git/saltbox/schema/backup_config.schema.yml",
+			name:       "backup_config.yml",
+			optional:   false,
+		},
+		{
+			configPath: layout.SaltboxHetznerVLANConfigPath,
+			schemaPath: "/srv/git/saltbox/schema/hetzner_vlan.schema.yml",
+			name:       "hetzner_vlan.yml",
+			optional:   false,
+		},
+		{
+			configPath: layout.SaltboxSettingsConfigPath,
+			schemaPath: "/srv/git/saltbox/schema/settings.schema.yml",
+			name:       "settings.yml",
+			optional:   false,
+		},
+		{
+			configPath: layout.SaltboxMOTDConfigPath,
+			schemaPath: "/srv/git/saltbox/schema/motd.schema.yml",
+			name:       "motd.yml",
+			optional:   true,
+		},
+		{
+			configPath:     layout.SaltboxInventoryConfigPath,
+			schemaPath:     "", // No schema needed for duplicate-only check
+			name:           "localhost.yml",
+			optional:       true,
+			duplicatesOnly: true,
+		},
+	}
+
+	// Process each validation job
+	for _, job := range jobs {
+		if err := processValidationJob(ctx, task, job, verbose); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateDuplicateKeys checks a YAML file for duplicate keys
+func validateDuplicateKeys(ctx context.Context, task *terminal.Task, node *yaml.Node, name string) error {
+	successMessage := fmt.Sprintf("Validated %s (no duplicates)", name)
+	failureMessage := fmt.Sprintf("Validation of %s (no duplicates)", name)
+
+	validationError := task.Run(ctx, terminal.TaskSpec{
+		Running: fmt.Sprintf("Validating %s (no duplicates)", name),
+		Success: successMessage,
+		Failure: failureMessage,
+	}, func(context.Context, *terminal.Task) error {
+		return checkDuplicateKeys(node)
+	})
+
+	if validationError != nil {
+		return fmt.Errorf("%s: %w", failureMessage, validationError)
+	}
+
+	return nil
+}
+
+// parseYAMLFile reads and parses a YAML file to ensure syntax validity.
+func parseYAMLFile(filePath string) ([]byte, *yaml.Node, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading file: %w", err)
+	}
+
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		return nil, nil, fmt.Errorf("invalid YAML in %s: %w", filePath, err)
+	}
+
+	return data, &node, nil
+}
+
+// checkDuplicateKeys detects duplicate keys from a parsed YAML node tree.
+func checkDuplicateKeys(node *yaml.Node) error {
+	// Check for duplicates recursively
+	duplicates := findDuplicateKeys(node, "")
+	if len(duplicates) > 0 {
+		var errorMsg strings.Builder
+		errorMsg.WriteString("duplicate keys found:")
+		for _, dup := range duplicates {
+			errorMsg.WriteString(fmt.Sprintf("\n  - %s", dup))
+		}
+		return fmt.Errorf("%s", errorMsg.String())
+	}
+
+	return nil
+}
+
+// findDuplicateKeys recursively searches for duplicate keys in a YAML node tree
+func findDuplicateKeys(node *yaml.Node, path string) []string {
+	var duplicates []string
+
+	// Only mapping nodes can have duplicate keys
+	switch node.Kind {
+	case yaml.MappingNode:
+		keysSeen := make(map[string]int)
+
+		// In a mapping node, content alternates between key and value nodes
+		for i := 0; i < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+
+			key := keyNode.Value
+			currentPath := key
+			if path != "" {
+				currentPath = path + "." + key
+			}
+
+			// Check if we've seen this key before
+			if count, exists := keysSeen[key]; exists {
+				keysSeen[key] = count + 1
+				duplicates = append(duplicates, fmt.Sprintf("%s (appears %d times)", currentPath, count+1))
+			} else {
+				keysSeen[key] = 1
+			}
+
+			// Recursively check the value node
+			duplicates = append(duplicates, findDuplicateKeys(valueNode, currentPath)...)
+		}
+	case yaml.SequenceNode:
+		// For sequence nodes, check each item
+		for i, item := range node.Content {
+			itemPath := fmt.Sprintf("%s[%d]", path, i)
+			duplicates = append(duplicates, findDuplicateKeys(item, itemPath)...)
+		}
+	case yaml.DocumentNode:
+		// For document nodes, check the content
+		for _, item := range node.Content {
+			duplicates = append(duplicates, findDuplicateKeys(item, path)...)
+		}
+	}
+
+	return duplicates
+}
+
+// processValidationJob handles validation of a single config file
+func processValidationJob(ctx context.Context, task *terminal.Task, job configValidationJob, verbose bool) error {
+	// Check if config file exists
+	if _, err := os.Stat(job.configPath); err != nil {
+		if job.optional {
+			if verbose {
+				fmt.Printf("%s not found, skipping validation\n", job.name)
+			}
+			return nil
+		}
+		return fmt.Errorf("required config file not found: %s", job.configPath)
+	}
+
+	// Validate YAML syntax before any other validation steps.
+	configFile, yamlNode, err := parseYAMLFile(job.configPath)
+	if err != nil {
+		return err
+	}
+
+	// If this is a duplicate-only check, skip schema validation
+	if job.duplicatesOnly {
+		return validateDuplicateKeys(ctx, task, yamlNode, job.name)
+	}
+
+	// Check if schema file exists
+	schemaPath := job.schemaPath
+	if _, err := os.Stat(schemaPath); err != nil {
+		return fmt.Errorf("schema file not found: %s", schemaPath)
+	}
+
+	// Perform validation with spinner
+	successMessage := fmt.Sprintf("Validated %s", job.name)
+	failureMessage := fmt.Sprintf("Validation of %s", job.name)
+
+	validationError := task.Run(ctx, terminal.TaskSpec{
+		Running:      fmt.Sprintf("Validating %s", job.name),
+		Success:      successMessage,
+		Failure:      failureMessage,
+		ChildDisplay: terminal.RetainChildTasks,
+	}, func(ctx context.Context, validationTask *terminal.Task) error {
+		return validateConfigWithSchema(ctx, validationTask, configFile, job.configPath, schemaPath, verbose)
+	})
+
+	if validationError != nil {
+		return fmt.Errorf("%s: %w", failureMessage, validationError)
+	}
+
+	return nil
+}
+
+// validateConfigWithSchema validates a config file against its YAML schema
+func validateConfigWithSchema(ctx context.Context, task *terminal.Task, configFile []byte, configPath, schemaPath string, verbose bool) error {
+	startTime := time.Now()
+	terminal.DebugBool(verbose, "validateConfigWithSchema called with config=%s, schema=%s at %v", configPath, schemaPath, startTime)
+
+	// Load into generic map for structure checking
+	var inputMap map[string]any
+	if err := yaml.Unmarshal(configFile, &inputMap); err != nil {
+		return fmt.Errorf("error unmarshaling config file (%s): %w", configPath, err)
+	}
+
+	// Load the schema for schema-based validation
+	schema, err := LoadSchema(schemaPath, verbose)
+	if err != nil {
+		return fmt.Errorf("failed to load schema file %s: %w", schemaPath, err)
+	}
+
+	// Perform schema validation with async API checks
+	asyncCtx, syncErr := schema.ValidateWithTypeFlexibilityAsync(ctx, task, inputMap)
+	if syncErr != nil {
+		return fmt.Errorf("schema validation failed: %w", syncErr)
+	}
+
+	syncDuration := time.Since(startTime)
+	terminal.DebugBool(verbose, "Synchronous schema validation completed successfully in %v", syncDuration)
+
+	// Wait for async API validations to complete
+	if asyncCtx != nil {
+		asyncStartTime := time.Now()
+		terminal.DebugBool(verbose, "Waiting for async API validations to complete")
+
+		// TODO: In the future, we could show progress here like:
+		// - "Validating Cloudflare API credentials..."
+		// - "Validating Docker Hub credentials..."
+		// For now, just wait for completion
+
+		apiErrors := asyncCtx.Wait()
+		if len(apiErrors) > 0 {
+			// Combine all API validation errors
+			var errorMsg strings.Builder
+			errorMsg.WriteString("API validation failed:")
+			for _, apiErr := range apiErrors {
+				errorMsg.WriteString(fmt.Sprintf("\n  - %v", apiErr))
+			}
+			// Fixed: Use %s format specifier to prevent format string vulnerability
+			return fmt.Errorf("%s", errorMsg.String())
+		}
+		asyncDuration := time.Since(asyncStartTime)
+		terminal.DebugBool(verbose, "Async API validations completed successfully in %v", asyncDuration)
+	}
+
+	duration := time.Since(startTime)
+	terminal.DebugBool(verbose, "validateConfigWithSchema completed for %s in %v", configPath, duration)
+	return nil
+}

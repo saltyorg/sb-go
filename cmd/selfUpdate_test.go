@@ -6,23 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/saltyorg/sb-go/internal/runtime"
-	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/buildinfo"
+	"github.com/saltyorg/sb-go/terminal"
 )
 
 func TestDisabledBuildSkipsSelfUpdateCheck(t *testing.T) {
-	previous := runtime.DisableSelfUpdate
-	runtime.DisableSelfUpdate = "true"
-	t.Cleanup(func() {
-		runtime.DisableSelfUpdate = previous
-	})
-
 	var output bytes.Buffer
-	runner := spinners.NewRunner(spinners.RunnerOptions{
+	runner := terminal.NewRunner(terminal.RunnerOptions{
 		Verbose: true,
 		Output:  &output,
 	})
-	updated, err := doSelfUpdate(context.Background(), runner, true, false, "", false)
+	updated, err := doSelfUpdate(context.Background(), runner, buildinfo.Info{Version: "1.0.0", DisableSelfUpdate: true}, true, false, "", false)
 	if err != nil {
 		t.Fatalf("disabled self-update returned an error: %v", err)
 	}
@@ -31,5 +25,18 @@ func TestDisabledBuildSkipsSelfUpdateCheck(t *testing.T) {
 	}
 	if got := output.String(); !strings.Contains(got, "Self-update is disabled in this build") {
 		t.Fatalf("disabled self-update message missing: %q", got)
+	}
+}
+
+func TestDisabledSelfUpdateVerboseFlagEmitsDebugOutput(t *testing.T) {
+	var output bytes.Buffer
+	command := newSelfUpdateCommand(buildinfo.Info{Version: "1.0.0", DisableSelfUpdate: true})
+	command.SetErr(&output)
+	command.SetArgs([]string{"--verbose"})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if got := output.String(); !strings.Contains(got, "Debug: Self-update is disabled") {
+		t.Fatalf("verbose debug output missing: %q", got)
 	}
 }

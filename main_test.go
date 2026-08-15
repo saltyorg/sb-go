@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"slices"
 	"testing"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/signals"
+	"github.com/saltyorg/sb-go/signals"
 )
 
 func TestMainPackageStructure(t *testing.T) {
@@ -31,7 +32,7 @@ func TestMainPackageStructure(t *testing.T) {
 	})
 
 	t.Run("signal manager initialization", func(t *testing.T) {
-		sigManager := signals.GetGlobalManager()
+		sigManager := signals.New()
 
 		if sigManager == nil {
 			t.Error("Signal manager should not be nil")
@@ -52,7 +53,7 @@ func TestMainPackageStructure(t *testing.T) {
 	})
 
 	t.Run("signal manager shutdown state", func(t *testing.T) {
-		sigManager := signals.GetGlobalManager()
+		sigManager := signals.New()
 
 		// Check initial state
 		isShutdown := sigManager.IsShutdown()
@@ -115,6 +116,20 @@ func TestMainPackageStructure(t *testing.T) {
 		args := os.Args[1:] // Exclude program name
 		_ = args            // May be empty if no args passed
 	})
+}
+
+func TestApplicationExitCodePrefersRequestedShutdown(t *testing.T) {
+	manager := signals.New()
+	manager.Shutdown(130)
+	if got := applicationExitCode(errors.New("command interrupted"), manager); got != 130 {
+		t.Fatalf("applicationExitCode() = %d, want 130", got)
+	}
+	if got := applicationExitCode(errors.New("command failed"), signals.New()); got != 1 {
+		t.Fatalf("applicationExitCode() = %d, want 1", got)
+	}
+	if got := applicationExitCode(nil, signals.New()); got != 0 {
+		t.Fatalf("applicationExitCode() = %d, want 0", got)
+	}
 }
 
 func TestContextWithTimeout(t *testing.T) {
@@ -286,22 +301,21 @@ func TestExitCodeBehavior(t *testing.T) {
 }
 
 func TestSignalManagerIntegration(t *testing.T) {
-	t.Run("get global manager multiple times", func(t *testing.T) {
-		mgr1 := signals.GetGlobalManager()
-		mgr2 := signals.GetGlobalManager()
+	t.Run("construct independent managers", func(t *testing.T) {
+		mgr1 := signals.New()
+		mgr2 := signals.New()
 
 		if mgr1 == nil || mgr2 == nil {
 			t.Error("Signal managers should not be nil")
 		}
 
-		// Both calls should return the same instance (singleton pattern)
-		if mgr1 != mgr2 {
-			t.Error("GetGlobalManager should return the same instance")
+		if mgr1 == mgr2 {
+			t.Error("separate managers should not share process state")
 		}
 	})
 
 	t.Run("manager context validity", func(t *testing.T) {
-		mgr := signals.GetGlobalManager()
+		mgr := signals.New()
 		ctx := mgr.Context()
 
 		if ctx == nil {
@@ -345,7 +359,7 @@ func TestMainFlowStructure(t *testing.T) {
 	})
 
 	t.Run("command execution flow", func(t *testing.T) {
-		sigManager := signals.GetGlobalManager()
+		sigManager := signals.New()
 		ctx := sigManager.Context()
 
 		if ctx == nil {

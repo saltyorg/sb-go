@@ -7,14 +7,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/saltyorg/sb-go/internal/cache"
-	"github.com/saltyorg/sb-go/internal/constants"
+	"github.com/saltyorg/sb-go/ansible"
+	"github.com/saltyorg/sb-go/layout"
 
 	"github.com/spf13/cobra"
 )
 
 // TestInstallCmdStructure tests the install command structure and flags
 func TestInstallCmdStructure(t *testing.T) {
+	installCmd, _, err := NewRootCommand(Dependencies{}).Find([]string{"install"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	t.Run("command initialization", func(t *testing.T) {
 		if installCmd == nil {
 			t.Fatal("installCmd should be initialized")
@@ -336,8 +341,8 @@ func TestCacheExistsAndIsValidFunction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary cache file for this test
 			tmpDir := t.TempDir()
-			cacheFile := filepath.Join(tmpDir, "cache.json")
-			testCache, err := cache.NewCacheWithFile(cacheFile)
+			cacheFile := filepath.Join(tmpDir, "ansible.json")
+			testCache, err := ansible.NewCacheWithFile(cacheFile)
 			if err != nil {
 				t.Fatalf("Failed to create cache: %v", err)
 			}
@@ -356,10 +361,10 @@ func TestCacheExistsAndIsValidFunction(t *testing.T) {
 				}
 
 				// Set cache directly in the cache instance
-				_ = testCache.SetRepoCache(constants.SaltboxRepoPath, cacheData)
+				_ = testCache.SetRepoCache(layout.SaltboxRepoPath, cacheData)
 			}
 
-			result := cacheExistsAndIsValid(constants.SaltboxRepoPath, testCache, 0)
+			result := cacheExistsAndIsValid(layout.SaltboxRepoPath, testCache, 0)
 
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v", tt.expected, result)
@@ -426,12 +431,12 @@ func TestGetValidTagsLogic(t *testing.T) {
 	}{
 		{
 			name:     "saltbox repo",
-			repoPath: constants.SaltboxRepoPath,
+			repoPath: layout.SaltboxRepoPath,
 			valid:    true,
 		},
 		{
 			name:     "sandbox repo",
-			repoPath: constants.SandboxRepoPath,
+			repoPath: layout.Current().SandboxRepoPath,
 			valid:    true,
 		},
 		{
@@ -445,10 +450,10 @@ func TestGetValidTagsLogic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			playbookPath := ""
 			switch tt.repoPath {
-			case constants.SaltboxRepoPath:
-				playbookPath = constants.SaltboxPlaybookPath()
-			case constants.SandboxRepoPath:
-				playbookPath = constants.SandboxPlaybookPath()
+			case layout.SaltboxRepoPath:
+				playbookPath = layout.SaltboxPlaybookPath()
+			case layout.Current().SandboxRepoPath:
+				playbookPath = layout.SandboxPlaybookPath()
 			}
 
 			if tt.valid && playbookPath == "" {
@@ -471,7 +476,7 @@ func TestHandleInstallFunctionStructure(t *testing.T) {
 	})
 
 	t.Run("cache creation", func(t *testing.T) {
-		_, err := cache.NewCache()
+		_, err := ansible.NewCache()
 		if err != nil {
 			t.Errorf("Cache creation failed: %v", err)
 		}
@@ -500,14 +505,14 @@ func TestValidateAndSuggestStructure(t *testing.T) {
 	}{
 		{
 			name:          "saltbox repo",
-			repoPath:      constants.SaltboxRepoPath,
+			repoPath:      layout.SaltboxRepoPath,
 			currentPrefix: "",
 			otherPrefix:   "sandbox-",
 			expectedNames: [2]string{"Saltbox", "Sandbox"},
 		},
 		{
 			name:          "sandbox repo",
-			repoPath:      constants.SandboxRepoPath,
+			repoPath:      layout.Current().SandboxRepoPath,
 			currentPrefix: "sandbox-",
 			otherPrefix:   "",
 			expectedNames: [2]string{"Sandbox", "Saltbox"},
@@ -518,7 +523,7 @@ func TestValidateAndSuggestStructure(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repoName := "Saltbox"
 			otherRepoName := "Sandbox"
-			if tt.repoPath == constants.SandboxRepoPath {
+			if tt.repoPath == layout.Current().SandboxRepoPath {
 				repoName = "Sandbox"
 				otherRepoName = "Saltbox"
 			}

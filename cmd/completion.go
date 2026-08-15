@@ -6,57 +6,52 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/saltyorg/sb-go/internal/cache"
+	"github.com/saltyorg/sb-go/ansible"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
-// completionCmd represents the completion command
-var completionCmd = &cobra.Command{
-	Use:    "completion",
-	Hidden: true,
-	Short:  "Install shell completion for sb",
-	Args:   cobra.NoArgs,
-	Long: `Install shell completion scripts for sb.
+func addCompletionCommand(rootCmd *cobra.Command) {
+	completionCmd := &cobra.Command{
+		Use:    "completion",
+		Hidden: true,
+		Short:  "Install shell completion for sb",
+		Args:   cobra.NoArgs,
+		Long: `Install shell completion scripts for sb.
 
 This command installs completion scripts system-wide on Ubuntu.
 Supported shells: bash, zsh
 
 After installation, restart your shell or source the completion file.`,
-}
-
-// bashCompletionCmd installs bash completion
-var bashCompletionCmd = &cobra.Command{
-	Use:   "bash",
-	Short: "Install bash completion",
-	Args:  cobra.NoArgs,
-	Long: `Installs bash completion script for all binary names (including symlinks).
+	}
+	bashCompletionCmd := &cobra.Command{
+		Use:   "bash",
+		Short: "Install bash completion",
+		Args:  cobra.NoArgs,
+		Long: `Installs bash completion script for all binary names (including symlinks).
 
 After installation, restart your shell or source the completion file.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return installCompletionsForAllNames("bash")
-	},
-}
-
-// zshCompletionCmd installs zsh completion
-var zshCompletionCmd = &cobra.Command{
-	Use:   "zsh",
-	Short: "Install zsh completion",
-	Args:  cobra.NoArgs,
-	Long: `Installs zsh completion script for all binary names (including symlinks).
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return installCompletionsForAllNames(rootCmd, "bash")
+		},
+	}
+	zshCompletionCmd := &cobra.Command{
+		Use:   "zsh",
+		Short: "Install zsh completion",
+		Args:  cobra.NoArgs,
+		Long: `Installs zsh completion script for all binary names (including symlinks).
 
 After installation, restart your shell or run:
   autoload -U compinit && compinit`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return installCompletionsForAllNames("zsh")
-	},
-}
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return installCompletionsForAllNames(rootCmd, "zsh")
+		},
+	}
 
-func init() {
-	rootCmd.AddCommand(completionCmd)
 	completionCmd.AddCommand(bashCompletionCmd)
 	completionCmd.AddCommand(zshCompletionCmd)
+	rootCmd.AddCommand(completionCmd)
 }
 
 // getAllBinaryNames returns the binary name plus all symlinks pointing to it
@@ -124,7 +119,7 @@ func findSymlinksToExecutable() []string {
 }
 
 // installCompletionsForAllNames installs completion for all binary names (main binary + symlinks)
-func installCompletionsForAllNames(shellName string) error {
+func installCompletionsForAllNames(rootCmd *cobra.Command, shellName string) error {
 	names := getAllBinaryNames()
 	var installedPaths []string
 
@@ -136,12 +131,12 @@ func installCompletionsForAllNames(shellName string) error {
 		case "bash":
 			targetPath = fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
 			generateFunc = func(path string) error {
-				return generateStaticBashCompletion(path, cmdName)
+				return generateStaticBashCompletion(rootCmd, path, cmdName)
 			}
 		case "zsh":
 			targetPath = fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
 			generateFunc = func(path string) error {
-				return generateStaticZshCompletion(path, cmdName)
+				return generateStaticZshCompletion(rootCmd, path, cmdName)
 			}
 		}
 
@@ -181,9 +176,9 @@ func installCompletionsForAllNames(shellName string) error {
 // generateStaticBashCompletion creates a hybrid bash completion script:
 // - Uses Cobra's native completion for all commands and subcommands
 // - Adds custom tag completion logic for the 'install' command
-func generateStaticBashCompletion(path, cmdName string) error {
+func generateStaticBashCompletion(rootCmd *cobra.Command, path, cmdName string) error {
 	// Load cache and get tags for install command
-	cacheInstance, err := cache.NewCache()
+	cacheInstance, err := ansible.NewCache()
 	if err != nil {
 		return fmt.Errorf("failed to load cache: %w", err)
 	}
@@ -434,9 +429,9 @@ func formatTagsForBash(tags []string) string {
 // generateStaticZshCompletion creates a hybrid zsh completion script:
 // - Uses Cobra's native completion for all commands and subcommands
 // - Adds custom tag completion logic for the 'install' command
-func generateStaticZshCompletion(path, cmdName string) error {
+func generateStaticZshCompletion(rootCmd *cobra.Command, path, cmdName string) error {
 	// Load cache and get tags for install command
-	cacheInstance, err := cache.NewCache()
+	cacheInstance, err := ansible.NewCache()
 	if err != nil {
 		return fmt.Errorf("failed to load cache: %w", err)
 	}

@@ -15,10 +15,10 @@ CGO_ENABLED := 0
 GO_FLAGS := -trimpath
 GO_TEST_FLAGS ?=
 LDFLAGS := -w -s \
-	-X '$(MODULE)/internal/runtime.Version=$(VERSION)' \
-	-X '$(MODULE)/internal/runtime.GitCommit=$(GIT_COMMIT)' \
-	-X '$(MODULE)/internal/runtime.UVVersion=$(UV_VERSION)' \
-	-X '$(MODULE)/internal/runtime.DisableSelfUpdate=$(DISABLE_SELF_UPDATE)'
+	-X '$(MODULE)/buildinfo.version=$(VERSION)' \
+	-X '$(MODULE)/buildinfo.gitCommit=$(GIT_COMMIT)' \
+	-X '$(MODULE)/buildinfo.uvVersion=$(UV_VERSION)' \
+	-X '$(MODULE)/buildinfo.disableSelfUpdate=$(DISABLE_SELF_UPDATE)'
 
 # Build output
 BINARY_PATH := $(BUILD_DIR)/$(BINARY_NAME)

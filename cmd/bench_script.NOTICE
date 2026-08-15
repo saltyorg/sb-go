@@ -1,0 +1,10 @@
+This product includes a modified snapshot of bench.sh from
+https://github.com/teddysun/across at commit
+fdb40962837b2e24bc94b87c2b1786ad2308489a.
+
+Copyright (C) 2015-2026 Teddysun <i@teddysun.com>
+Licensed under the Apache License, Version 2.0.
+
+The runtime download and extraction of Speedtest were removed. sb-go supplies
+an independently downloaded and SHA-256-verified Speedtest executable through
+SB_SPEEDTEST_BIN.

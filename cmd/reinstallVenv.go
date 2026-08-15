@@ -4,49 +4,52 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/saltyorg/sb-go/internal/spinners"
-	"github.com/saltyorg/sb-go/internal/utils"
-	"github.com/saltyorg/sb-go/internal/venv"
+	"github.com/saltyorg/sb-go/host"
+	"github.com/saltyorg/sb-go/python"
+	"github.com/saltyorg/sb-go/terminal"
 
 	"github.com/spf13/cobra"
 )
 
 // reinstallVenvCmd represents the reinstall-venv command
-var reinstallVenvCmd = &cobra.Command{
-	Use:   "reinstall-venv",
-	Short: "Reinstall the Ansible virtual environment",
-	Long:  `Reinstall the Ansible virtual environment`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		return handleReinstallVenv(ctx, verbose)
-	},
+func newReinstallVenvCommand() *cobra.Command {
+	var verbose bool
+	reinstallVenvCmd := &cobra.Command{
+		Use:   "reinstall-venv",
+		Short: "Reinstall the Ansible virtual environment",
+		Long:  `Reinstall the Ansible virtual environment`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			return handleReinstallVenv(ctx, verbose)
+		},
+	}
+	reinstallVenvCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	return reinstallVenvCmd
 }
 
-func init() {
-	rootCmd.AddCommand(reinstallVenvCmd)
-	reinstallVenvCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+func addReinstallVenvCommand(rootCmd *cobra.Command) {
+	rootCmd.AddCommand(newReinstallVenvCommand())
 }
 
 // handleReinstallVenv handles the reinstallation of the Ansible virtual environment.
 func handleReinstallVenv(ctx context.Context, verbose bool) error {
-	runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
+	runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: verbose})
 
 	// Get Saltbox user
-	saltboxUser, err := utils.GetSaltboxUser()
+	saltboxUser, err := host.GetSaltboxUser()
 	if err != nil {
 		return fmt.Errorf("error getting saltbox user: %w", err)
 	}
 
 	// Manage Ansible venv with the force recreate flag set to true
 	// This function already has internal spinners
-	return runner.Run(ctx, spinners.TaskSpec{
+	return runner.Run(ctx, terminal.TaskSpec{
 		Running:      "Reinstalling Ansible virtual environment",
 		Success:      "Ansible virtual environment reinstalled",
-		ChildDisplay: spinners.RetainChildTasks,
-	}, func(ctx context.Context, task *spinners.Task) error {
-		if err := venv.ManageAnsibleVenv(ctx, task, true, saltboxUser, verbose); err != nil {
+		ChildDisplay: terminal.RetainChildTasks,
+	}, func(ctx context.Context, task *terminal.Task) error {
+		if err := python.ManageAnsibleVenv(ctx, task, true, saltboxUser, verbose); err != nil {
 			return fmt.Errorf("error managing Ansible venv: %w", err)
 		}
 		return nil

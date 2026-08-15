@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/saltyorg/sb-go/internal/motd"
+	"github.com/saltyorg/sb-go/motd"
 
 	"github.com/spf13/cobra"
 )
@@ -51,53 +51,54 @@ type motdConfig struct {
 }
 
 // motdCmd represents the motd command
-var motdCmd = &cobra.Command{
-	Use:   "motd",
-	Short: "Display system information",
-	Long: `Displays system information including Ubuntu distribution version,
+func newMOTDCommand() *cobra.Command {
+	config := &motdConfig{}
+	motdCmd := &cobra.Command{
+		Use:   "motd",
+		Short: "Display system information",
+		Long: `Displays system information including Ubuntu distribution version,
 kernel version, system uptime, CPU load, memory usage, disk usage,
 last login, user sessions, process information, and system update status based on flags provided.`,
-	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get flag values and create config
-		config := &motdConfig{}
-		config.showAll, _ = cmd.Flags().GetBool("all")
-		config.showAptStatus, _ = cmd.Flags().GetBool("apt")
-		config.showCPU, _ = cmd.Flags().GetBool("cpu-info")
-		config.showCpuAverages, _ = cmd.Flags().GetBool("cpu")
-		config.showDisk, _ = cmd.Flags().GetBool("disk")
-		config.showDistribution, _ = cmd.Flags().GetBool("distro")
-		config.showDocker, _ = cmd.Flags().GetBool("docker")
-		config.showEmby, _ = cmd.Flags().GetBool("emby")
-		config.showGPU, _ = cmd.Flags().GetBool("gpu")
-		config.showJellyfin, _ = cmd.Flags().GetBool("jellyfin")
-		config.showKernel, _ = cmd.Flags().GetBool("kernel")
-		config.showLastLogin, _ = cmd.Flags().GetBool("login")
-		config.showMemory, _ = cmd.Flags().GetBool("memory")
-		config.showNzbget, _ = cmd.Flags().GetBool("nzbget")
-		config.showPlex, _ = cmd.Flags().GetBool("plex")
-		config.showProcesses, _ = cmd.Flags().GetBool("processes")
-		config.showQbittorrent, _ = cmd.Flags().GetBool("qbittorrent")
-		config.showQueues, _ = cmd.Flags().GetBool("queues")
-		config.showRebootRequired, _ = cmd.Flags().GetBool("reboot")
-		config.showRtorrent, _ = cmd.Flags().GetBool("rtorrent")
-		config.showSabnzbd, _ = cmd.Flags().GetBool("sabnzbd")
-		config.showSessions, _ = cmd.Flags().GetBool("sessions")
-		config.showSystemd, _ = cmd.Flags().GetBool("systemd")
-		config.showTraefik, _ = cmd.Flags().GetBool("traefik")
-		config.showUptime, _ = cmd.Flags().GetBool("uptime")
-		config.bannerFile, _ = cmd.Flags().GetString("banner-file")
-		config.bannerFileToiletArgs, _ = cmd.Flags().GetString("banner-file-toilet")
-		config.bannerFont, _ = cmd.Flags().GetString("font")
-		config.bannerFontExplicit = cmd.Flags().Changed("font")
-		config.bannerTitle, _ = cmd.Flags().GetString("title")
-		config.bannerType, _ = cmd.Flags().GetString("type")
-		config.verbosity, _ = cmd.Flags().GetCount("verbose")
-		config.shareMode, _ = cmd.Flags().GetBool("share")
-		config.generateConfig, _ = cmd.Flags().GetBool("generate-config")
-
-		return runMotdCommand(cmd.Context(), config)
-	},
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			config.bannerFontExplicit = cmd.Flags().Changed("font")
+			return runMotdCommand(cmd.Context(), config)
+		},
+	}
+	motdCmd.Flags().BoolVar(&config.showAll, "all", false, "Show all information")
+	motdCmd.Flags().BoolVar(&config.showAptStatus, "apt", false, "Show apt package status")
+	motdCmd.Flags().BoolVar(&config.showCpuAverages, "cpu", false, "Show CPU load averages")
+	motdCmd.Flags().BoolVar(&config.showCPU, "cpu-info", false, "Show CPU model and core count information")
+	motdCmd.Flags().BoolVar(&config.showDisk, "disk", false, "Show disk usage for all partitions")
+	motdCmd.Flags().BoolVar(&config.showDistribution, "distro", false, "Show distribution information")
+	motdCmd.Flags().BoolVar(&config.showDocker, "docker", false, "Show Docker container information")
+	motdCmd.Flags().BoolVar(&config.showEmby, "emby", false, "Show Emby streaming information")
+	motdCmd.Flags().BoolVar(&config.showGPU, "gpu", false, "Show GPU information")
+	motdCmd.Flags().BoolVar(&config.showJellyfin, "jellyfin", false, "Show Jellyfin streaming information")
+	motdCmd.Flags().BoolVar(&config.showKernel, "kernel", false, "Show kernel information")
+	motdCmd.Flags().BoolVar(&config.showLastLogin, "login", false, "Show last login information")
+	motdCmd.Flags().BoolVar(&config.showMemory, "memory", false, "Show memory usage")
+	motdCmd.Flags().BoolVar(&config.showNzbget, "nzbget", false, "Show NZBGet queue information")
+	motdCmd.Flags().BoolVar(&config.showPlex, "plex", false, "Show Plex streaming information")
+	motdCmd.Flags().BoolVar(&config.showProcesses, "processes", false, "Show process count")
+	motdCmd.Flags().BoolVar(&config.showQbittorrent, "qbittorrent", false, "Show qBittorrent queue information")
+	motdCmd.Flags().BoolVar(&config.showQueues, "queues", false, "Show download queue information from Sonarr, Radarr, etc.")
+	motdCmd.Flags().BoolVar(&config.showRebootRequired, "reboot", false, "Show if reboot is required")
+	motdCmd.Flags().BoolVar(&config.showRtorrent, "rtorrent", false, "Show rTorrent queue information")
+	motdCmd.Flags().BoolVar(&config.showSabnzbd, "sabnzbd", false, "Show SABnzbd queue information")
+	motdCmd.Flags().BoolVar(&config.showSessions, "sessions", false, "Show active user sessions")
+	motdCmd.Flags().BoolVar(&config.showSystemd, "systemd", false, "Show systemd services status")
+	motdCmd.Flags().BoolVar(&config.showTraefik, "traefik", false, "Show Traefik router status information")
+	motdCmd.Flags().BoolVar(&config.showUptime, "uptime", false, "Show uptime information")
+	motdCmd.Flags().CountVarP(&config.verbosity, "verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
+	motdCmd.Flags().BoolVar(&config.shareMode, "share", false, "Obscure sensitive information like IP addresses for sharing screenshots")
+	motdCmd.Flags().BoolVar(&config.generateConfig, "generate-config", false, "Print an example MOTD configuration file to stdout")
+	motdCmd.Flags().StringVar(&config.bannerTitle, "title", "Saltbox", "Text to display in the banner")
+	motdCmd.Flags().StringVar(&config.bannerType, "type", "peek", "Banner type for boxes (use 'none' to omit box)")
+	motdCmd.Flags().StringVar(&config.bannerFont, "font", "ivrit", "Font for toilet cli")
+	motdCmd.Flags().StringVar(&config.bannerFile, "banner-file", "", "Path to a file containing a custom banner to display")
+	motdCmd.Flags().StringVar(&config.bannerFileToiletArgs, "banner-file-toilet", "", "A string of arguments for toilet when using --banner-file")
+	return motdCmd
 }
 
 // runMotdCommand handles the main logic for the motd command
@@ -199,8 +200,7 @@ func runMotdCommand(ctx context.Context, mcfg *motdConfig) error {
 }
 
 func displayMotd(ctx context.Context, config *motdConfig, verbose bool) error {
-	// Set share mode if enabled
-	motd.SetShareMode(config.shareMode)
+	ctx = motd.WithShareMode(ctx, config.shareMode)
 
 	// Display a banner from a file if provided. This takes precedence.
 	if config.bannerFile != "" {
@@ -338,49 +338,6 @@ func displayMotd(ctx context.Context, config *motdConfig, verbose bool) error {
 	return nil
 }
 
-func init() {
-	rootCmd.AddCommand(motdCmd)
-
-	// Define flags for enabling/disabling components (all default to false - opt-in)
-	motdCmd.Flags().Bool("all", false, "Show all information")
-	motdCmd.Flags().Bool("apt", false, "Show apt package status")
-	motdCmd.Flags().Bool("cpu", false, "Show CPU load averages")
-	motdCmd.Flags().Bool("cpu-info", false, "Show CPU model and core count information")
-	motdCmd.Flags().Bool("disk", false, "Show disk usage for all partitions")
-	motdCmd.Flags().Bool("distro", false, "Show distribution information")
-	motdCmd.Flags().Bool("docker", false, "Show Docker container information")
-	motdCmd.Flags().Bool("emby", false, "Show Emby streaming information")
-	motdCmd.Flags().Bool("gpu", false, "Show GPU information")
-	motdCmd.Flags().Bool("jellyfin", false, "Show Jellyfin streaming information")
-	motdCmd.Flags().Bool("kernel", false, "Show kernel information")
-	motdCmd.Flags().Bool("login", false, "Show last login information")
-	motdCmd.Flags().Bool("memory", false, "Show memory usage")
-	motdCmd.Flags().Bool("nzbget", false, "Show NZBGet queue information")
-	motdCmd.Flags().Bool("plex", false, "Show Plex streaming information")
-	motdCmd.Flags().Bool("processes", false, "Show process count")
-	motdCmd.Flags().Bool("qbittorrent", false, "Show qBittorrent queue information")
-	motdCmd.Flags().Bool("queues", false, "Show download queue information from Sonarr, Radarr, etc.")
-	motdCmd.Flags().Bool("reboot", false, "Show if reboot is required")
-	motdCmd.Flags().Bool("rtorrent", false, "Show rTorrent queue information")
-	motdCmd.Flags().Bool("sabnzbd", false, "Show SABnzbd queue information")
-	motdCmd.Flags().Bool("sessions", false, "Show active user sessions")
-	motdCmd.Flags().Bool("systemd", false, "Show systemd services status")
-	motdCmd.Flags().Bool("traefik", false, "Show Traefik router status information")
-	motdCmd.Flags().Bool("uptime", false, "Show uptime information")
-
-	// Add verbosity flag
-	motdCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
-
-	// Add share mode flag
-	motdCmd.Flags().Bool("share", false, "Obscure sensitive information like IP addresses for sharing screenshots")
-
-	// Add config generation flag
-	motdCmd.Flags().Bool("generate-config", false, "Print an example MOTD configuration file to stdout")
-
-	// Add banner options
-	motdCmd.Flags().String("title", "Saltbox", "Text to display in the banner")
-	motdCmd.Flags().String("type", "peek", "Banner type for boxes (use 'none' to omit box)")
-	motdCmd.Flags().String("font", "ivrit", "Font for toilet cli")
-	motdCmd.Flags().String("banner-file", "", "Path to a file containing a custom banner to display")
-	motdCmd.Flags().String("banner-file-toilet", "", "A string of arguments for toilet when using --banner-file")
+func addMOTDCommand(rootCmd *cobra.Command) {
+	rootCmd.AddCommand(newMOTDCommand())
 }

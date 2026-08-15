@@ -4,34 +4,36 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/saltyorg/sb-go/internal/fact"
-	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/saltbox"
+	"github.com/saltyorg/sb-go/terminal"
 
 	"github.com/spf13/cobra"
 )
 
 // reinstallFactsCmd represents the reinstallFacts command
-var reinstallFactsCmd = &cobra.Command{
-	Use:   "reinstall-facts",
-	Short: "Reinstall the Rust saltbox.fact file",
-	Long:  `Reinstall the Rust saltbox.fact file`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		verbose, _ := cmd.Flags().GetBool("verbose")
-
-		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: verbose})
-		return runner.Run(cmd.Context(), spinners.TaskSpec{
-			Running: "Reinstalling saltbox.fact",
-		}, func(ctx context.Context, task *spinners.Task) error {
-			if err := fact.DownloadAndInstallSaltboxFact(ctx, task, true, verbose); err != nil {
-				return fmt.Errorf("error reinstalling saltbox.fact: %w", err)
-			}
-			return nil
-		})
-	},
+func newReinstallFactsCommand() *cobra.Command {
+	var verbose bool
+	reinstallFactsCmd := &cobra.Command{
+		Use:   "reinstall-facts",
+		Short: "Reinstall the Rust saltbox.fact file",
+		Long:  `Reinstall the Rust saltbox.fact file`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: verbose})
+			return runner.Run(cmd.Context(), terminal.TaskSpec{
+				Running: "Reinstalling saltbox.fact",
+			}, func(ctx context.Context, task *terminal.Task) error {
+				if err := saltbox.DownloadAndInstallSaltboxFact(ctx, task, true, verbose); err != nil {
+					return fmt.Errorf("error reinstalling saltbox.fact: %w", err)
+				}
+				return nil
+			})
+		},
+	}
+	reinstallFactsCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	return reinstallFactsCmd
 }
 
-func init() {
-	rootCmd.AddCommand(reinstallFactsCmd)
-	reinstallFactsCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+func addReinstallFactsCommand(rootCmd *cobra.Command) {
+	rootCmd.AddCommand(newReinstallFactsCommand())
 }

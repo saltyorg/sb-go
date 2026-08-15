@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/executor"
-	"github.com/saltyorg/sb-go/internal/signals"
-	"github.com/saltyorg/sb-go/internal/styles"
-	"github.com/saltyorg/sb-go/internal/systemd"
+	"github.com/saltyorg/sb-go/executor"
+	"github.com/saltyorg/sb-go/host"
+	"github.com/saltyorg/sb-go/signals"
+	"github.com/saltyorg/sb-go/terminal"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -24,17 +24,20 @@ import (
 )
 
 // logsCmd represents the logs command
-var logsCmd = &cobra.Command{
-	Use:   "logs",
-	Short: "Display logs of managed systemd services",
-	Long:  `Displays a list of managed systemd services.`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleLogs(cmd.Context())
-	},
+func newLogsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logs",
+		Short: "Display logs of managed systemd services",
+		Long:  `Displays a list of managed systemd services.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleLogs(cmd.Context())
+		},
+	}
 }
 
-func init() {
+func addLogsCommand(rootCmd *cobra.Command) {
+	logsCmd := newLogsCommand()
 	rootCmd.AddCommand(logsCmd)
 }
 
@@ -74,16 +77,16 @@ func formatStatusIndicator(active, sub, runtime string) string {
 	switch active {
 	case "active":
 		symbol = "✓"
-		style = styles.SuccessStyle
+		style = terminal.SuccessStyle
 	case "failed":
 		symbol = "✗"
-		style = styles.ErrorStyle
+		style = terminal.ErrorStyle
 	case "inactive":
 		symbol = "○"
-		style = styles.DimStyle
+		style = terminal.DimStyle
 	default:
 		symbol = "?"
-		style = styles.WarningStyle
+		style = terminal.WarningStyle
 	}
 
 	// Show both active and sub status for more detail
@@ -189,6 +192,7 @@ var keys = keyMap{
 }
 
 type model struct {
+	ctx                 context.Context
 	list                list.Model
 	viewport            viewport.Model
 	spinner             spinner.Model
@@ -253,7 +257,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+c":
-			signals.GetGlobalManager().Shutdown(130)
+			signals.Shutdown(m.ctx, 130)
 			return m, tea.Quit
 		case "q":
 			return m, tea.Quit
@@ -286,8 +290,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.viewportYPosition = 0
 						m.followMode = false
 						// Create new log buffer with target size of 10 pages
-						m.logBuf = newLogBuffer(m.selectedService, prefetchPagesAhead*logPageSize)
-						return m, fetchLogs(m.selectedService, false, "", false)
+						m.logBuf = newLogBuffer(m.ctx, m.selectedService, prefetchPagesAhead*logPageSize)
+						return m, fetchLogs(m.ctx, m.selectedService, false, "", false)
 					} else {
 						// Make sure we re-apply the current log content with boundaries
 						if m.logBuf != nil {
@@ -316,7 +320,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if atTop && m.logBuf.beforeCursor != "" && m.logBuf.hasMoreBefore {
 					m.loading = true
 					m.err = nil
-					return m, fetchLogs(m.selectedService, true, m.logBuf.beforeCursor, false)
+					return m, fetchLogs(m.ctx, m.selectedService, true, m.logBuf.beforeCursor, false)
 				}
 				// Otherwise, let the viewport handle scrolling
 			}
@@ -332,7 +336,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if atBottom && m.logBuf.afterCursor != "" && m.logBuf.hasMoreAfter {
 					m.loading = true
 					m.err = nil
-					return m, fetchLogs(m.selectedService, false, m.logBuf.afterCursor, false)
+					return m, fetchLogs(m.ctx, m.selectedService, false, m.logBuf.afterCursor, false)
 				}
 				// Otherwise, let the viewport handle scrolling
 			}
@@ -504,7 +508,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Background ticker for follow mode
 		if m.followMode && m.logBuf != nil && !m.loading {
 			// Fetch new logs from the current end cursor
-			cmds = append(cmds, fetchLogs(m.selectedService, false, m.logBuf.afterCursor, true))
+			cmds = append(cmds, fetchLogs(m.ctx, m.selectedService, false, m.logBuf.afterCursor, true))
 		}
 		// Continue ticking if still in follow mode
 		if m.followMode {
@@ -579,7 +583,7 @@ func (m model) View() tea.View {
 
 	if m.err != nil {
 		// Show error with styling
-		errorMsg := styles.ErrorStyle.Render("Error: " + m.err.Error())
+		errorMsg := terminal.ErrorStyle.Render("Error: " + m.err.Error())
 		logsContent = lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height - lipgloss.Height(helpView)).
@@ -589,7 +593,7 @@ func (m model) View() tea.View {
 		// Show loading spinner
 		loadingMsg := fmt.Sprintf("%s Loading logs for %s...",
 			m.spinner.View(),
-			styles.InfoStyle.Render(m.selectedService))
+			terminal.InfoStyle.Render(m.selectedService))
 		logsContent = lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height - lipgloss.Height(helpView)).
@@ -600,7 +604,7 @@ func (m model) View() tea.View {
 		logsContent = m.viewport.View()
 	} else {
 		// Show prompt to select a service
-		promptMsg := styles.DimStyle.Render("Select a service to view logs")
+		promptMsg := terminal.DimStyle.Render("Select a service to view logs")
 		logsContent = lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height - lipgloss.Height(helpView)).
@@ -623,7 +627,7 @@ func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAf
 
 	// Add start indicator at the beginning if we've hit the start boundary
 	if !hasMoreBefore {
-		lines = append(lines, styles.DimStyle.Render("--- start of logs ---"))
+		lines = append(lines, terminal.DimStyle.Render("--- start of logs ---"))
 		lines = append(lines, "")
 	}
 
@@ -636,9 +640,9 @@ func formatLogEntriesWithBoundaries(entries []logEntry, hasMoreBefore, hasMoreAf
 	if !hasMoreAfter {
 		lines = append(lines, "")
 		if followMode {
-			lines = append(lines, styles.InfoStyle.Render("--- watching for new logs (press 'f' to disable) ---"))
+			lines = append(lines, terminal.InfoStyle.Render("--- watching for new logs (press 'f' to disable) ---"))
 		} else {
-			lines = append(lines, styles.DimStyle.Render("--- end of logs ---"))
+			lines = append(lines, terminal.DimStyle.Render("--- end of logs ---"))
 		}
 	}
 
@@ -687,6 +691,7 @@ type logEntry struct {
 
 // logBuffer manages log entries and handles prefetching
 type logBuffer struct {
+	ctx              context.Context
 	entries          []logEntry
 	beforeCursor     string
 	afterCursor      string
@@ -699,8 +704,9 @@ type logBuffer struct {
 	followActive     bool // Whether follow mode background fetching is active
 }
 
-func newLogBuffer(serviceName string, targetSize int) *logBuffer {
+func newLogBuffer(ctx context.Context, serviceName string, targetSize int) *logBuffer {
 	return &logBuffer{
+		ctx:           ctx,
 		entries:       []logEntry{},
 		serviceName:   serviceName,
 		targetSize:    targetSize,
@@ -730,7 +736,7 @@ func (lb *logBuffer) StartPrefetch() tea.Cmd {
 		return nil
 	}
 	lb.prefetching = true
-	return fetchLogs(lb.serviceName, true, lb.beforeCursor, true)
+	return fetchLogs(lb.ctx, lb.serviceName, true, lb.beforeCursor, true)
 }
 
 // AppendInitial sets initial logs (most recent)
@@ -851,14 +857,14 @@ func (lb *logBuffer) CheckPrefetchNeeds(viewportY, viewportHeight, totalHeight i
 	// Check if we should prefetch older logs (scrolling near top)
 	if viewportY < prefetchThreshold && lb.hasMoreBefore && lb.beforeCursor != "" && !lb.prefetching {
 		lb.prefetching = true
-		cmds = append(cmds, fetchLogs(lb.serviceName, true, lb.beforeCursor, true))
+		cmds = append(cmds, fetchLogs(lb.ctx, lb.serviceName, true, lb.beforeCursor, true))
 	}
 
 	// Check if we should prefetch newer logs (scrolling near bottom)
 	distanceFromBottom := totalHeight - (viewportY + viewportHeight)
 	if distanceFromBottom < prefetchThreshold && lb.hasMoreAfter && lb.afterCursor != "" && !lb.prefetchingAfter {
 		lb.prefetchingAfter = true
-		cmds = append(cmds, fetchLogs(lb.serviceName, false, lb.afterCursor, true))
+		cmds = append(cmds, fetchLogs(lb.ctx, lb.serviceName, false, lb.afterCursor, true))
 	}
 
 	return cmds
@@ -875,7 +881,7 @@ func (lb *logBuffer) StopFollow() {
 	lb.followActive = false
 }
 
-func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea.Cmd {
+func fetchLogs(parent context.Context, service string, reverse bool, cursor string, isPrefetch bool) tea.Cmd {
 	return func() tea.Msg {
 		// Build journalctl command with JSON output for proper parsing
 		// Add .service suffix to ensure exact unit match
@@ -913,8 +919,7 @@ func fetchLogs(service string, reverse bool, cursor string, isPrefetch bool) tea
 		}
 
 		// Use context with timeout, canceled on shutdown
-		baseCtx := signals.GetGlobalManager().Context()
-		ctx, cancel := context.WithTimeout(baseCtx, 10*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 
 		result, err := executor.Run(ctx, args[0],
@@ -1076,7 +1081,7 @@ func handleLogs(parentCtx context.Context) error {
 	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 	defer cancel()
 
-	services, err := systemd.GetFilteredServices(ctx, systemd.DefaultFilters)
+	services, err := host.GetFilteredServices(ctx, host.DefaultFilters)
 	if err != nil {
 		return fmt.Errorf("error getting systemd services: %w", err)
 	}
@@ -1094,7 +1099,7 @@ func handleLogs(parentCtx context.Context) error {
 		}
 	}
 
-	// Convert systemd.ServiceInfo slice to list items
+	// Convert host.ServiceInfo slice to list items
 	items := make([]list.Item, len(services))
 	for i, service := range services {
 		items[i] = serviceItem{
@@ -1128,6 +1133,7 @@ func handleLogs(parentCtx context.Context) error {
 
 	// Initial model
 	initialModel := model{
+		ctx:                 parentCtx,
 		list:                listModel,
 		spinner:             s,
 		help:                h,

@@ -3,475 +3,99 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"strings"
-	"sync"
-	"time"
 
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/releaseproxy"
-	"github.com/saltyorg/sb-go/internal/runtime"
-	"github.com/saltyorg/sb-go/internal/spinners"
+	"github.com/saltyorg/sb-go/buildinfo"
+	"github.com/saltyorg/sb-go/layout"
+	"github.com/saltyorg/sb-go/selfupdate"
+	"github.com/saltyorg/sb-go/terminal"
 
-	"github.com/Masterminds/semver/v3"
-	"github.com/creativeprojects/go-selfupdate"
 	"github.com/spf13/cobra"
 )
 
-// Debug flag to enable verbose output
-var debug bool
-
-// Auto-accept flag to skip confirmation
-var autoAccept bool
-
-// Force update flag to bypass DisableSelfUpdate build flag
-var forceUpdate bool
-
-// selfUpdateCmd represents the selfUpdate command
-var selfUpdateCmd = &cobra.Command{
-	Use:    "self-update",
-	Hidden: true,
-	Short:  "Update Saltbox CLI",
-	Long:   `Update Saltbox CLI`,
-	Args:   cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		runner := spinners.NewRunner(spinners.RunnerOptions{Verbose: debug})
-		// Check if self-update is disabled at build time (unless the force flag is used)
-		if runtime.DisableSelfUpdate == "true" && !forceUpdate {
-			runner.Warning("Self-update is disabled in this build")
-			if runtime.DisableSelfUpdate == "true" {
-				runner.Info("Use --force-update to override this restriction")
+func newSelfUpdateCommand(info buildinfo.Info) *cobra.Command {
+	var verbose, autoAccept, forceUpdate bool
+	selfUpdateCmd := &cobra.Command{
+		Use:    "self-update",
+		Hidden: true,
+		Short:  "Update Saltbox CLI",
+		Long:   `Update Saltbox CLI`,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			runner := terminal.NewRunner(terminal.RunnerOptions{
+				Verbose: verbose,
+				Output:  cmd.ErrOrStderr(),
+			})
+			if info.DisableSelfUpdate && !forceUpdate {
+				if verbose {
+					runner.Info("Debug: Self-update is disabled in this build")
+					runner.Info("Debug: Use --force-update to override this restriction")
+				} else {
+					runner.Warning("Self-update is disabled in this build")
+					runner.Info("Use --force-update to override this restriction")
+				}
+				return nil
 			}
-			return nil
-		}
-		_, err := doSelfUpdate(cmd.Context(), runner, autoAccept, debug, "", forceUpdate)
-		return err
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(selfUpdateCmd)
-	selfUpdateCmd.Flags().BoolVarP(&debug, "verbose", "v", false, "Enable verbose debug output")
+			confirm := func(prompt string) (bool, error) {
+				return promptForConfirmation(cmd.InOrStdin(), cmd.OutOrStdout(), prompt)
+			}
+			_, err := runSelfUpdate(cmd.Context(), runner, info, autoAccept, verbose, "", forceUpdate, confirm)
+			return err
+		},
+	}
+	selfUpdateCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose debug output")
 	selfUpdateCmd.Flags().BoolVarP(&autoAccept, "yes", "y", false, "Automatically accept update without confirmation")
-
-	// Only add a force-update flag if self-update is disabled at build time
-	if runtime.DisableSelfUpdate == "true" {
+	if info.DisableSelfUpdate {
 		selfUpdateCmd.Flags().BoolVar(&forceUpdate, "force-update", false, "Force update even when self-update is disabled")
 	}
+	return selfUpdateCmd
 }
 
-// promptForConfirmation asks the user for confirmation (y/n)
-func promptForConfirmation(prompt string) (bool, error) {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("%s [y/n]: ", prompt)
+func addSelfUpdateCommand(rootCmd *cobra.Command, info buildinfo.Info) {
+	rootCmd.AddCommand(newSelfUpdateCommand(info))
+}
 
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		return false, fmt.Errorf("error reading input: %w", err)
+func promptForConfirmation(input io.Reader, output io.Writer, prompt string) (bool, error) {
+	if _, err := fmt.Fprintf(output, "%s [y/n]: ", prompt); err != nil {
+		return false, fmt.Errorf("write confirmation prompt: %w", err)
 	}
-
+	response, err := bufio.NewReader(input).ReadString('\n')
+	if err != nil {
+		return false, fmt.Errorf("read confirmation input: %w", err)
+	}
 	response = strings.ToLower(strings.TrimSpace(response))
 	return response == "y" || response == "yes", nil
 }
 
-func doSelfUpdate(ctx context.Context, runner *spinners.Runner, autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
-	// Check if self-update is disabled at build time (unless force is true)
-	if runtime.DisableSelfUpdate == "true" && !force {
-		if verbose {
-			fmt.Println("Debug: Self-update is disabled (build flag)")
-		} else {
-			runner.Warning("Self-update is disabled in this build")
-		}
-		return false, nil
-	}
-
-	// Log if force update is being used
-	if force && runtime.DisableSelfUpdate == "true" {
-		if verbose {
-			fmt.Println("Debug: Force update flag is active, bypassing DisableSelfUpdate build flag")
-		} else {
-			runner.Info("Forcing self-update despite build configuration")
-		}
-	}
-
-	if verbose {
-		fmt.Println("Debug: Starting self-update process")
-		fmt.Printf("Debug: Current version: %s\n", runtime.Version)
-		fmt.Printf("Debug: Current git commit: %s\n", runtime.GitCommit)
-		fmt.Printf("Debug: Looking for updates in repository: saltyorg/sb-go\n")
-		fmt.Printf("Debug: Auto-update mode: %t\n", autoUpdate)
-		//selfupdate.EnableLog()
-	}
-
-	v, err := semver.NewVersion(runtime.Version)
+func runSelfUpdate(
+	ctx context.Context,
+	runner *terminal.Runner,
+	info buildinfo.Info,
+	autoUpdate bool,
+	verbose bool,
+	optionalMessage string,
+	force bool,
+	confirm func(string) (bool, error),
+) (bool, error) {
+	source, err := selfupdate.NewSource(layout.SVMVersionProxyURL, verbose, runner)
 	if err != nil {
-		return false, fmt.Errorf("invalid current version %q: %w", runtime.Version, err)
+		return false, fmt.Errorf("create release source: %w", err)
 	}
-
-	if verbose {
-		fmt.Printf("Debug: Parsed semver version: %s\n", v.String())
-		fmt.Println("Debug: Checking for latest release from GitHub via Saltbox proxy")
-	}
-
-	// Create the Saltbox proxy source
-	proxySource, err := NewSaltboxProxySource(constants.SVMVersionProxyURL, verbose, runner)
-	if err != nil {
-		if verbose {
-			fmt.Printf("Debug: Error creating source: %v\n", err)
-		}
-		return false, fmt.Errorf("error creating release source: %w", err)
-	}
-
-	// First, check if an update is available without applying it
-	updater, err := selfupdate.NewUpdater(selfupdate.Config{
-		Source: proxySource,
-	})
-	if err != nil {
-		if verbose {
-			fmt.Printf("Debug: Error creating updater: %v\n", err)
-		}
-		return false, fmt.Errorf("error creating updater: %w", err)
-	}
-
-	latest, found, err := updater.DetectLatest(ctx, selfupdate.ParseSlug("saltyorg/sb-go"))
-	if err != nil {
-		if verbose {
-			fmt.Printf("Debug: Error checking for updates: %v\n", err)
-		}
-		return false, fmt.Errorf("error checking for updates: %w", err)
-	}
-
-	if !found || latest.Version() == v.String() {
-		if verbose {
-			fmt.Println("Debug: No update available - current version is the latest")
-		}
-		runner.Info(fmt.Sprintf("Current binary is the latest version: %s", runtime.Version))
-		return false, nil
-	}
-
-	// An update is available
-	runner.Info(fmt.Sprintf("New sb CLI version available: %s (current: %s)", latest.Version(), v))
-
-	// If autoUpdate is false, ask for confirmation
-	if !autoUpdate {
-		confirmed, err := promptForConfirmation("Do you want to update")
-		if err != nil {
-			return false, err
-		}
-		if !confirmed {
-			runner.Warning("Update of sb CLI cancelled")
-			fmt.Println()
-			return false, nil
-		}
-	} else if verbose {
-		fmt.Println("Debug: Auto-update enabled, proceeding without confirmation")
-	}
-
-	// User confirmed or auto-update enabled, proceed with update
-	exe, err := os.Executable()
-	if err != nil {
-		if verbose {
-			fmt.Printf("Debug: Error getting executable path: %v\n", err)
-		}
-		return false, fmt.Errorf("error getting executable path: %w", err)
-	}
-
-	err = updater.UpdateTo(ctx, latest, exe)
-	if err != nil {
-		if verbose {
-			fmt.Printf("Debug: Update failed with error: %v\n", err)
-		}
-		return false, fmt.Errorf("binary update failed: %w", err)
-	}
-
-	if verbose {
-		fmt.Printf("Debug: Update successful - previous version: %s, new version: %s\n", v, latest.Version())
-	}
-	runner.Info(fmt.Sprintf("Successfully updated sb CLI to version: %s", latest.Version()))
-
-	// Print an optional message if provided
-	if optionalMessage != "" {
-		runner.Warning(optionalMessage)
-	}
-	fmt.Println("")
-	return true, nil
-}
-
-// SaltboxProxySource implements the go-selfupdate Source interface
-// to route GitHub API calls through the Saltbox version proxy
-type SaltboxProxySource struct {
-	proxyBaseURL string
-	httpClient   *http.Client
-	githubSource selfupdate.Source
-	verbose      bool
-	runner       *spinners.Runner
-	warnOnce     sync.Once
-	successOnce  sync.Once
-}
-
-// NewSaltboxProxySource creates a new Saltbox proxy source
-func NewSaltboxProxySource(proxyBaseURL string, verbose bool, runner *spinners.Runner) (*SaltboxProxySource, error) {
-	githubSource, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GitHub source: %w", err)
-	}
-
-	return &SaltboxProxySource{
-		proxyBaseURL: proxyBaseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		githubSource: githubSource,
-		verbose:      verbose,
-		runner:       runner,
-	}, nil
-}
-
-// githubRelease represents the GitHub API release response
-type githubRelease struct {
-	ID          int64         `json:"id"`
-	TagName     string        `json:"tag_name"`
-	Name        string        `json:"name"`
-	Draft       bool          `json:"draft"`
-	Prerelease  bool          `json:"prerelease"`
-	PublishedAt string        `json:"published_at"`
-	Body        string        `json:"body"`
-	HTMLURL     string        `json:"html_url"`
-	Assets      []githubAsset `json:"assets"`
-}
-
-type githubAsset struct {
-	ID                 int64  `json:"id"`
-	Name               string `json:"name"`
-	Size               int    `json:"size"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-}
-
-// ListReleases fetches releases through the Saltbox proxy, then falls back to direct GitHub API if needed.
-func (s *SaltboxProxySource) ListReleases(ctx context.Context, repository selfupdate.Repository) ([]selfupdate.SourceRelease, error) {
-	proxyReleases, proxyErr := s.listReleasesFromProxy(ctx, repository)
-	if proxyErr == nil {
-		if usabilityErr := releaseListUsabilityError(proxyReleases); usabilityErr == nil {
-			return proxyReleases, nil
-		} else {
-			proxyErr = releaseproxy.InvalidResponse(usabilityErr.Error(), usabilityErr)
-		}
-	}
-
-	s.notifyFallback(proxyErr)
-
-	githubReleases, fallbackErr := s.githubSource.ListReleases(ctx, repository)
-	if fallbackErr != nil {
-		return nil, fmt.Errorf("%w; fallback GitHub API request failed: %w", proxyErr, fallbackErr)
-	}
-	if usabilityErr := releaseListUsabilityError(githubReleases); usabilityErr != nil {
-		return nil, fmt.Errorf("%w; fallback GitHub API response unusable: %w", proxyErr, usabilityErr)
-	}
-
-	s.notifyFallbackSuccess()
-	return githubReleases, nil
-}
-
-func (s *SaltboxProxySource) notifyFallback(reason error) {
-	s.warnOnce.Do(func() {
-		if s.verbose {
-			fmt.Printf("Debug: SVM proxy unavailable or unusable (%v); falling back to direct GitHub API\n", reason)
-			return
-		}
-		if s.runner != nil {
-			s.runner.Warning(fmt.Sprintf("SVM proxy %s; trying GitHub directly", releaseproxy.Describe(reason)))
-		}
+	return selfupdate.Run(ctx, source, runner, selfupdate.Options{
+		BuildInfo:       info,
+		AutoAccept:      autoUpdate,
+		OptionalMessage: optionalMessage,
+		Force:           force,
+		Confirm:         confirm,
 	})
 }
 
-func (s *SaltboxProxySource) notifyFallbackSuccess() {
-	s.successOnce.Do(func() {
-		if s.verbose {
-			fmt.Println("Debug: Direct GitHub API fallback succeeded")
-			return
-		}
-		if s.runner != nil {
-			s.runner.Info("GitHub fallback succeeded")
-		}
-	})
-}
-
-func (s *SaltboxProxySource) listReleasesFromProxy(ctx context.Context, repository selfupdate.Repository) ([]selfupdate.SourceRelease, error) {
-	// Get repository owner and name
-	owner, name, err := repository.GetSlug()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get repository slug: %w", err)
+func doSelfUpdate(ctx context.Context, runner *terminal.Runner, info buildinfo.Info, autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
+	confirm := func(prompt string) (bool, error) {
+		return promptForConfirmation(os.Stdin, os.Stdout, prompt)
 	}
-
-	// Construct the GitHub API URL for releases
-	githubAPIURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", owner, name)
-
-	// Construct the proxied URL
-	proxyURL := fmt.Sprintf("%s?url=%s", s.proxyBaseURL, url.QueryEscape(githubAPIURL))
-
-	// Make the request
-	req, err := http.NewRequestWithContext(ctx, "GET", proxyURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch releases: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
-		return nil, fmt.Errorf("%w: %s", releaseproxy.HTTPStatus(resp.StatusCode), string(body))
-	}
-
-	// Parse the response
-	var githubReleases []githubRelease
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&githubReleases); err != nil {
-		return nil, releaseproxy.InvalidResponse("returned invalid JSON", err)
-	}
-
-	// Convert to SourceRelease format
-	releases := make([]selfupdate.SourceRelease, 0, len(githubReleases))
-	for _, ghRelease := range githubReleases {
-		releases = append(releases, newSaltboxRelease(ghRelease))
-	}
-
-	return releases, nil
-}
-
-func releaseListUsabilityError(releases []selfupdate.SourceRelease) error {
-	if len(releases) == 0 {
-		return fmt.Errorf("no releases found")
-	}
-
-	for _, release := range releases {
-		if release == nil {
-			continue
-		}
-		if strings.TrimSpace(release.GetTagName()) == "" {
-			continue
-		}
-		for _, asset := range release.GetAssets() {
-			if asset == nil {
-				continue
-			}
-			if strings.TrimSpace(asset.GetBrowserDownloadURL()) == "" {
-				continue
-			}
-			return nil
-		}
-	}
-
-	return fmt.Errorf("no release entries with tag_name and downloadable asset URLs")
-}
-
-// DownloadReleaseAsset downloads the actual release asset
-// Note: This downloads directly, not through the proxy
-func (s *SaltboxProxySource) DownloadReleaseAsset(ctx context.Context, rel *selfupdate.Release, assetID int64) (io.ReadCloser, error) {
-	// Get the download URL from the release's validated asset
-	downloadURL := rel.AssetURL
-
-	if downloadURL == "" {
-		return nil, fmt.Errorf("no asset URL found in release")
-	}
-
-	// Download the asset directly (not through proxy)
-	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create download request: %w", err)
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download asset: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("download returned status %d", resp.StatusCode)
-	}
-
-	return resp.Body, nil
-}
-
-// saltboxRelease wraps githubRelease to implement SourceRelease interface
-type saltboxRelease struct {
-	release githubRelease
-}
-
-func newSaltboxRelease(ghRelease githubRelease) *saltboxRelease {
-	return &saltboxRelease{release: ghRelease}
-}
-
-func (r *saltboxRelease) GetID() int64 {
-	return r.release.ID
-}
-
-func (r *saltboxRelease) GetTagName() string {
-	return r.release.TagName
-}
-
-func (r *saltboxRelease) GetDraft() bool {
-	return r.release.Draft
-}
-
-func (r *saltboxRelease) GetPrerelease() bool {
-	return r.release.Prerelease
-}
-
-func (r *saltboxRelease) GetPublishedAt() time.Time {
-	t, _ := time.Parse(time.RFC3339, r.release.PublishedAt)
-	return t
-}
-
-func (r *saltboxRelease) GetReleaseNotes() string {
-	return r.release.Body
-}
-
-func (r *saltboxRelease) GetName() string {
-	return r.release.Name
-}
-
-func (r *saltboxRelease) GetURL() string {
-	return r.release.HTMLURL
-}
-
-func (r *saltboxRelease) GetAssets() []selfupdate.SourceAsset {
-	assets := make([]selfupdate.SourceAsset, 0, len(r.release.Assets))
-	for _, asset := range r.release.Assets {
-		assets = append(assets, newSaltboxAsset(asset))
-	}
-	return assets
-}
-
-// saltboxAsset wraps githubAsset to implement SourceAsset interface
-type saltboxAsset struct {
-	asset githubAsset
-}
-
-func newSaltboxAsset(ghAsset githubAsset) *saltboxAsset {
-	return &saltboxAsset{asset: ghAsset}
-}
-
-func (a *saltboxAsset) GetID() int64 {
-	return a.asset.ID
-}
-
-func (a *saltboxAsset) GetName() string {
-	return a.asset.Name
-}
-
-func (a *saltboxAsset) GetSize() int {
-	return a.asset.Size
-}
-
-func (a *saltboxAsset) GetBrowserDownloadURL() string {
-	return a.asset.BrowserDownloadURL
+	return runSelfUpdate(ctx, runner, info, autoUpdate, verbose, optionalMessage, force, confirm)
 }

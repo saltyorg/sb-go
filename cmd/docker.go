@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/executor"
+	"github.com/saltyorg/sb-go/executor"
+	"github.com/saltyorg/sb-go/layout"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -48,29 +48,34 @@ const (
 	dockerJobMaxPolls      = 60
 )
 
-// dockerCmd is the primary command for managing Docker containers in Saltbox.
-var dockerCmd = &cobra.Command{
-	Use:                "docker",
-	Short:              "Manage Docker containers managed by Saltbox",
-	Long:               `Manage Docker containers managed by Saltbox`,
-	DisableFlagParsing: false,
-	Args:               cobra.ArbitraryArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// If args are provided, it means an unknown subcommand was used
-		if len(args) > 0 {
-			normalStyle := lipgloss.NewStyle()
-			return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())))
-		}
-		// No args - show help
-		return cmd.Help()
-	},
+func newDockerCommand() *cobra.Command {
+	dockerCmd := &cobra.Command{
+		Use:                "docker",
+		Short:              "Manage Docker containers managed by Saltbox",
+		Long:               `Manage Docker containers managed by Saltbox`,
+		DisableFlagParsing: false,
+		Args:               cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				normalStyle := lipgloss.NewStyle()
+				return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())))
+			}
+			return cmd.Help()
+		},
+	}
+	dockerCmd.AddCommand(newDockerStartCommand())
+	dockerCmd.AddCommand(newDockerStopCommand())
+	dockerCmd.AddCommand(newDockerRestartCommand())
+	dockerCmd.AddCommand(newDockerPSCommand())
+	dockerCmd.AddCommand(newDockerLogsCommand())
+	return dockerCmd
 }
 
 // isServiceExistAndRunning checks whether the Docker controller service file exists
 // and whether the service is currently active.
 func isServiceExistAndRunning(ctx context.Context) (bool, bool, error) {
 	// Verify the existence of the service file.
-	_, err := os.Stat(constants.DockerControllerServiceFile)
+	_, err := os.Stat(layout.DockerControllerServiceFile)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			// The service file does not exist.
@@ -176,7 +181,7 @@ func requestDockerJob(ctx context.Context, endpoint string, ignoreContainers []s
 // has failed, or a timeout occurs.
 func waitForJobCompletion(ctx context.Context, jobID string) (bool, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	return waitForJobCompletionWithClient(ctx, jobID, constants.DockerControllerAPIURL, client, dockerJobPollInterval, dockerJobMaxPolls)
+	return waitForJobCompletionWithClient(ctx, jobID, layout.DockerControllerAPIURL, client, dockerJobPollInterval, dockerJobMaxPolls)
 }
 
 func waitForJobCompletionWithClient(
@@ -231,13 +236,6 @@ func containerDisplayName(id string, names []string) string {
 	return shortContainerID(id)
 }
 
-// init registers the docker command and its associated subcommands.
-func init() {
-	rootCmd.AddCommand(dockerCmd)
-
-	// Register subcommands for Docker management.
-	dockerCmd.AddCommand(startCmd)
-	dockerCmd.AddCommand(stopCmd)
-	dockerCmd.AddCommand(restartCmd)
-	dockerCmd.AddCommand(psCmd)
+func addDockerCommand(rootCmd *cobra.Command) {
+	rootCmd.AddCommand(newDockerCommand())
 }

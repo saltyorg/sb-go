@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/signals"
-	"github.com/saltyorg/sb-go/internal/styles"
+	"github.com/saltyorg/sb-go/signals"
+	"github.com/saltyorg/sb-go/terminal"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -24,19 +24,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// dockerLogsCmd represents the docker logs command
-var dockerLogsCmd = &cobra.Command{
-	Use:   "logs",
-	Short: "Display logs of Docker containers",
-	Long:  `Displays a list of Docker containers and allows viewing their logs.`,
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return handleDockerLogs(cmd.Context())
-	},
-}
-
-func init() {
-	dockerCmd.AddCommand(dockerLogsCmd)
+func newDockerLogsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "logs",
+		Short: "Display logs of Docker containers",
+		Long:  `Displays a list of Docker containers and allows viewing their logs.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return handleDockerLogs(cmd.Context())
+		},
+	}
 }
 
 const (
@@ -75,19 +72,19 @@ func formatContainerStatus(status, state string) string {
 	switch status {
 	case "running":
 		symbol = "✓"
-		style = styles.SuccessStyle
+		style = terminal.SuccessStyle
 	case "exited":
 		symbol = "✗"
-		style = styles.ErrorStyle
+		style = terminal.ErrorStyle
 	case "created", "paused":
 		symbol = "○"
-		style = styles.WarningStyle
+		style = terminal.WarningStyle
 	case "restarting", "removing", "dead":
 		symbol = "⚠"
-		style = styles.WarningStyle
+		style = terminal.WarningStyle
 	default:
 		symbol = "?"
-		style = styles.DimStyle
+		style = terminal.DimStyle
 	}
 
 	statusText := state
@@ -184,6 +181,7 @@ var dockerKeys = dockerKeyMap{
 }
 
 type dockerLogsModel struct {
+	ctx                 context.Context
 	list                list.Model
 	viewport            viewport.Model
 	spinner             spinner.Model
@@ -250,7 +248,7 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+c":
-			signals.GetGlobalManager().Shutdown(130)
+			signals.Shutdown(m.ctx, 130)
 			// Clean up follow mode
 			if m.followMode && m.logBuf != nil {
 				m.logBuf.StopFollow()
@@ -293,8 +291,8 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.viewportYPosition = 0
 						m.followMode = false
 						// Create new log buffer
-						m.logBuf = newDockerLogBuffer(m.selectedContainerID, dockerPrefetchPagesAhead*dockerLogPageSize, m.dockerClient)
-						return m, fetchDockerLogs(m.dockerClient, m.selectedContainerID, "", false, false)
+						m.logBuf = newDockerLogBuffer(m.ctx, m.selectedContainerID, dockerPrefetchPagesAhead*dockerLogPageSize, m.dockerClient)
+						return m, fetchDockerLogs(m.ctx, m.dockerClient, m.selectedContainerID, "", false, false)
 					} else {
 						// Make sure we re-apply the current log content with boundaries
 						if m.logBuf != nil {
@@ -346,7 +344,7 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if atTop && m.logBuf.beforeTimestamp != "" && m.logBuf.hasMoreBefore {
 					m.loading = true
 					m.err = nil
-					return m, fetchDockerLogs(m.dockerClient, m.selectedContainerID, m.logBuf.beforeTimestamp, true, false)
+					return m, fetchDockerLogs(m.ctx, m.dockerClient, m.selectedContainerID, m.logBuf.beforeTimestamp, true, false)
 				}
 				// Otherwise, let the viewport handle scrolling
 			}
@@ -362,7 +360,7 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if atBottom && m.logBuf.afterTimestamp != "" && m.logBuf.hasMoreAfter {
 					m.loading = true
 					m.err = nil
-					return m, fetchDockerLogs(m.dockerClient, m.selectedContainerID, m.logBuf.afterTimestamp, false, false)
+					return m, fetchDockerLogs(m.ctx, m.dockerClient, m.selectedContainerID, m.logBuf.afterTimestamp, false, false)
 				}
 				// Otherwise, let the viewport handle scrolling
 			}
@@ -510,7 +508,7 @@ func (m dockerLogsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Follow mode tick - fetch new logs
 		if m.followMode && m.logBuf != nil && !m.loading {
 			// Fetch new logs since last timestamp
-			cmds = append(cmds, fetchDockerLogs(m.dockerClient, m.selectedContainerID, m.logBuf.afterTimestamp, false, true))
+			cmds = append(cmds, fetchDockerLogs(m.ctx, m.dockerClient, m.selectedContainerID, m.logBuf.afterTimestamp, false, true))
 		}
 		// Schedule next tick
 		if m.followMode {
@@ -588,7 +586,7 @@ func (m dockerLogsModel) View() tea.View {
 
 	if m.err != nil {
 		// Show error with styling
-		errorMsg := styles.ErrorStyle.Render("Error: " + m.err.Error())
+		errorMsg := terminal.ErrorStyle.Render("Error: " + m.err.Error())
 		logsContent = lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height - lipgloss.Height(helpView)).
@@ -598,7 +596,7 @@ func (m dockerLogsModel) View() tea.View {
 		// Show loading spinner (only if no logs loaded yet)
 		loadingMsg := fmt.Sprintf("%s Loading logs for %s...",
 			m.spinner.View(),
-			styles.InfoStyle.Render(m.selectedContainer))
+			terminal.InfoStyle.Render(m.selectedContainer))
 		logsContent = lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height - lipgloss.Height(helpView)).
@@ -609,7 +607,7 @@ func (m dockerLogsModel) View() tea.View {
 		logsContent = m.viewport.View()
 	} else {
 		// Show prompt to select a container
-		promptMsg := styles.DimStyle.Render("Select a container to view logs")
+		promptMsg := terminal.DimStyle.Render("Select a container to view logs")
 		logsContent = lipgloss.NewStyle().
 			Width(m.width).
 			Height(m.height - lipgloss.Height(helpView)).
@@ -632,7 +630,7 @@ func formatDockerLogEntriesWithBoundaries(entries []dockerLogEntry, hasMoreBefor
 
 	// Add start indicator at the beginning if we've hit the start boundary
 	if !hasMoreBefore {
-		lines = append(lines, styles.DimStyle.Render("--- start of logs ---"))
+		lines = append(lines, terminal.DimStyle.Render("--- start of logs ---"))
 		lines = append(lines, "")
 	}
 
@@ -645,9 +643,9 @@ func formatDockerLogEntriesWithBoundaries(entries []dockerLogEntry, hasMoreBefor
 	if !hasMoreAfter {
 		lines = append(lines, "")
 		if followMode {
-			lines = append(lines, styles.InfoStyle.Render("--- watching for new logs (press 'f' to disable) ---"))
+			lines = append(lines, terminal.InfoStyle.Render("--- watching for new logs (press 'f' to disable) ---"))
 		} else {
-			lines = append(lines, styles.DimStyle.Render("--- end of logs ---"))
+			lines = append(lines, terminal.DimStyle.Render("--- end of logs ---"))
 		}
 	}
 
@@ -692,6 +690,7 @@ func tickFollow() tea.Cmd {
 
 // dockerLogBuffer manages log entries and handles prefetching
 type dockerLogBuffer struct {
+	ctx              context.Context
 	entries          []dockerLogEntry
 	beforeTimestamp  string // Timestamp for fetching older logs
 	afterTimestamp   string // Timestamp for fetching newer logs
@@ -705,8 +704,9 @@ type dockerLogBuffer struct {
 	followActive     bool
 }
 
-func newDockerLogBuffer(containerID string, targetSize int, dockerClient *client.Client) *dockerLogBuffer {
+func newDockerLogBuffer(ctx context.Context, containerID string, targetSize int, dockerClient *client.Client) *dockerLogBuffer {
 	return &dockerLogBuffer{
+		ctx:           ctx,
 		entries:       []dockerLogEntry{},
 		containerID:   containerID,
 		targetSize:    targetSize,
@@ -738,7 +738,7 @@ func (lb *dockerLogBuffer) StartPrefetch() tea.Cmd {
 		return nil
 	}
 	lb.prefetching = true
-	return fetchDockerLogs(lb.dockerClient, lb.containerID, lb.beforeTimestamp, true, true)
+	return fetchDockerLogs(lb.ctx, lb.dockerClient, lb.containerID, lb.beforeTimestamp, true, true)
 }
 
 // AppendInitial sets initial logs (most recent)
@@ -869,22 +869,22 @@ func (lb *dockerLogBuffer) CheckPrefetchNeeds(viewportY, viewportHeight, totalHe
 	// Check if we should prefetch older logs (scrolling near top)
 	if viewportY < prefetchThreshold && lb.hasMoreBefore && lb.beforeTimestamp != "" && !lb.prefetching {
 		lb.prefetching = true
-		cmds = append(cmds, fetchDockerLogs(lb.dockerClient, lb.containerID, lb.beforeTimestamp, true, true))
+		cmds = append(cmds, fetchDockerLogs(lb.ctx, lb.dockerClient, lb.containerID, lb.beforeTimestamp, true, true))
 	}
 
 	// Check if we should prefetch newer logs (scrolling near bottom)
 	distanceFromBottom := totalHeight - (viewportY + viewportHeight)
 	if distanceFromBottom < prefetchThreshold && lb.hasMoreAfter && lb.afterTimestamp != "" && !lb.prefetchingAfter {
 		lb.prefetchingAfter = true
-		cmds = append(cmds, fetchDockerLogs(lb.dockerClient, lb.containerID, lb.afterTimestamp, false, true))
+		cmds = append(cmds, fetchDockerLogs(lb.ctx, lb.dockerClient, lb.containerID, lb.afterTimestamp, false, true))
 	}
 
 	return cmds
 }
 
-func fetchDockerLogs(cli *client.Client, containerID string, timestamp string, reverse bool, isPrefetch bool) tea.Cmd {
+func fetchDockerLogs(parent context.Context, cli *client.Client, containerID string, timestamp string, reverse bool, isPrefetch bool) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(signals.GetGlobalManager().Context(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 
 		options := client.ContainerLogsOptions{
@@ -1173,6 +1173,7 @@ func handleDockerLogs(ctx context.Context) error {
 
 	// Initial model
 	initialModel := dockerLogsModel{
+		ctx:                 ctx,
 		list:                listModel,
 		spinner:             s,
 		help:                h,

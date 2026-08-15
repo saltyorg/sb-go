@@ -7,17 +7,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/saltyorg/sb-go/internal/ansible"
-	"github.com/saltyorg/sb-go/internal/cache"
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/git"
+	"github.com/saltyorg/sb-go/ansible"
+	"github.com/saltyorg/sb-go/git"
+	"github.com/saltyorg/sb-go/layout"
 
 	"github.com/spf13/cobra"
 )
 
 // isAnsiblePlaybookAvailable checks if ansible-playbook is installed
 func isAnsiblePlaybookAvailable() bool {
-	_, err := exec.LookPath(constants.AnsiblePlaybookBinaryPath)
+	_, err := exec.LookPath(layout.AnsiblePlaybookBinaryPath)
 	return err == nil
 }
 
@@ -72,14 +71,14 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		setupCache func(*cache.Cache)
+		setupCache func(*ansible.Cache)
 		repoPath   string
 		verbosity  int
 		expected   bool
 	}{
 		{
 			name: "valid cache with tags",
-			setupCache: func(c *cache.Cache) {
+			setupCache: func(c *ansible.Cache) {
 				_ = c.SetRepoCache(testRepoPath, map[string]any{
 					"commit": "abc123",
 					"tags":   []any{"tag1", "tag2", "tag3"},
@@ -91,7 +90,7 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 		},
 		{
 			name: "cache with empty tags",
-			setupCache: func(c *cache.Cache) {
+			setupCache: func(c *ansible.Cache) {
 				_ = c.SetRepoCache(testRepoPath, map[string]any{
 					"commit": "abc123",
 					"tags":   []any{},
@@ -103,7 +102,7 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 		},
 		{
 			name: "cache without tags key",
-			setupCache: func(c *cache.Cache) {
+			setupCache: func(c *ansible.Cache) {
 				_ = c.SetRepoCache(testRepoPath, map[string]any{
 					"commit": "abc123",
 				})
@@ -114,7 +113,7 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 		},
 		{
 			name:       "no cache",
-			setupCache: func(c *cache.Cache) {},
+			setupCache: func(c *ansible.Cache) {},
 			repoPath:   testRepoPath,
 			verbosity:  0,
 			expected:   false,
@@ -125,10 +124,10 @@ func TestCacheExistsAndIsValid_Integration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temporary cache file for this test
 			tmpDir := t.TempDir()
-			cacheFile := filepath.Join(tmpDir, "cache.json")
+			cacheFile := filepath.Join(tmpDir, "ansible.json")
 
 			// Create cache instance with temporary file
-			c, err := cache.NewCacheWithFile(cacheFile)
+			c, err := ansible.NewCacheWithFile(cacheFile)
 			if err != nil {
 				t.Fatalf("Failed to create test cache: %v", err)
 			}
@@ -153,19 +152,10 @@ func TestGetValidTags_Integration(t *testing.T) {
 	t.Skip("Skipping: tests use real system paths that can't be mocked without refactoring production code")
 
 	testRepoPath := "/tmp/test-repo"
-
-	// Save original executors
-	originalGitExecutor := git.GetExecutor()
-	originalAnsibleExecutor := ansible.GetExecutor()
-	defer func() {
-		git.SetExecutor(originalGitExecutor)
-		ansible.SetExecutor(originalAnsibleExecutor)
-	}()
-
 	tests := []struct {
 		name        string
 		repoPath    string
-		setupCache  func(*cache.Cache, string)
+		setupCache  func(*ansible.Cache, string)
 		mockGitHash string
 		mockTags    []string
 		expectedLen int
@@ -174,7 +164,7 @@ func TestGetValidTags_Integration(t *testing.T) {
 		{
 			name:     "valid cached tags",
 			repoPath: testRepoPath,
-			setupCache: func(c *cache.Cache, path string) {
+			setupCache: func(c *ansible.Cache, path string) {
 				_ = c.SetRepoCache(path, map[string]any{
 					"commit": "abc123def456",
 					"tags":   []any{"tag1", "tag2", "tag3"},
@@ -188,7 +178,7 @@ func TestGetValidTags_Integration(t *testing.T) {
 		{
 			name:     "cache miss - needs update",
 			repoPath: testRepoPath,
-			setupCache: func(c *cache.Cache, path string) {
+			setupCache: func(c *ansible.Cache, path string) {
 				_ = c.SetRepoCache(path, map[string]any{
 					"commit": "old123",
 					"tags":   []any{"oldtag1", "oldtag2"},
@@ -202,7 +192,7 @@ func TestGetValidTags_Integration(t *testing.T) {
 		{
 			name:        "no cache - fetch from ansible",
 			repoPath:    testRepoPath,
-			setupCache:  func(c *cache.Cache, path string) {},
+			setupCache:  func(c *ansible.Cache, path string) {},
 			mockGitHash: "abc123def456",
 			mockTags:    []string{"tag1", "tag2"},
 			expectedLen: 2,
@@ -216,7 +206,7 @@ func TestGetValidTags_Integration(t *testing.T) {
 
 			// Create temporary cache file for this test
 			tmpDir := t.TempDir()
-			cacheFile := filepath.Join(tmpDir, "cache.json")
+			cacheFile := filepath.Join(tmpDir, "ansible.json")
 
 			// Setup mock git executor
 			mockGit := &MockGitExecutor{
@@ -227,8 +217,6 @@ func TestGetValidTags_Integration(t *testing.T) {
 					return []byte{}, nil
 				},
 			}
-			git.SetExecutor(mockGit)
-
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
 				ExecuteContextFunc: func(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
@@ -243,10 +231,11 @@ func TestGetValidTags_Integration(t *testing.T) {
 					return []byte("TASK TAGS: [" + tagsStr.String() + "]"), nil
 				},
 			}
-			ansible.SetExecutor(mockAnsible)
+			ctx = git.WithExecutor(ctx, mockGit)
+			ctx = ansible.WithExecutor(ctx, mockAnsible)
 
 			// Create cache with temporary file
-			c, err := cache.NewCacheWithFile(cacheFile)
+			c, err := ansible.NewCacheWithFile(cacheFile)
 			if err != nil {
 				t.Fatalf("Failed to create test cache: %v", err)
 			}
@@ -279,15 +268,6 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 
 	testSaltboxRepoPath := "/tmp/test-saltbox"
 	testSandboxRepoPath := "/tmp/test-sandbox"
-
-	// Save original executors
-	originalGitExecutor := git.GetExecutor()
-	originalAnsibleExecutor := ansible.GetExecutor()
-	defer func() {
-		git.SetExecutor(originalGitExecutor)
-		ansible.SetExecutor(originalAnsibleExecutor)
-	}()
-
 	tests := []struct {
 		name              string
 		repoPath          string
@@ -351,7 +331,7 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 
 			// Create temporary cache file for this test
 			tmpDir := t.TempDir()
-			cacheFile := filepath.Join(tmpDir, "cache.json")
+			cacheFile := filepath.Join(tmpDir, "ansible.json")
 
 			// Setup mock git executor
 			mockGit := &MockGitExecutor{
@@ -359,8 +339,6 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 					return []byte("abc123def456\n"), nil
 				},
 			}
-			git.SetExecutor(mockGit)
-
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
 				ExecuteContextFunc: func(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
@@ -382,10 +360,11 @@ func TestValidateAndSuggest_Integration(t *testing.T) {
 					return []byte("TASK TAGS: [" + tagsStr.String() + "]"), nil
 				},
 			}
-			ansible.SetExecutor(mockAnsible)
+			ctx = git.WithExecutor(ctx, mockGit)
+			ctx = ansible.WithExecutor(ctx, mockAnsible)
 
 			// Create cache with temporary file and pre-populate data
-			c, err := cache.NewCacheWithFile(cacheFile)
+			c, err := ansible.NewCacheWithFile(cacheFile)
 			if err != nil {
 				t.Fatalf("Failed to create test cache: %v", err)
 			}
@@ -420,15 +399,6 @@ func TestHandleInstall_Integration(t *testing.T) {
 	if !isAnsiblePlaybookAvailable() {
 		t.Skip("Skipping TestHandleInstall_Integration: ansible-playbook not found in PATH")
 	}
-
-	// Save original executors
-	originalGitExecutor := git.GetExecutor()
-	originalAnsibleExecutor := ansible.GetExecutor()
-	defer func() {
-		git.SetExecutor(originalGitExecutor)
-		ansible.SetExecutor(originalAnsibleExecutor)
-	}()
-
 	tests := []struct {
 		name        string
 		tags        []string
@@ -469,8 +439,6 @@ func TestHandleInstall_Integration(t *testing.T) {
 					return []byte("abc123def456\n"), nil
 				},
 			}
-			git.SetExecutor(mockGit)
-
 			// Setup mock ansible executor
 			mockAnsible := &MockAnsibleExecutor{
 				ExecuteContextFunc: func(ctx context.Context, dir string, name string, args ...string) ([]byte, error) {
@@ -485,36 +453,34 @@ func TestHandleInstall_Integration(t *testing.T) {
 					return nil
 				},
 			}
-			ansible.SetExecutor(mockAnsible)
-
 			// Create temporary cache file for this test
 			tmpDir := t.TempDir()
-			cacheFile := filepath.Join(tmpDir, "cache.json")
+			cacheFile := filepath.Join(tmpDir, "ansible.json")
 
 			// Create a mock cobra command
 			cmd := &cobra.Command{
 				Use: "test",
 			}
-			cmd.SetContext(context.Background())
+			cmd.SetContext(ansible.WithExecutor(git.WithExecutor(context.Background(), mockGit), mockAnsible))
 
 			// Create cache with temporary file and pre-populate to speed up tests
-			c, err := cache.NewCacheWithFile(cacheFile)
+			c, err := ansible.NewCacheWithFile(cacheFile)
 			if err != nil {
 				t.Fatalf("Failed to create test cache: %v", err)
 			}
 
-			_ = c.SetRepoCache(constants.SaltboxRepoPath, map[string]any{
+			_ = c.SetRepoCache(layout.SaltboxRepoPath, map[string]any{
 				"commit": "abc123def456",
 				"tags":   []any{"plex", "sonarr", "radarr"},
 			})
-			_ = c.SetRepoCache(constants.SandboxRepoPath, map[string]any{
+			_ = c.SetRepoCache(layout.Current().SandboxRepoPath, map[string]any{
 				"commit": "abc123def456",
 				"tags":   []any{"overseerr", "tautulli"},
 			})
 
 			// Call handleInstall - but note this may fail if it tries to actually run ansible
 			// We're mainly testing the parsing logic here
-			err = handleInstall(cmd, tt.tags, []string{}, []string{}, []string{}, 0, true) // Use noCache=true
+			err = handleInstall(cmd, tt.tags, []string{}, []string{}, []string{}, 0, true, false) // Use noCache=true
 
 			if tt.expectError && err == nil {
 				t.Errorf("Expected error but got none")

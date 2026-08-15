@@ -8,11 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/saltyorg/sb-go/internal/ansible"
-	"github.com/saltyorg/sb-go/internal/cache"
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/logging"
-	"github.com/saltyorg/sb-go/internal/table"
+	"github.com/saltyorg/sb-go/ansible"
+	"github.com/saltyorg/sb-go/layout"
+	"github.com/saltyorg/sb-go/terminal"
 
 	"github.com/agnivade/levenshtein"
 	aquatable "github.com/aquasecurity/table"
@@ -21,10 +19,15 @@ import (
 )
 
 // listCmd represents the list command
-var listCmd = &cobra.Command{
-	Use:   "list [query]",
-	Short: "List available Saltbox, Sandbox or Saltbox-mod tags",
-	Long: `List available Saltbox, Sandbox or Saltbox-mod tags
+func newListCommand() *cobra.Command {
+	opts := struct {
+		includeMod bool
+		verbosity  int
+	}{}
+	listCmd := &cobra.Command{
+		Use:   "list [query]",
+		Short: "List available Saltbox, Sandbox or Saltbox-mod tags",
+		Long: `List available Saltbox, Sandbox or Saltbox-mod tags
 
 Without arguments, displays all available tags.
 With a query argument, performs fuzzy search across all tags.
@@ -33,26 +36,24 @@ Examples:
   sb list                # List all tags
   sb list plex           # Search for tags matching "plex"
   sb list arr            # Search for tags matching "arr"`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		verbosity, _ := cmd.Flags().GetCount("verbose")
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			var query string
+			if len(args) > 0 {
+				query = args[0]
+			}
 
-		var query string
-		if len(args) > 0 {
-			query = args[0]
-		}
-
-		return handleList(ctx, verbosity, query)
-	},
+			return handleList(ctx, opts.verbosity, query, opts.includeMod)
+		},
+	}
+	listCmd.Flags().BoolVarP(&opts.includeMod, "include-mod", "m", false, "Include Saltbox-mod tags")
+	listCmd.Flags().CountVarP(&opts.verbosity, "verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
+	return listCmd
 }
 
-var includeMod bool
-
-func init() {
-	rootCmd.AddCommand(listCmd)
-	listCmd.Flags().BoolVarP(&includeMod, "include-mod", "m", false, "Include Saltbox-mod tags")
-	listCmd.Flags().CountP("verbose", "v", "Increase verbosity level (can be used multiple times, e.g. -vvv)")
+func addListCommand(rootCmd *cobra.Command) {
+	rootCmd.AddCommand(newListCommand())
 }
 
 // tagResult holds a tag with its metadata for search results
@@ -63,13 +64,13 @@ type tagResult struct {
 	distance int
 }
 
-func handleList(ctx context.Context, verbosity int, query string) error {
-	cacheInstance, err := cache.NewCache()
+func handleList(ctx context.Context, verbosity int, query string, includeMod bool) error {
+	cacheInstance, err := ansible.NewCache()
 	if err != nil {
 		return fmt.Errorf("error creating cache: %w", err)
 	}
 
-	logging.Debug(verbosity, "Cache instance created successfully")
+	terminal.Debug(verbosity, "Cache instance created successfully")
 
 	repoInfo := []struct {
 		RepoPath      string
@@ -79,12 +80,12 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 		Prefix        string
 		RepoName      string
 	}{
-		{constants.SaltboxRepoPath, constants.SaltboxPlaybookPath(), "", "Saltbox tags:", "", "Saltbox"},
-		{constants.SandboxRepoPath, constants.SandboxPlaybookPath(), "sanity_check", "\nSandbox tags (prepend sandbox-):", "sandbox-", "Sandbox"},
+		{layout.SaltboxRepoPath, layout.SaltboxPlaybookPath(), "", "Saltbox tags:", "", "Saltbox"},
+		{layout.Current().SandboxRepoPath, layout.SandboxPlaybookPath(), "sanity_check", "\nSandbox tags (prepend sandbox-):", "sandbox-", "Sandbox"},
 	}
 
 	if includeMod {
-		if _, err := os.Stat(constants.SaltboxModRepoPath); err == nil {
+		if _, err := os.Stat(layout.Current().SaltboxModRepoPath); err == nil {
 			repoInfo = append(repoInfo, struct {
 				RepoPath      string
 				PlaybookPath  string
@@ -92,7 +93,7 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 				BaseTitle     string
 				Prefix        string
 				RepoName      string
-			}{constants.SaltboxModRepoPath, constants.SaltboxModPlaybookPath(), "sanity_check", "\nSaltbox_mod tags (prepend mod-):", "mod-", "Saltbox-mod"})
+			}{layout.Current().SaltboxModRepoPath, layout.SaltboxModPlaybookPath(), "sanity_check", "\nSaltbox_mod tags (prepend mod-):", "mod-", "Saltbox-mod"})
 		} else if errors.Is(err, os.ErrNotExist) {
 			fmt.Println("Saltbox-mod directory not found, skipping.  Ensure Saltbox-mod is installed.")
 		} else {
@@ -111,35 +112,35 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 		var tags []string // Declare tags here
 		cacheStatus := "" // Default to empty string
 
-		logging.Debug(verbosity, "Processing repository: %s", info.RepoPath)
-		logging.Debug(verbosity, "Playbook path: %s", info.PlaybookPath)
-		logging.Debug(verbosity, "Extra skip tags: %s", info.ExtraSkipTags)
+		terminal.Debug(verbosity, "Processing repository: %s", info.RepoPath)
+		terminal.Debug(verbosity, "Playbook path: %s", info.PlaybookPath)
+		terminal.Debug(verbosity, "Extra skip tags: %s", info.ExtraSkipTags)
 
-		if info.RepoPath == constants.SaltboxModRepoPath {
+		if info.RepoPath == layout.Current().SaltboxModRepoPath {
 			// Always run ansible list tags for saltbox_mod
-			logging.Debug(verbosity, "Running ansible list tags for saltbox_mod (no cache)")
+			terminal.Debug(verbosity, "Running ansible list tags for saltbox_mod (no cache)")
 			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
-				handleInterruptError(err)
+				handleInterruptError(ctx, err)
 				errs = append(errs, fmt.Errorf("error running ansible list tags for %s: %w", info.RepoPath, err))
 				continue
 			}
-			logging.Debug(verbosity, "Retrieved %d tags from ansible", len(tags))
+			terminal.Debug(verbosity, "Retrieved %d tags from ansible", len(tags))
 		} else {
 			// Use cache for other repositories
-			logging.Debug(verbosity, "Attempting to use cache for %s", info.RepoPath)
+			terminal.Debug(verbosity, "Attempting to use cache for %s", info.RepoPath)
 			cacheRebuilt, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
-				handleInterruptError(err)
+				handleInterruptError(ctx, err)
 				errs = append(errs, fmt.Errorf("error running and caching ansible tags for %s: %w", info.RepoPath, err))
 				continue
 			}
-			logging.Debug(verbosity, "Cache rebuilt: %t", cacheRebuilt)
+			terminal.Debug(verbosity, "Cache rebuilt: %t", cacheRebuilt)
 
 			repoCache, cacheFound := cacheInstance.GetRepoCache(info.RepoPath)
-			logging.Debug(verbosity, "Cache found for %s: %t", info.RepoPath, cacheFound)
+			terminal.Debug(verbosity, "Cache found for %s: %t", info.RepoPath, cacheFound)
 			if cacheFound {
-				logging.Debug(verbosity, "Cache contents: %+v", repoCache)
+				terminal.Debug(verbosity, "Cache contents: %+v", repoCache)
 			}
 
 			tagsInterface, ok := repoCache["tags"]
@@ -148,12 +149,12 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 				continue
 			}
 
-			logging.Debug(verbosity, "Tags interface type: %T", tagsInterface)
+			terminal.Debug(verbosity, "Tags interface type: %T", tagsInterface)
 
 			tags = make([]string, 0)
 			switch v := tagsInterface.(type) {
 			case []any:
-				logging.Debug(verbosity, "Processing []any with %d elements", len(v))
+				terminal.Debug(verbosity, "Processing []any with %d elements", len(v))
 				for i, tag := range v {
 					if strTag, ok := tag.(string); ok {
 						tags = append(tags, strTag)
@@ -162,22 +163,22 @@ func handleList(ctx context.Context, verbosity int, query string) error {
 					}
 				}
 			case []string:
-				logging.Debug(verbosity, "Processing []string with %d elements", len(v))
+				terminal.Debug(verbosity, "Processing []string with %d elements", len(v))
 				tags = v
 			default:
 				errs = append(errs, fmt.Errorf("unexpected tags type in cache for %s: %T", info.RepoPath, tagsInterface))
 				continue
 			}
 
-			logging.Debug(verbosity, "Successfully extracted %d tags from cache", len(tags))
+			terminal.Debug(verbosity, "Successfully extracted %d tags from cache", len(tags))
 
 			if !cacheRebuilt && repoCache != nil {
 				cacheStatus = " (cached)"
-				logging.Debug(verbosity, "Using cached tags (not rebuilt)")
+				terminal.Debug(verbosity, "Using cached tags (not rebuilt)")
 			}
 		}
 
-		logging.Debug(verbosity, "Final tag count for %s: %d", info.RepoPath, len(tags))
+		terminal.Debug(verbosity, "Final tag count for %s: %d", info.RepoPath, len(tags))
 
 		fmt.Printf("%s%s\n\n", info.BaseTitle, cacheStatus)
 		printInColumns(tags, 2)
@@ -233,7 +234,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 	BaseTitle     string
 	Prefix        string
 	RepoName      string
-}, cacheInstance *cache.Cache, verbosity int) error {
+}, cacheInstance *ansible.Cache, verbosity int) error {
 	queryLower := strings.ToLower(query)
 	var allResults []tagResult
 	var errs []error
@@ -242,14 +243,14 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 	for _, info := range repoInfo {
 		var tags []string
 
-		logging.Debug(verbosity, "Processing repository: %s", info.RepoPath)
+		terminal.Debug(verbosity, "Processing repository: %s", info.RepoPath)
 
-		if info.RepoPath == constants.SaltboxModRepoPath {
+		if info.RepoPath == layout.Current().SaltboxModRepoPath {
 			// Always run ansible list tags for saltbox_mod
 			var err error
 			tags, err = ansible.RunAnsibleListTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
-				handleInterruptError(err)
+				handleInterruptError(ctx, err)
 				errs = append(errs, fmt.Errorf("error running ansible list tags for %s: %w", info.RepoPath, err))
 				continue
 			}
@@ -257,7 +258,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 			// Use cache for other repositories
 			_, err := ansible.RunAndCacheAnsibleTags(ctx, info.RepoPath, info.PlaybookPath, info.ExtraSkipTags, cacheInstance, verbosity)
 			if err != nil {
-				handleInterruptError(err)
+				handleInterruptError(ctx, err)
 				errs = append(errs, fmt.Errorf("error running and caching ansible tags for %s: %w", info.RepoPath, err))
 				continue
 			}
@@ -377,7 +378,7 @@ func handleSearch(ctx context.Context, query string, repoInfo []struct {
 	}
 
 	// Create a single table with all repositories
-	t := table.New(os.Stdout)
+	t := terminal.New(os.Stdout)
 
 	// First section becomes the table header
 	t.SetHeaders(nonEmptySections[0].name)

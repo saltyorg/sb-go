@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -9,11 +10,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"unicode"
 
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/utils"
+	"github.com/saltyorg/sb-go/host"
+	"github.com/saltyorg/sb-go/layout"
 
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
@@ -28,10 +28,12 @@ type factConfig struct {
 }
 
 // factCmd represents the fact command
-var factCmd = &cobra.Command{
-	Use:   "fact [role] [instance]",
-	Short: "Manage Saltbox configuration facts",
-	Long: `This command allows loading, saving, and deleting configuration facts
+func newFactCommand() *cobra.Command {
+	config := &factConfig{}
+	factCmd := &cobra.Command{
+		Use:   "fact [role] [instance]",
+		Short: "Manage Saltbox configuration facts",
+		Long: `This command allows loading, saving, and deleting configuration facts
 stored in INI files located in the /opt/saltbox directory.
 
 Example usage:
@@ -41,21 +43,15 @@ Example usage:
   sb fact role instance --method=delete --delete-type=key --key key1
   sb fact role instance --method=delete --delete-type=instance
   sb fact role --method=delete --delete-type=role`,
-	Args: cobra.RangeArgs(1, 2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get flag values and create config
-		method, _ := cmd.Flags().GetString("method")
-		deleteType, _ := cmd.Flags().GetString("delete-type")
-		keyValues, _ := cmd.Flags().GetStringSlice("key")
-
-		config := &factConfig{
-			method:     method,
-			deleteType: deleteType,
-			keyValues:  keyValues,
-		}
-
-		return runFactCommand(cmd, args, config)
-	},
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runFactCommand(cmd, args, config)
+		},
+	}
+	factCmd.Flags().StringVar(&config.method, "method", "load", "Method to use (load, save, delete)")
+	factCmd.Flags().StringVar(&config.deleteType, "delete-type", "", "Type of deletion (role, instance, key)")
+	factCmd.Flags().StringSliceVar(&config.keyValues, "key", []string{}, "Key-value pairs (format: key=value)")
+	return factCmd
 }
 
 // runFactCommand handles the main logic for the fact command
@@ -132,7 +128,7 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 		instance := args[1]
 
 		// Get the Saltbox user for owner/group
-		saltboxUser, err := utils.GetSaltboxUser()
+		saltboxUser, err := host.GetSaltboxUser()
 		if err != nil {
 			return fmt.Errorf("error getting Saltbox user: %v", err)
 		}
@@ -161,7 +157,7 @@ func runFactCommand(cmd *cobra.Command, args []string, config *factConfig) error
 		}
 
 		// Get the Saltbox user for owner/group if needed for cleanup
-		saltboxUser, err := utils.GetSaltboxUser()
+		saltboxUser, err := host.GetSaltboxUser()
 		if err != nil {
 			return fmt.Errorf("error getting Saltbox user: %v", err)
 		}
@@ -323,19 +319,18 @@ func displayFacts(facts map[string]string) {
 	}
 }
 
-// setFileOwnershipAndPermissions sets the file ownership to saltboxUser and permissions to 0640
-func setFileOwnershipAndPermissions(filePath, saltboxUser string) error {
-	// Always set permissions to 0640
-	if err := os.Chmod(filePath, 0640); err != nil {
+// setFileOwnershipAndPermissions sets ownership and mode through an already-open
+// file descriptor so path replacement cannot redirect the operation.
+func setFileOwnershipAndPermissions(file *os.File, saltboxUser string) error {
+	if err := file.Chmod(0640); err != nil {
 		return fmt.Errorf("failed to set file permissions: %v", err)
 	}
 
-	// Set ownership to the Saltbox user
 	passwd, err := user.Lookup(saltboxUser)
 	if err == nil {
 		uid, _ := strconv.Atoi(passwd.Uid)
 		gid, _ := strconv.Atoi(passwd.Gid)
-		if err := syscall.Chown(filePath, uid, gid); err != nil {
+		if err := file.Chown(uid, gid); err != nil {
 			// Just log the error but don't fail the operation
 			fmt.Printf("Warning: Failed to set ownership to %s: %v\n", saltboxUser, err)
 		}
@@ -343,6 +338,121 @@ func setFileOwnershipAndPermissions(filePath, saltboxUser string) error {
 		fmt.Printf("Warning: Failed to lookup user %s: %v\n", saltboxUser, err)
 	}
 
+	return nil
+}
+
+func inspectFactsDirectory(dir string, create bool) (bool, error) {
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) && create {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return false, fmt.Errorf("create facts directory: %w", err)
+		}
+		info, err = os.Lstat(dir)
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect facts directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false, fmt.Errorf("facts directory %s must not be a symlink", dir)
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("facts path %s is not a directory", dir)
+	}
+	return true, nil
+}
+
+// loadINIFile opens an existing regular file and verifies that the path still
+// names the same inode after open. This rejects symlinks and path-swap races.
+func loadINIFile(filePath string) (*ini.File, bool, error) {
+	dirExists, err := inspectFactsDirectory(filepath.Dir(filePath), false)
+	if err != nil || !dirExists {
+		return nil, false, err
+	}
+
+	pathInfo, err := os.Lstat(filePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("inspect facts file: %w", err)
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, false, fmt.Errorf("facts file %s must not be a symlink", filePath)
+	}
+	if !pathInfo.Mode().IsRegular() {
+		return nil, false, fmt.Errorf("facts file %s is not a regular file", filePath)
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, false, fmt.Errorf("open facts file: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return nil, false, fmt.Errorf("inspect open facts file: %w", err)
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(pathInfo, openedInfo) {
+		return nil, false, fmt.Errorf("facts file %s changed while it was being opened", filePath)
+	}
+
+	cfg, err := ini.Load(file)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to load ini file: %v", err)
+	}
+	return cfg, true, nil
+}
+
+// writeINIFile atomically replaces the destination from a same-directory
+// temporary file. Existing symlinks are never followed.
+func writeINIFile(filePath string, cfg *ini.File, saltboxUser string) error {
+	dir := filepath.Dir(filePath)
+	if _, err := inspectFactsDirectory(dir, true); err != nil {
+		return err
+	}
+
+	temporary, err := os.CreateTemp(dir, "."+filepath.Base(filePath)+"-*")
+	if err != nil {
+		return fmt.Errorf("create temporary facts file: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	removeTemporary := true
+	defer func() {
+		_ = temporary.Close()
+		if removeTemporary {
+			_ = os.Remove(temporaryPath)
+		}
+	}()
+
+	if err := setFileOwnershipAndPermissions(temporary, saltboxUser); err != nil {
+		return err
+	}
+	if _, err := cfg.WriteTo(temporary); err != nil {
+		return fmt.Errorf("write temporary facts file: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		return fmt.Errorf("sync temporary facts file: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary facts file: %w", err)
+	}
+	if err := os.Rename(temporaryPath, filePath); err != nil {
+		return fmt.Errorf("replace facts file: %w", err)
+	}
+	removeTemporary = false
+
+	directory, err := os.Open(dir)
+	if err != nil {
+		return fmt.Errorf("open facts directory for sync: %w", err)
+	}
+	defer func() { _ = directory.Close() }()
+	if err := directory.Sync(); err != nil {
+		return fmt.Errorf("sync facts directory: %w", err)
+	}
 	return nil
 }
 
@@ -358,7 +468,7 @@ func getKeyNames(keys map[string]string) []string {
 
 // getFilePath returns the configuration file path for a role
 func getFilePath(role string) string {
-	return filepath.Join(constants.SaltboxFactsPath, role+".ini")
+	return filepath.Join(layout.Current().SaltboxFactsPath, role+".ini")
 }
 
 // parseKeyValues parses key=value string slices into a map
@@ -379,16 +489,12 @@ func parseKeyValues(keyVals []string) map[string]string {
 // loadAllInstances loads all instances and their facts from an ini file
 func loadAllInstances(filePath string) (map[string]map[string]string, error) {
 	allInstances := make(map[string]map[string]string)
-
-	// Check if the file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return allInstances, nil // Return an empty map if the file doesn't exist
-	}
-
-	// Load the ini file
-	cfg, err := ini.Load(filePath)
+	cfg, exists, err := loadINIFile(filePath)
 	if err != nil {
-		return allInstances, fmt.Errorf("failed to load ini file: %v", err)
+		return allInstances, err
+	}
+	if !exists {
+		return allInstances, nil
 	}
 
 	// Get all sections (instances)
@@ -422,15 +528,12 @@ func loadFacts(filePath, instance string, defaults map[string]string) (map[strin
 	// Copy defaults into facts
 	maps.Copy(facts, defaults)
 
-	// Check if the file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return facts, nil // Return defaults if the file doesn't exist
-	}
-
-	// Load the ini file
-	cfg, err := ini.Load(filePath)
+	cfg, exists, err := loadINIFile(filePath)
 	if err != nil {
-		return facts, fmt.Errorf("failed to load ini file: %v", err)
+		return facts, err
+	}
+	if !exists {
+		return facts, nil
 	}
 
 	// Check if the instance section exists
@@ -465,13 +568,13 @@ func saveFacts(filePath, instance string, keys map[string]string, saltboxUser st
 	// Create a new ini file config
 	cfg := ini.Empty()
 
-	// If a file exists, load it
-	fileExists := false
-	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-		fileExists = true
-		if err := cfg.Append(filePath); err != nil {
-			return facts, false, fmt.Errorf("failed to load existing ini file: %v", err)
-		}
+	// If a regular file exists, load it without following symlinks.
+	existing, fileExists, err := loadINIFile(filePath)
+	if err != nil {
+		return facts, false, err
+	}
+	if fileExists {
+		cfg = existing
 	}
 
 	// Ensure section exists
@@ -517,20 +620,8 @@ func saveFacts(filePath, instance string, keys map[string]string, saltboxUser st
 
 	// Save the file if changes were made
 	if changed {
-		// Create the directory if it doesn't exist
-		dir := filepath.Dir(filePath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return facts, false, fmt.Errorf("failed to create directory: %v", err)
-		}
-
-		// Save to file
-		if err := cfg.SaveTo(filePath); err != nil {
+		if err := writeINIFile(filePath, cfg, saltboxUser); err != nil {
 			return facts, false, fmt.Errorf("failed to save ini file: %v", err)
-		}
-
-		// Set ownership and permissions
-		if err := setFileOwnershipAndPermissions(filePath, saltboxUser); err != nil {
-			return facts, true, err
 		}
 	}
 
@@ -543,8 +634,13 @@ func deleteFacts(filePath, deleteType, instance string, keys map[string]string, 
 
 	// For role deletion, just remove the file
 	if deleteType == "role" {
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		if _, err := inspectFactsDirectory(filepath.Dir(filePath), false); err != nil {
+			return false, err
+		}
+		if _, err := os.Lstat(filePath); errors.Is(err, os.ErrNotExist) {
 			return false, nil // File doesn't exist, no change
+		} else if err != nil {
+			return false, fmt.Errorf("inspect facts file: %v", err)
 		}
 
 		if err := os.Remove(filePath); err != nil {
@@ -554,15 +650,13 @@ func deleteFacts(filePath, deleteType, instance string, keys map[string]string, 
 		return true, nil
 	}
 
-	// For instance or key deletion, we need to modify the file
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return false, nil // File doesn't exist, no change
-	}
-
-	// Load the ini file
-	cfg, err := ini.Load(filePath)
+	// For instance or key deletion, load without following symlinks.
+	cfg, exists, err := loadINIFile(filePath)
 	if err != nil {
-		return false, fmt.Errorf("failed to load ini file: %v", err)
+		return false, err
+	}
+	if !exists {
+		return false, nil
 	}
 
 	// If the instance doesn't exist, no change
@@ -588,24 +682,14 @@ func deleteFacts(filePath, deleteType, instance string, keys map[string]string, 
 
 	// Save changes if any were made
 	if changed {
-		if err := cfg.SaveTo(filePath); err != nil {
+		if err := writeINIFile(filePath, cfg, saltboxUser); err != nil {
 			return false, fmt.Errorf("failed to save ini file: %v", err)
-		}
-
-		// Set ownership and permissions
-		if err := setFileOwnershipAndPermissions(filePath, saltboxUser); err != nil {
-			return true, err
 		}
 	}
 
 	return changed, nil
 }
 
-func init() {
-	rootCmd.AddCommand(factCmd)
-
-	// Add flags
-	factCmd.Flags().String("method", "load", "Method to use (load, save, delete)")
-	factCmd.Flags().String("delete-type", "", "Type of deletion (role, instance, key)")
-	factCmd.Flags().StringSlice("key", []string{}, "Key-value pairs (format: key=value)")
+func addFactCommand(rootCmd *cobra.Command) {
+	rootCmd.AddCommand(newFactCommand())
 }

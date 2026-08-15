@@ -116,7 +116,7 @@ run_scenario() {
 mkdir -p "${repository_root}/build"
 (
     cd "${repository_root}"
-    CGO_ENABLED=0 go test -c -o "${test_binary}" ./internal/python
+    CGO_ENABLED=0 go test -c -o "${test_binary}" ./python
 )
 
 run_scenario repository-present false

@@ -17,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/saltyorg/sb-go/internal/constants"
-	"github.com/saltyorg/sb-go/internal/signals"
+	"github.com/saltyorg/sb-go/layout"
+	"github.com/saltyorg/sb-go/signals"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -40,6 +40,7 @@ var (
 
 // restoreModel holds the state of the Bubble Tea UI.
 type restoreModel struct {
+	ctx        context.Context
 	focusIndex int
 	inputs     []textinput.Model
 	err        error
@@ -48,8 +49,9 @@ type restoreModel struct {
 	submitted  bool
 }
 
-func initialRestoreModel() *restoreModel {
+func initialRestoreModel(ctx context.Context) *restoreModel {
 	m := &restoreModel{
+		ctx:       ctx,
 		inputs:    make([]textinput.Model, 3),
 		submitted: false,
 	}
@@ -103,7 +105,7 @@ func (m *restoreModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c":
-			signals.GetGlobalManager().Shutdown(130)
+			signals.Shutdown(m.ctx, 130)
 			return m, tea.Quit
 		case "esc":
 			return m, tea.Quit
@@ -208,63 +210,71 @@ func (m *restoreModel) View() tea.View {
 	return v
 }
 
-// restoreCmd represents the restore command
-var restoreCmd = &cobra.Command{
-	Use:   "restore",
-	Short: "Fetches and decrypts files based on username and password",
-	Long: `Fetches encrypted files from a remote URL, decrypts them, and places them in the Saltbox directory.
+func newRestoreCommand() *cobra.Command {
+	var verbose bool
+	restoreCmd := &cobra.Command{
+		Use:   "restore",
+		Short: "Fetches and decrypts files based on username and password",
+		Long: `Fetches encrypted files from a remote URL, decrypts them, and places them in the Saltbox directory.
 	The restore URL defaults to "crs.saltbox.dev".  A password will be prompted for twice.`,
-	Hidden: true,
-	Args:   cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		p := tea.NewProgram(initialRestoreModel(), tea.WithOutput(os.Stdout), tea.WithContext(cmd.Context()))
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			p := tea.NewProgram(initialRestoreModel(cmd.Context()), tea.WithOutput(cmd.OutOrStdout()), tea.WithContext(cmd.Context()))
 
-		m, err := p.Run()
-		if err != nil {
-			return fmt.Errorf("could not start program: %w", err)
-		}
-
-		// Assert the model back to our model and check the submitted flag.
-		if finalModel, ok := m.(*restoreModel); ok {
-			if finalModel.submitted {
-				// Form was submitted, proceed with restore.
-				user := finalModel.user
-				password := finalModel.password
-				restoreURL := "https://crs.saltbox.dev"
-
-				dir := constants.SaltboxRepoPath
-				folder := filepath.Join(os.TempDir(), "saltbox_restore")
-				verbose, _ := cmd.Flags().GetBool("verbose")
-
-				successfulDownloads, err := validateAndRestore(cmd.Context(), user, password, restoreURL, dir, folder, verbose)
-				if err != nil {
-					if verbose {
-						return fmt.Errorf("restore error (DEBUG: %v): %w", err, err)
-					}
-					return fmt.Errorf("restore error: %w", err)
-				}
-
-				if successfulDownloads == 0 {
-					return fmt.Errorf("restore process failed: no files were downloaded or decrypted")
-				}
-
-				fmt.Printf("Restore process completed: %d files successfully restored.\n", successfulDownloads)
-				return nil
-
-			} else {
-				// User exited without submitting, exit gracefully.
-				fmt.Println("Restore cancelled.")
-				return nil
+			m, err := p.Run()
+			if err != nil {
+				return fmt.Errorf("could not start program: %w", err)
 			}
-		}
 
-		return fmt.Errorf("could not retrieve values from the UI")
-	},
+			// Assert the model back to our model and check the submitted flag.
+			if finalModel, ok := m.(*restoreModel); ok {
+				if finalModel.submitted {
+					// Form was submitted, proceed with restore.
+					user := finalModel.user
+					password := finalModel.password
+					restoreURL := "https://crs.saltbox.dev"
+
+					dir := layout.SaltboxRepoPath
+					folder, err := newRestoreTempDir()
+					if err != nil {
+						return fmt.Errorf("could not create private restore directory: %w", err)
+					}
+					successfulDownloads, err := validateAndRestore(cmd.Context(), user, password, restoreURL, dir, folder, verbose)
+					if err != nil {
+						if verbose {
+							return fmt.Errorf("restore error (DEBUG: %v): %w", err, err)
+						}
+						return fmt.Errorf("restore error: %w", err)
+					}
+
+					if successfulDownloads == 0 {
+						return fmt.Errorf("restore process failed: no files were downloaded or decrypted")
+					}
+
+					fmt.Printf("Restore process completed: %d files successfully restored.\n", successfulDownloads)
+					return nil
+
+				} else {
+					// User exited without submitting, exit gracefully.
+					fmt.Println("Restore cancelled.")
+					return nil
+				}
+			}
+
+			return fmt.Errorf("could not retrieve values from the UI")
+		},
+	}
+	restoreCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	return restoreCmd
 }
 
-func init() {
-	rootCmd.AddCommand(restoreCmd)
-	restoreCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
+func newRestoreTempDir() (string, error) {
+	return os.MkdirTemp("", "saltbox-restore-*")
+}
+
+func addRestoreCommand(rootCmd *cobra.Command) {
+	rootCmd.AddCommand(newRestoreCommand())
 }
 
 // setupRestoreFolders creates the necessary temporary and restore folders
@@ -358,12 +368,11 @@ func processRestoredFile(file, folder, dir, password string, verbose bool) error
 
 func validateAndRestore(ctx context.Context, user, password, restoreURL, dir, folder string, verbose bool) (int, error) {
 	files := []string{"accounts.yml", "adv_settings.yml", "backup_config.yml", "hetzner_vlan.yml", "localhost.yml", "motd.yml", "providers.yml", "rclone.conf", "settings.yml"}
+	defer func() { _ = os.RemoveAll(folder) }()
 
 	if err := setupRestoreFolders(dir, folder, verbose); err != nil {
 		return 0, err
 	}
-	defer func() { _ = os.RemoveAll(folder) }() // Clean up the temp folder afterward
-
 	userHash := fmt.Sprintf("%x", sha1.Sum([]byte(user)))
 	if verbose {
 		fmt.Println("User Hash:", userHash)
@@ -378,17 +387,16 @@ func validateAndRestore(ctx context.Context, user, password, restoreURL, dir, fo
 			fmt.Printf("DEBUG: Fetching URL: %s\n", url)
 		}
 
-		if !validateURL(ctx, url, verbose) {
-			fmt.Println(" [IGNORED]")
-			continue
-		}
-
 		outFile := filepath.Join(folder, file+".enc")
 		if verbose {
 			fmt.Printf("DEBUG: Downloading to: %s\n", outFile)
 		}
 		if err := downloadFile(ctx, url, outFile); err != nil {
-			fmt.Println(" [FAIL]")
+			if _, ok := errors.AsType[*restoreHTTPStatusError](err); ok {
+				fmt.Println(" [IGNORED]")
+			} else {
+				fmt.Println(" [FAIL]")
+			}
 			continue
 		}
 
@@ -413,30 +421,9 @@ func validateAndRestore(ctx context.Context, user, password, restoreURL, dir, fo
 	return successfulDownloads, nil
 }
 
-func validateURL(ctx context.Context, url string, verbose bool) bool {
-	if verbose {
-		fmt.Printf("DEBUG: Validating URL: %s\n", url)
-	}
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
-	if err != nil {
-		return false
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		if verbose {
-			fmt.Printf("DEBUG: URL validation failed: %v\n", err)
-		}
-		return false
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if verbose {
-		fmt.Printf("DEBUG: URL validation status code: %d\n", resp.StatusCode)
-	}
-	return resp.StatusCode == http.StatusOK
-}
+type restoreHTTPStatusError struct{ status string }
+
+func (e *restoreHTTPStatusError) Error() string { return "bad status: " + e.status }
 
 func downloadFile(ctx context.Context, url, filePath string) error {
 	const maxRestoreFileSize = 16 << 20
@@ -455,14 +442,20 @@ func downloadFile(ctx context.Context, url, filePath string) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", resp.Status)
+		return &restoreHTTPStatusError{status: resp.Status}
 	}
 
-	out, err := os.Create(filePath)
+	out, err := os.OpenFile(filePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = out.Close() }()
+	keep := false
+	defer func() {
+		_ = out.Close()
+		if !keep {
+			_ = os.Remove(filePath)
+		}
+	}()
 
 	written, err := io.Copy(out, io.LimitReader(resp.Body, maxRestoreFileSize+1))
 	if err != nil {
@@ -471,6 +464,13 @@ func downloadFile(ctx context.Context, url, filePath string) error {
 	if written > maxRestoreFileSize {
 		return fmt.Errorf("restore file exceeds %d bytes", maxRestoreFileSize)
 	}
+	if err := out.Sync(); err != nil {
+		return fmt.Errorf("sync downloaded restore file: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close downloaded restore file: %w", err)
+	}
+	keep = true
 	return nil
 }
 
@@ -543,7 +543,28 @@ func decryptFile(inputFile, outputFile, password string, verbose bool) error {
 	if verbose {
 		fmt.Printf("DEBUG: Plaintext length after unpadding: %d\n", len(plaintext))
 	}
-	return os.WriteFile(outputFile, plaintext, 0600)
+	output, err := os.OpenFile(outputFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	keep := false
+	defer func() {
+		_ = output.Close()
+		if !keep {
+			_ = os.Remove(outputFile)
+		}
+	}()
+	if _, err := output.Write(plaintext); err != nil {
+		return err
+	}
+	if err := output.Sync(); err != nil {
+		return err
+	}
+	if err := output.Close(); err != nil {
+		return err
+	}
+	keep = true
+	return nil
 }
 
 func deriveKeyAndIV(password, salt []byte, verbose bool) ([]byte, []byte) {
@@ -557,6 +578,38 @@ func deriveKeyAndIV(password, salt []byte, verbose bool) ([]byte, []byte) {
 }
 
 func moveFile(src, dst string, perm os.FileMode) error {
+	sourceInfo, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if sourceInfo.Mode()&os.ModeSymlink != 0 || !sourceInfo.Mode().IsRegular() {
+		return fmt.Errorf("restore source %s is not a regular file", src)
+	}
+	source, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	openedInfo, err := source.Stat()
+	if err != nil {
+		_ = source.Close()
+		return err
+	}
+	if !os.SameFile(sourceInfo, openedInfo) {
+		_ = source.Close()
+		return fmt.Errorf("restore source %s changed while it was being opened", src)
+	}
+	if err := source.Chmod(perm); err != nil {
+		_ = source.Close()
+		return err
+	}
+	if err := source.Sync(); err != nil {
+		_ = source.Close()
+		return err
+	}
+	if err := source.Close(); err != nil {
+		return err
+	}
+
 	if err := os.Rename(src, dst); err == nil {
 		return nil
 	} else if linkErr, ok := err.(*os.LinkError); ok && errors.Is(linkErr.Err, syscall.EXDEV) {
