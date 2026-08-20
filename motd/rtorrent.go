@@ -231,7 +231,7 @@ func formatRtorrentOutput(infos []rtorrentInfo) string {
 		appNameColored := AppNameStyle.Render(paddedName)
 
 		summary := formatRtorrentSummary(info)
-		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))
+		fmt.Fprintf(&output, "%s%s", appNameColored, summary)
 	}
 
 	return output.String()

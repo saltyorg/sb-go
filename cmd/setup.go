@@ -77,7 +77,7 @@ func checkSetupAllowed(repoPath string, force bool) error {
 		return fmt.Errorf("%s exists but is not a directory", repoPath)
 	}
 	if !force {
-		return fmt.Errorf("Saltbox setup already exists at %s; setup is intended for fresh installations only (use --force to run it anyway)", repoPath)
+		return fmt.Errorf("setup already exists at %s; setup is intended for fresh installations only (use --force to run it anyway)", repoPath)
 	}
 
 	return nil

@@ -115,8 +115,16 @@ func TestFastSpinnerConsumesDelayedTerminalCapabilityResponses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open pty: %v", err)
 	}
-	defer master.Close()
-	defer slave.Close()
+	defer func() {
+		if err := master.Close(); err != nil {
+			t.Errorf("close pty master: %v", err)
+		}
+	}()
+	defer func() {
+		if err := slave.Close(); err != nil {
+			t.Errorf("close pty slave: %v", err)
+		}
+	}()
 
 	cmd := exec.Command(os.Args[0], "-test.run=^TestFastSpinnerPTYHelper$")
 	cmd.Env = append(os.Environ(),

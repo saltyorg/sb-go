@@ -740,15 +740,15 @@ func GetCpuInfo(ctx context.Context, verbose bool) string {
 				}
 				if threadsPerSocket > coresPerSocket {
 					// We have hyperthreading/SMT
-					output.WriteString(fmt.Sprintf("%s (%s cores, %s threads)",
+					fmt.Fprintf(&output, "%s (%s cores, %s threads)",
 						DefaultStyle.Render(modelName),
 						ValueStyle.Render(fmt.Sprintf("%d", coresPerSocket)),
-						ValueStyle.Render(fmt.Sprintf("%d", threadsPerSocket))))
+						ValueStyle.Render(fmt.Sprintf("%d", threadsPerSocket)))
 				} else {
 					// No hyperthreading
-					output.WriteString(fmt.Sprintf("%s (%s cores)",
+					fmt.Fprintf(&output, "%s (%s cores)",
 						DefaultStyle.Render(modelName),
-						ValueStyle.Render(fmt.Sprintf("%d", coresPerSocket))))
+						ValueStyle.Render(fmt.Sprintf("%d", coresPerSocket)))
 				}
 			}
 			return output.String()
@@ -1039,7 +1039,7 @@ func GetDockerInfo(ctx context.Context, verbose bool) string {
 	// If there are problematic containers, add them to the output
 	if len(problemContainers) > 0 {
 		for _, container := range problemContainers {
-			output.WriteString(fmt.Sprintf("\n%s", container))
+			fmt.Fprintf(&output, "\n%s", container)
 		}
 	}
 
@@ -1171,12 +1171,12 @@ func GetDiskInfo(ctx context.Context, verbose bool) string {
 			// Format using the original format with wide fixed spacing and mountpoint
 			infoLine := fmt.Sprintf("%-30s%s used out of %s", p.mountPoint, coloredPercent, coloredSize)
 			output.WriteString(DefaultStyle.Render(infoLine))
-			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
+			fmt.Fprintf(&output, "\n%s", p.formattedBar)
 		} else {
 			// For later partitions, add line breaks before
 			infoLine := fmt.Sprintf("%-30s%s used out of %s", p.mountPoint, coloredPercent, coloredSize)
-			output.WriteString(fmt.Sprintf("\n%s", DefaultStyle.Render(infoLine)))
-			output.WriteString(fmt.Sprintf("\n%s", p.formattedBar))
+			fmt.Fprintf(&output, "\n%s", DefaultStyle.Render(infoLine))
+			fmt.Fprintf(&output, "\n%s", p.formattedBar)
 		}
 	}
 
@@ -1255,7 +1255,7 @@ func GetTraefikInfo(ctx context.Context, verbose bool) string {
 
 		// Add each problematic router on its own line
 		for _, problem := range problemRouters {
-			output.WriteString(fmt.Sprintf("\n%s", problem))
+			fmt.Fprintf(&output, "\n%s", problem)
 		}
 	} else {
 		// All routers are healthy

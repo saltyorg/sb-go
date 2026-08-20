@@ -237,15 +237,15 @@ func formatEmbyOutput(infos []EmbyStreamInfo) string {
 		appNameColored := AppNameStyle.Render(paddedName)
 
 		if info.Error != nil {
-			output.WriteString(fmt.Sprintf("%s%s", appNameColored, ErrorStyle.Render(formatProviderError(info.Error))))
+			fmt.Fprintf(&output, "%s%s", appNameColored, ErrorStyle.Render(formatProviderError(info.Error)))
 			continue
 		}
 
 		if info.ActiveStreams == 0 {
-			output.WriteString(fmt.Sprintf("%sNo active streams", appNameColored))
+			fmt.Fprintf(&output, "%sNo active streams", appNameColored)
 			continue
 		}
-		output.WriteString(fmt.Sprintf("%s%s", appNameColored, formatStreamSummary(info)))
+		fmt.Fprintf(&output, "%s%s", appNameColored, formatStreamSummary(info))
 	}
 
 	return output.String()

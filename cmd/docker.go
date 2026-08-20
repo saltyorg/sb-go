@@ -161,10 +161,10 @@ func requestDockerJob(ctx context.Context, endpoint string, ignoreContainers []s
 	if err != nil {
 		return jobResp, fmt.Errorf("send Docker controller request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return jobResp, fmt.Errorf("Docker controller request failed with status code: %d", resp.StatusCode)
+		return jobResp, fmt.Errorf("docker controller request failed with status code: %d", resp.StatusCode)
 	}
 
 	decoder := json.NewDecoder(io.LimitReader(resp.Body, dockerAPIResponseLimit))
@@ -172,7 +172,7 @@ func requestDockerJob(ctx context.Context, endpoint string, ignoreContainers []s
 		return jobResp, fmt.Errorf("decode Docker controller response: %w", err)
 	}
 	if strings.TrimSpace(jobResp.JobID) == "" {
-		return jobResp, fmt.Errorf("Docker controller response is missing job ID")
+		return jobResp, fmt.Errorf("docker controller response is missing job ID")
 	}
 	return jobResp, nil
 }

@@ -145,12 +145,11 @@ func policyVersionOrigins(output, installedVersion string) (bool, bool, bool) {
 
 func hasLegacyDeadsnakesVersionSuffix(version string) bool {
 	for _, marker := range []string{"+focal", "+jammy"} {
-		markerIndex := strings.LastIndex(version, marker)
-		if markerIndex == -1 {
+		_, revision, found := strings.CutLast(version, marker)
+		if !found {
 			continue
 		}
 
-		revision := version[markerIndex+len(marker):]
 		if revision == "" {
 			return false
 		}

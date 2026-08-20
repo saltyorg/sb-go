@@ -286,7 +286,7 @@ func formatBytes(b uint64) string {
 }
 
 func diskSpaceError(path string, usedPercent float64, availableBytes uint64) error {
-	return fmt.Errorf("INSUFFICIENT DISK SPACE - Install cancelled: %s is %.1f%% full (%s free). Free up space on %s before continuing.",
+	return fmt.Errorf("INSUFFICIENT DISK SPACE - Install cancelled: %s is %.1f%% full (%s free). Free up space on %s before continuing",
 		path, usedPercent, formatBytes(availableBytes), path)
 }
 

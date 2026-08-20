@@ -81,7 +81,7 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 	}
 	if !compatible {
 		return fmt.Errorf(
-			"Saltbox requires uv %s or newer, but this sb release provides %s; run sb self-update",
+			"saltbox requires uv %s or newer, but this sb release provides %s; run sb self-update",
 			config.MinimumUV,
 			uvVersion,
 		)
@@ -309,18 +309,18 @@ func inspectActive(ctx context.Context, pythonVersion, lockDigest string) (activ
 
 func validatePython(ctx context.Context, path, version string) error {
 	if path == "" {
-		return fmt.Errorf("Python path is empty")
+		return fmt.Errorf("python path is empty")
 	}
 	result, err := executor.Run(ctx, path, executor.WithArgs("--version"))
 	if err != nil {
 		return fmt.Errorf("run Python at %s: %w", path, err)
 	}
 	if got := strings.TrimSpace(string(result.Combined)); got != "Python "+version {
-		return fmt.Errorf("Python at %s reports %q, expected %q", path, got, "Python "+version)
+		return fmt.Errorf("python at %s reports %q, expected %q", path, got, "Python "+version)
 	}
 	_, err = executor.Run(ctx, path, executor.WithArgs("-c", "import encodings, sys; sys.exit(0)"))
 	if err != nil {
-		return fmt.Errorf("Python at %s cannot import its standard library: %w", path, err)
+		return fmt.Errorf("python at %s cannot import its standard library: %w", path, err)
 	}
 	return nil
 }

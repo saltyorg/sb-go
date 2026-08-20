@@ -132,7 +132,7 @@ func checkDuplicateKeys(node *yaml.Node) error {
 		var errorMsg strings.Builder
 		errorMsg.WriteString("duplicate keys found:")
 		for _, dup := range duplicates {
-			errorMsg.WriteString(fmt.Sprintf("\n  - %s", dup))
+			fmt.Fprintf(&errorMsg, "\n  - %s", dup)
 		}
 		return fmt.Errorf("%s", errorMsg.String())
 	}
@@ -279,7 +279,7 @@ func validateConfigWithSchema(ctx context.Context, task *terminal.Task, configFi
 			var errorMsg strings.Builder
 			errorMsg.WriteString("API validation failed:")
 			for _, apiErr := range apiErrors {
-				errorMsg.WriteString(fmt.Sprintf("\n  - %v", apiErr))
+				fmt.Fprintf(&errorMsg, "\n  - %v", apiErr)
 			}
 			// Fixed: Use %s format specifier to prevent format string vulnerability
 			return fmt.Errorf("%s", errorMsg.String())

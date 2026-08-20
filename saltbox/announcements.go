@@ -542,7 +542,9 @@ func PromptForMigrations(diffs []*AnnouncementDiff) ([]MigrationRequest, error) 
 func readMigrationApproval(input io.Reader, output io.Writer) (bool, error) {
 	scanner := bufio.NewScanner(input)
 	for {
-		fmt.Fprint(output, "\nRun all migration tags? (y/n): ")
+		if _, err := fmt.Fprint(output, "\nRun all migration tags? (y/n): "); err != nil {
+			return false, fmt.Errorf("write migration prompt: %w", err)
+		}
 		if !scanner.Scan() {
 			if err := scanner.Err(); err != nil {
 				return false, fmt.Errorf("failed to read migration approval: %w", err)
@@ -560,7 +562,9 @@ func readMigrationApproval(input io.Reader, output io.Writer) (bool, error) {
 		}
 
 		// Show error for invalid input
-		fmt.Fprintln(output, "Invalid input. Please enter 'y' (yes) or 'n' (no).")
+		if _, err := fmt.Fprintln(output, "Invalid input. Please enter 'y' (yes) or 'n' (no)."); err != nil {
+			return false, fmt.Errorf("write migration validation error: %w", err)
+		}
 	}
 }
 

@@ -626,7 +626,7 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 		appNameColored := AppNameStyle.Render(paddedName)
 
 		if queue.Error != nil {
-			output.WriteString(fmt.Sprintf("%s%s", appNameColored, ErrorStyle.Render(formatProviderError(queue.Error))))
+			fmt.Fprintf(&output, "%s%s", appNameColored, ErrorStyle.Render(formatProviderError(queue.Error)))
 			continue
 		}
 
@@ -659,7 +659,7 @@ func formatDetailedQueueOutput(queues []QueueInfo, verbose bool) string {
 		if len(statusParts) > 0 {
 			queueSummary += fmt.Sprintf(", %s", strings.Join(statusParts, ", "))
 		}
-		output.WriteString(fmt.Sprintf("%s%s", appNameColored, queueSummary))
+		fmt.Fprintf(&output, "%s%s", appNameColored, queueSummary)
 	}
 
 	if verbose {

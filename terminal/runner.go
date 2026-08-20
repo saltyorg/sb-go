@@ -290,7 +290,7 @@ func (r *Runner) printPlain(depth int, message string) {
 	// Multiple concurrent tasks may report plain output.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	fmt.Fprintln(r.output, strings.Repeat("  ", depth)+message)
+	_, _ = fmt.Fprintln(r.output, strings.Repeat("  ", depth)+message)
 }
 
 func (r *Runner) printMessage(message, color string) {
@@ -300,7 +300,7 @@ func (r *Runner) printMessage(message, color string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	fmt.Fprintln(r.output, getStyle(color).Render("● "+message))
+	_, _ = fmt.Fprintln(r.output, getStyle(color).Render("● "+message))
 }
 
 func (r *Runner) printFinal(output string) {
@@ -309,7 +309,7 @@ func (r *Runner) printFinal(output string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	fmt.Fprintln(r.output, output)
+	_, _ = fmt.Fprintln(r.output, output)
 }
 
 func normalizeTaskSpec(spec TaskSpec) TaskSpec {

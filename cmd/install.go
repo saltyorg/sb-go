@@ -269,47 +269,47 @@ func formatSuggestions(suggestions []suggestion) string {
 		switch s.sType {
 		case suggestionExactMatch:
 			// Exact match in other repo - this is the most helpful suggestion
-			result.WriteString(fmt.Sprintf("%s %s %s\n",
+			fmt.Fprintf(&result, "%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in "+s.currentRepo)))
-			result.WriteString(fmt.Sprintf("%s %s %s\n",
+				normalStyle.Render("not present in "+s.currentRepo))
+			fmt.Fprintf(&result, "%s %s %s\n",
 				labelStyle.Render("Try:"),
 				suggestStyle.Render(s.suggestTag),
-				normalStyle.Render("(from "+s.targetRepo+")")))
+				normalStyle.Render("(from "+s.targetRepo+")"))
 
 		case suggestionTypo:
 			// Likely typo in same repo
-			result.WriteString(fmt.Sprintf("%s %s %s\n",
+			fmt.Fprintf(&result, "%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in "+s.currentRepo)))
-			result.WriteString(fmt.Sprintf("%s %s\n",
+				normalStyle.Render("not present in "+s.currentRepo))
+			fmt.Fprintf(&result, "%s %s\n",
 				labelStyle.Render("Did you mean:"),
-				suggestStyle.Render(s.suggestTag)))
+				suggestStyle.Render(s.suggestTag))
 
 		case suggestionTypoOther:
 			// Likely typo in other repo
-			result.WriteString(fmt.Sprintf("%s %s %s\n",
+			fmt.Fprintf(&result, "%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in "+s.currentRepo)))
-			result.WriteString(fmt.Sprintf("%s %s %s\n",
+				normalStyle.Render("not present in "+s.currentRepo))
+			fmt.Fprintf(&result, "%s %s %s\n",
 				labelStyle.Render("Did you mean:"),
 				suggestStyle.Render(s.suggestTag),
-				normalStyle.Render("(from "+s.targetRepo+")")))
+				normalStyle.Render("(from "+s.targetRepo+")"))
 
 		case suggestionNotFound:
 			// Not found anywhere
 			infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(terminal.ColorLightBlue))
-			result.WriteString(fmt.Sprintf("%s %s %s\n",
+			fmt.Fprintf(&result, "%s %s %s\n",
 				labelStyle.Render("Tag:"),
 				inputStyle.Render(s.inputTag),
-				normalStyle.Render("not present in Saltbox or Sandbox")))
-			result.WriteString(fmt.Sprintf("%s %s %s\n",
+				normalStyle.Render("not present in Saltbox or Sandbox"))
+			fmt.Fprintf(&result, "%s %s %s\n",
 				labelStyle.Render("Add:"),
 				infoStyle.Render("--no-cache"),
-				normalStyle.Render("if developing your own role")))
+				normalStyle.Render("if developing your own role"))
 		}
 
 		// Add blank line between suggestions

@@ -60,12 +60,12 @@ func GenerateExampleConfig() (string, error) {
 		// Write section comment from description
 		if rule.Description != "" {
 			for line := range strings.SplitSeq(strings.TrimSpace(rule.Description), "\n") {
-				buf.WriteString(fmt.Sprintf("# %s\n", line))
+				fmt.Fprintf(&buf, "# %s\n", line)
 			}
 		}
 
 		// Generate the section based on its structure
-		buf.WriteString(fmt.Sprintf("%s:\n", sectionName))
+		fmt.Fprintf(&buf, "%s:\n", sectionName)
 		generateSection(&buf, rule, "  ")
 	}
 
@@ -89,14 +89,14 @@ func generateSection(buf *strings.Builder, rule *saltbox.SchemaRule, indent stri
 
 		// Handle instances array specially - generate example item
 		if fieldName == "instances" && propRule.Type == "array" && propRule.Items != nil {
-			buf.WriteString(fmt.Sprintf("%sinstances:\n", indent))
+			fmt.Fprintf(buf, "%sinstances:\n", indent)
 			generateInstanceExample(buf, propRule.Items, indent+"  ")
 			continue
 		}
 
 		// Use example if available
 		if propRule.Example != nil {
-			buf.WriteString(fmt.Sprintf("%s%s: %s\n", indent, fieldName, formatValue(propRule.Example)))
+			fmt.Fprintf(buf, "%s%s: %s\n", indent, fieldName, formatValue(propRule.Example))
 		}
 	}
 }
@@ -125,7 +125,7 @@ func generateInstanceExample(buf *strings.Builder, itemRule *saltbox.SchemaRule,
 		return
 	}
 
-	buf.WriteString(fmt.Sprintf("%s- ", indent))
+	fmt.Fprintf(buf, "%s- ", indent)
 	first := true
 
 	// Define field order for instances
@@ -145,10 +145,10 @@ func generateInstanceExample(buf *strings.Builder, itemRule *saltbox.SchemaRule,
 		if first {
 			first = false
 		} else {
-			buf.WriteString(fmt.Sprintf("%s  ", indent))
+			fmt.Fprintf(buf, "%s  ", indent)
 		}
 
-		buf.WriteString(fmt.Sprintf("%s: %s\n", fieldName, formatValue(fieldRule.Example)))
+		fmt.Fprintf(buf, "%s: %s\n", fieldName, formatValue(fieldRule.Example))
 	}
 }
 
@@ -160,11 +160,11 @@ func generateColorsSection(rule *saltbox.SchemaRule) string {
 	// Write description from schema
 	if rule.Description != "" {
 		for line := range strings.SplitSeq(strings.TrimSpace(rule.Description), "\n") {
-			buf.WriteString(fmt.Sprintf("# %s\n", line))
+			fmt.Fprintf(&buf, "# %s\n", line)
 		}
 	}
 
-	buf.WriteString(fmt.Sprintf(`colors:
+	fmt.Fprintf(&buf, `colors:
   text:
     label: "%s"
     value: "%s"
@@ -179,7 +179,7 @@ func generateColorsSection(rule *saltbox.SchemaRule) string {
     critical: "%s"
 `, defaultKey, defaultValue, defaultAppName,
 		defaultWarning, defaultSuccess, defaultError,
-		defaultProgressBarLow, defaultProgressBarHigh, defaultProgressBarCritical))
+		defaultProgressBarLow, defaultProgressBarHigh, defaultProgressBarCritical)
 
 	return buf.String()
 }

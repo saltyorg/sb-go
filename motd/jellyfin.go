@@ -260,12 +260,12 @@ func formatJellyfinOutput(infos []JellyfinStreamInfo) string {
 		appNameColored := AppNameStyle.Render(paddedName)
 
 		if info.Error != nil {
-			output.WriteString(fmt.Sprintf("%s%s", appNameColored, ErrorStyle.Render(formatProviderError(info.Error))))
+			fmt.Fprintf(&output, "%s%s", appNameColored, ErrorStyle.Render(formatProviderError(info.Error)))
 			continue
 		}
 
 		if info.ActiveStreams == 0 {
-			output.WriteString(fmt.Sprintf("%sNo active streams", appNameColored))
+			fmt.Fprintf(&output, "%sNo active streams", appNameColored)
 			continue
 		}
 
@@ -299,7 +299,7 @@ func formatJellyfinOutput(infos []JellyfinStreamInfo) string {
 			summary += fmt.Sprintf(" (%s)", strings.Join(streamTypes, ", "))
 		}
 
-		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))
+		fmt.Fprintf(&output, "%s%s", appNameColored, summary)
 	}
 
 	return output.String()

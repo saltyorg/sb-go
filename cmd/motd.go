@@ -169,7 +169,7 @@ func runMotdCommand(ctx context.Context, mcfg *motdConfig) error {
 				if i%numColumns == 0 {
 					availableTypes.WriteString("\n")
 				}
-				availableTypes.WriteString(fmt.Sprintf("  %-16s", bType))
+				fmt.Fprintf(&availableTypes, "  %-16s", bType)
 			}
 			availableTypes.WriteString("\n")
 
@@ -189,7 +189,7 @@ func runMotdCommand(ctx context.Context, mcfg *motdConfig) error {
 			if i%numColumns == 0 {
 				availableFonts.WriteString("\n")
 			}
-			availableFonts.WriteString(fmt.Sprintf("  %-16s", font))
+			fmt.Fprintf(&availableFonts, "  %-16s", font)
 		}
 		availableFonts.WriteString("\n")
 

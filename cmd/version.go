@@ -15,7 +15,9 @@ func newVersionCommand(info buildinfo.Info) *cobra.Command {
 		Long:  `Print Saltbox CLI version`,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintf(cmd.OutOrStdout(), "Saltbox CLI version: %s (commit: %s)\n", info.Version, info.GitCommit)
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Saltbox CLI version: %s (commit: %s)\n", info.Version, info.GitCommit); err != nil {
+				return fmt.Errorf("write version: %w", err)
+			}
 			return nil
 		},
 	}

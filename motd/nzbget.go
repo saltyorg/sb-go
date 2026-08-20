@@ -268,7 +268,7 @@ func formatNzbgetOutput(infos []NzbgetInfo) string {
 		appNameColored := AppNameStyle.Render(paddedName)
 
 		summary := formatNzbgetSummary(info)
-		output.WriteString(fmt.Sprintf("%s%s", appNameColored, summary))
+		fmt.Fprintf(&output, "%s%s", appNameColored, summary)
 	}
 
 	return output.String()

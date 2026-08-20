@@ -32,7 +32,7 @@ func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
 	}
 
 	// Print error header (already styled by Fang)
-	fmt.Fprintf(w, "%s\n", styles.ErrorHeader.String())
+	_, _ = fmt.Fprintf(w, "%s\n", styles.ErrorHeader.String())
 
 	// Split error message by line breaks
 	errorText := err.Error()
@@ -47,15 +47,15 @@ func customErrorHandler(w io.Writer, styles fang.Styles, err error) {
 			// This allows error messages with embedded lipgloss styles and ANSI codes
 			// to display correctly without Fang's titleFirstWord transform interfering
 			lineStyle := styles.ErrorText.UnsetTransform().UnsetWidth()
-			fmt.Fprintf(w, "%s\n", lineStyle.Render(line))
+			_, _ = fmt.Fprintf(w, "%s\n", lineStyle.Render(line))
 		} else {
-			fmt.Fprintf(w, "\n") // Preserve blank lines
+			_, _ = fmt.Fprintln(w) // Preserve blank lines
 		}
 	}
 
 	// Add trailing newline if error doesn't end with one
 	if !strings.HasSuffix(errorText, "\n") {
-		fmt.Fprintf(w, "\n")
+		_, _ = fmt.Fprintln(w)
 	}
 }
 
