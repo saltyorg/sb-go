@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -83,7 +84,11 @@ func TestSyncRequirementsUsesNonInteractiveProgressFreeOutput(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	config := executor.Config{OutputMode: executor.OutputModeCombined}
-	for _, option := range syncRequirementsOptions("/venv/bin/python", "/requirements.txt", true, &stdout, &stderr) {
+	for _, option := range syncRequirementsOptions("/venv/bin/python", "/requirements.txt", SyncRequirementsOptions{
+		Verbose: true,
+		Stdout:  &stdout,
+		Stderr:  &stderr,
+	}) {
 		option(&config)
 	}
 
@@ -99,5 +104,51 @@ func TestSyncRequirementsUsesNonInteractiveProgressFreeOutput(t *testing.T) {
 	}
 	if config.Stdout != &stdout || config.Stderr != &stderr {
 		t.Fatal("uv sync did not retain managed output writers")
+	}
+}
+
+func TestCleanReinstallBypassesUVCache(t *testing.T) {
+	t.Run("Python install", func(t *testing.T) {
+		got := installPythonArgs("3.12.13", "/srv/python/release", true, true)
+		want := []string{
+			"python", "install", "--managed-python", "--no-bin", "--install-dir", "/srv/python/release",
+			"--reinstall", "--no-cache", "3.12.13",
+		}
+		if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+			t.Fatalf("install arguments = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("Python install during forced venv recovery", func(t *testing.T) {
+		got := installPythonArgs("3.12.13", "/srv/python/release", false, true)
+		if !slices.Contains(got, "--no-cache") || slices.Contains(got, "--reinstall") {
+			t.Fatalf("forced venv Python fallback arguments = %q, want no-cache without reinstall", got)
+		}
+	})
+
+	t.Run("requirements sync", func(t *testing.T) {
+		config := executor.Config{}
+		for _, option := range syncRequirementsOptions("/venv/bin/python", "/requirements.txt", SyncRequirementsOptions{NoCache: true}) {
+			option(&config)
+		}
+		want := []string{
+			"pip", "sync", "--no-progress", "--python", "/venv/bin/python", "--require-hashes", "--no-cache", "/requirements.txt",
+		}
+		if strings.Join(config.Args, "\x00") != strings.Join(want, "\x00") {
+			t.Fatalf("sync arguments = %q, want %q", config.Args, want)
+		}
+	})
+}
+
+func TestNormalInstallKeepsUVCache(t *testing.T) {
+	if got := installPythonArgs("3.12.13", "/srv/python/release", false, false); slices.Contains(got, "--no-cache") {
+		t.Fatalf("normal Python install arguments unexpectedly bypass cache: %q", got)
+	}
+	config := executor.Config{}
+	for _, option := range syncRequirementsOptions("/venv/bin/python", "/requirements.txt", SyncRequirementsOptions{}) {
+		option(&config)
+	}
+	if slices.Contains(config.Args, "--no-cache") {
+		t.Fatalf("normal sync arguments unexpectedly bypass cache: %q", config.Args)
 	}
 }

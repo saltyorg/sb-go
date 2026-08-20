@@ -35,6 +35,10 @@ type Options struct {
 	Verbose     bool
 }
 
+func (o Options) noCache() bool {
+	return o.ForceVenv || o.ForcePython
+}
+
 type Manifest struct {
 	SchemaVersion    int      `json:"schema_version"`
 	GenerationID     string   `json:"generation_id"`
@@ -177,7 +181,12 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 
 	venvPython := filepath.Join(venvPath, "bin", "python3")
 	if err := task.RunOutput(ctx, terminal.TaskSpec{Running: "Syncing hashed Saltbox requirements"}, func(taskCtx context.Context, stdout, stderr io.Writer) error {
-		return SyncRequirements(taskCtx, venvPython, layout.AnsibleRequirementsPath, options.Verbose, stdout, stderr)
+		return SyncRequirements(taskCtx, venvPython, layout.AnsibleRequirementsPath, SyncRequirementsOptions{
+			NoCache: options.noCache(),
+			Verbose: options.Verbose,
+			Stdout:  stdout,
+			Stderr:  stderr,
+		})
 	}); err != nil {
 		return err
 	}
@@ -254,7 +263,7 @@ func createPythonRelease(ctx context.Context, task *terminal.Task, version strin
 		}
 	}()
 	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Installing Python %s", version)}, func(taskCtx context.Context) error {
-		return InstallPythonAt(taskCtx, version, installDir, options.ForcePython, options.Verbose)
+		return InstallPythonAt(taskCtx, version, installDir, options.ForcePython, options.noCache(), options.Verbose)
 	}); err != nil {
 		return "", "", fmt.Errorf("install Python release: %w", err)
 	}

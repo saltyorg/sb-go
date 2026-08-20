@@ -219,16 +219,23 @@ func extractUVBinary(tarballPath, destPath string, verbose bool) error {
 	return fmt.Errorf("uv binary not found in tarball")
 }
 
-func InstallPythonAt(ctx context.Context, version, installDir string, reinstall, verbose bool) error {
-	args := []string{"python", "install", "--managed-python", "--no-bin", "--install-dir", installDir}
-	if reinstall {
-		args = append(args, "--reinstall")
-	}
-	args = append(args, version)
+func InstallPythonAt(ctx context.Context, version, installDir string, reinstall, noCache, verbose bool) error {
+	args := installPythonArgs(version, installDir, reinstall, noCache)
 	if err := executor.RunVerbose(ctx, UVBinaryPath, args, verbose); err != nil {
 		return fmt.Errorf("error installing Python %s: %w", version, err)
 	}
 	return nil
+}
+
+func installPythonArgs(version, installDir string, reinstall, noCache bool) []string {
+	args := []string{"python", "install", "--managed-python", "--no-bin", "--install-dir", installDir}
+	if reinstall {
+		args = append(args, "--reinstall")
+	}
+	if noCache {
+		args = append(args, "--no-cache")
+	}
+	return append(args, version)
 }
 
 func FindPythonAt(ctx context.Context, version, installDir string) (string, error) {
@@ -253,28 +260,40 @@ func CreateVenvWithPython(ctx context.Context, venvPath, pythonPath string, verb
 	return nil
 }
 
-func SyncRequirements(ctx context.Context, pythonPath, requirementsPath string, verbose bool, stdout, stderr io.Writer) error {
-	options := syncRequirementsOptions(pythonPath, requirementsPath, verbose, stdout, stderr)
-	if _, err := executor.Run(ctx, UVBinaryPath, options...); err != nil {
+type SyncRequirementsOptions struct {
+	NoCache bool
+	Verbose bool
+	Stdout  io.Writer
+	Stderr  io.Writer
+}
+
+func SyncRequirements(ctx context.Context, pythonPath, requirementsPath string, settings SyncRequirementsOptions) error {
+	executorOptions := syncRequirementsOptions(pythonPath, requirementsPath, settings)
+	if _, err := executor.Run(ctx, UVBinaryPath, executorOptions...); err != nil {
 		return fmt.Errorf("error syncing requirements: %w", err)
 	}
 	return nil
 }
 
-func syncRequirementsOptions(pythonPath, requirementsPath string, verbose bool, stdout, stderr io.Writer) []executor.Option {
-	options := []executor.Option{
-		executor.WithArgs("pip", "sync", "--no-progress", "--python", pythonPath, "--require-hashes", requirementsPath),
+func syncRequirementsOptions(pythonPath, requirementsPath string, settings SyncRequirementsOptions) []executor.Option {
+	args := []string{"pip", "sync", "--no-progress", "--python", pythonPath, "--require-hashes"}
+	if settings.NoCache {
+		args = append(args, "--no-cache")
 	}
-	if stdout != nil {
-		options = append(options, executor.WithOutputMode(executor.OutputModeStream), executor.WithStdout(stdout))
+	args = append(args, requirementsPath)
+	executorOptions := []executor.Option{
+		executor.WithArgs(args...),
 	}
-	if stderr != nil {
-		options = append(options, executor.WithStderr(stderr))
+	if settings.Stdout != nil {
+		executorOptions = append(executorOptions, executor.WithOutputMode(executor.OutputModeStream), executor.WithStdout(settings.Stdout))
 	}
-	if verbose && stdout == nil {
-		options = append(options, executor.WithOutputMode(executor.OutputModeStream))
+	if settings.Stderr != nil {
+		executorOptions = append(executorOptions, executor.WithStderr(settings.Stderr))
 	}
-	return options
+	if settings.Verbose && settings.Stdout == nil {
+		executorOptions = append(executorOptions, executor.WithOutputMode(executor.OutputModeStream))
+	}
+	return executorOptions
 }
 
 func CheckPackages(ctx context.Context, pythonPath string) error {
@@ -287,7 +306,7 @@ func CheckPackages(ctx context.Context, pythonPath string) error {
 
 // Compatibility wrappers retained for callers outside the reconciler.
 func InstallPython(ctx context.Context, version string, verbose bool) error {
-	return InstallPythonAt(ctx, version, layout.PythonInstallDir, false, verbose)
+	return InstallPythonAt(ctx, version, layout.PythonInstallDir, false, false, verbose)
 }
 
 func FindPythonBinary(ctx context.Context, version string) (string, error) {

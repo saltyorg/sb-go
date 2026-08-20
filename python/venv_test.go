@@ -233,3 +233,22 @@ func TestEnvironmentStatusTaskSpec(t *testing.T) {
 		})
 	}
 }
+
+func TestForcedReconciliationBypassesCache(t *testing.T) {
+	tests := []struct {
+		name    string
+		options Options
+		want    bool
+	}{
+		{name: "normal reconciliation"},
+		{name: "forced venv", options: Options{ForceVenv: true}, want: true},
+		{name: "forced Python", options: Options{ForcePython: true}, want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := test.options.noCache(); got != test.want {
+				t.Fatalf("noCache() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
