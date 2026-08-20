@@ -47,7 +47,9 @@ jobs:
 
       - name: Run tests
         working-directory: sb-go
-        run: make test GO_TEST_FLAGS='-exec sudo'
+        run: |
+          command -v tmux
+          make test GO_TEST_FLAGS='-exec sudo'
 
       - name: Build sb binary
         working-directory: sb-go

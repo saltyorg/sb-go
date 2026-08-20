@@ -96,9 +96,6 @@ func TestRetainIsTheDefaultChildDisplay(t *testing.T) {
 	if output := model.finalOutput(); !strings.Contains(output, "child done") {
 		t.Fatalf("default child display did not retain completed child: %q", output)
 	}
-	if model.nodes[1].detached {
-		t.Fatal("default child display detached completed child")
-	}
 }
 
 func TestCompletedMarkerUsesTaskResultColor(t *testing.T) {
@@ -215,21 +212,6 @@ func TestFinishedViewClearsTransientFrameBeforeFinalOutput(t *testing.T) {
 	}
 }
 
-func TestPrintChildrenDetachesSuccessfulChild(t *testing.T) {
-	model := newProgressModel(TaskSpec{Running: "root", ChildDisplay: PrintChildTasks}, func() error { return nil })
-	updated, _ := model.Update(progressStartMsg{id: 1, parentID: 0, spec: TaskSpec{Running: "child", Success: "child done"}})
-	model = updated.(progressModel)
-	updated, cmd := model.Update(progressFinishMsg{id: 1})
-	model = updated.(progressModel)
-
-	if cmd == nil {
-		t.Fatal("print policy did not produce a persistent output command")
-	}
-	if view := model.View().Content; strings.Contains(view, "child done") {
-		t.Fatalf("printed child remained in live hierarchy: %q", view)
-	}
-}
-
 func TestRunnerPlainModeIsIndependent(t *testing.T) {
 	var first, second bytes.Buffer
 	firstRunner := NewRunner(RunnerOptions{Verbose: true, Output: &first})
@@ -254,7 +236,7 @@ func TestRunnerRejectsInvalidTaskSpec(t *testing.T) {
 	runner := NewRunner(RunnerOptions{Verbose: true, Output: io.Discard})
 	err := runner.Run(context.Background(), TaskSpec{
 		Running:      "invalid",
-		ChildDisplay: ChildDisplay(99),
+		ChildDisplay: CollapseChildTasks + 1,
 	}, func(context.Context, *Task) error {
 		return nil
 	})

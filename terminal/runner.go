@@ -23,10 +23,9 @@ type ChildDisplay uint8
 
 const (
 	// RetainChildTasks is the safe default: tasks remain in the live tree
-	// unless their caller explicitly chooses to collapse or print them.
+	// unless their caller explicitly chooses to collapse them.
 	RetainChildTasks ChildDisplay = iota
 	CollapseChildTasks
-	PrintChildTasks
 )
 
 // TaskSpec describes one task and how its direct children behave when it
@@ -326,7 +325,7 @@ func validateTaskSpec(spec TaskSpec) error {
 	if strings.TrimSpace(spec.Running) == "" {
 		return fmt.Errorf("task running message is required")
 	}
-	if spec.ChildDisplay > PrintChildTasks {
+	if spec.ChildDisplay > CollapseChildTasks {
 		return fmt.Errorf("invalid child display mode %d", spec.ChildDisplay)
 	}
 	return nil
@@ -350,7 +349,6 @@ type progressNode struct {
 	output   taskOutputBuffer
 	notices  []progressNotice
 	children []uint64
-	detached bool
 }
 
 type progressModel struct {
@@ -469,13 +467,6 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				node.state = progressSucceeded
 			}
-			if parent := m.nodes[node.parentID]; parent != nil &&
-				parent.spec.ChildDisplay == PrintChildTasks &&
-				node.state == progressSucceeded {
-				lines := m.renderNode(node.id, m.nodeDepth(node.id), true)
-				node.detached = true
-				return m, tea.Println(strings.Join(lines, "\n"))
-			}
 		}
 	case progressOutputMsg:
 		if node, ok := m.nodes[msg.id]; ok {
@@ -586,9 +577,6 @@ func (m progressModel) nodeVisible(node *progressNode) bool {
 }
 
 func (m progressModel) childVisible(parent, child *progressNode) bool {
-	if child.detached {
-		return false
-	}
 	if child.state == progressFailed || m.hasFailedDescendant(child) {
 		return true
 	}
@@ -600,24 +588,9 @@ func (m progressModel) childVisible(parent, child *progressNode) bool {
 		return true
 	case CollapseChildTasks:
 		return false
-	case PrintChildTasks:
-		return true
 	default:
 		return true
 	}
-}
-
-func (m progressModel) nodeDepth(id uint64) int {
-	depth := 0
-	for id != m.rootID {
-		node := m.nodes[id]
-		if node == nil {
-			break
-		}
-		depth++
-		id = node.parentID
-	}
-	return depth
 }
 
 func (m progressModel) hasFailedDescendant(node *progressNode) bool {

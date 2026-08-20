@@ -7,7 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/fang/v2 v2.0.1
 	charm.land/glamour/v2 v2.0.1
-	charm.land/lipgloss/v2 v2.0.5 // v2.0.6 strands transient inline frames in scrollback
+	charm.land/lipgloss/v2 v2.0.5 // v2.0.6 blocked by github.com/charmbracelet/ultraviolet/issues/155
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/agnivade/levenshtein v1.2.1
 	github.com/aquasecurity/table v1.11.0
