@@ -14,6 +14,7 @@ const (
 	SaltboxAdvancedSettingsConfigPath = "/srv/git/saltbox/adv_settings.yml"
 	SaltboxBackupConfigPath           = "/srv/git/saltbox/backup_config.yml"
 	SaltboxHetznerVLANConfigPath      = "/srv/git/saltbox/hetzner_vlan.yml"
+	SaltboxProvidersConfigPath        = "/srv/git/saltbox/providers.yml"
 	SaltboxSettingsConfigPath         = "/srv/git/saltbox/settings.yml"
 	SaltboxMOTDConfigPath             = "/srv/git/saltbox/motd.yml"
 	SaltboxMOTDSchemaPath             = "/srv/git/saltbox/schema/motd.schema.yml"

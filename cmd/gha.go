@@ -3,7 +3,11 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
+	"github.com/saltyorg/sb-go/host"
+	"github.com/saltyorg/sb-go/layout"
 	"github.com/saltyorg/sb-go/python"
 	"github.com/saltyorg/sb-go/saltbox"
 	"github.com/saltyorg/sb-go/terminal"
@@ -54,6 +58,17 @@ func newGHACommand() *cobra.Command {
 
 				if err := saltbox.CopyDefaultConfigFiles(ctx, task); err != nil {
 					return fmt.Errorf("error copying default configuration files: %w", err)
+				}
+				configOwner := strings.TrimSpace(os.Getenv("SUDO_USER"))
+				if err := host.EnsureForExistingUser(configOwner,
+					layout.SaltboxAccountsConfigPath,
+					layout.SaltboxAdvancedSettingsConfigPath,
+					layout.SaltboxBackupConfigPath,
+					layout.SaltboxHetznerVLANConfigPath,
+					layout.SaltboxProvidersConfigPath,
+					layout.SaltboxSettingsConfigPath,
+				); err != nil {
+					return fmt.Errorf("error assigning GHA configuration ownership: %w", err)
 				}
 
 				if err := saltbox.InitializeGitHooks(ctx, task); err != nil {

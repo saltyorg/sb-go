@@ -74,6 +74,9 @@ jobs:
           ls -la /srv/ansible/venv/bin/
           /srv/ansible/venv/bin/python3 --version
           /srv/ansible/venv/bin/ansible --version
+          echo "=== Checking private config ownership ==="
+          test "$(stat -c '%U:%G:%a' /srv/git/saltbox/accounts.yml)" = "runner:runner:600"
+          test "$(stat -c '%U:%G:%a' /srv/git/saltbox/settings.yml)" = "runner:runner:600"
 
       - name: Check saltbox.fact
         run: |
