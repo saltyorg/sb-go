@@ -100,7 +100,7 @@
                 "/(^|/)\\.uv-version$/"
             ],
             "matchStrings": [
-                "^(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)$"
+                "^(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\\s*$"
             ],
             "depNameTemplate": "uv",
             "datasourceTemplate": "pypi",
