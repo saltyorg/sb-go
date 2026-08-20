@@ -97,10 +97,10 @@
             "customType": "regex",
             "description": "Pinned uv runtime",
             "managerFilePatterns": [
-                "/(^|/)\\.uv-version$/"
+                "/(^|/)buildinfo/runtime\\.go$/"
             ],
             "matchStrings": [
-                "^(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\\s*$"
+                "uvVersion\\s*=\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
             ],
             "depNameTemplate": "uv",
             "datasourceTemplate": "pypi",

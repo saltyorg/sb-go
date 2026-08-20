@@ -47,6 +47,7 @@ jobs:
           fi
 
       - name: Build
+        id: build
         env:
           VERSION: ${{ steps.determine_version.outputs.version }}
           GIT_COMMIT: ${{ steps.get_git_commit.outputs.short_sha }}
@@ -62,9 +63,20 @@ jobs:
             OUTPUT_NAME="${APP_NAME}"
           fi
 
-          UV_VERSION=$(tr -d '[:space:]' < .uv-version)
-          ldflags="-w -s -X '${GITHUB_REPO}/buildinfo.version=${VERSION}' -X '${GITHUB_REPO}/buildinfo.gitCommit=${GIT_COMMIT}' -X '${GITHUB_REPO}/buildinfo.uvVersion=${UV_VERSION}' -X '${GITHUB_REPO}/buildinfo.disableSelfUpdate=${DISABLE_SELF_UPDATE}'"
+          ldflags="-w -s -X '${GITHUB_REPO}/buildinfo.version=${VERSION}' -X '${GITHUB_REPO}/buildinfo.gitCommit=${GIT_COMMIT}' -X '${GITHUB_REPO}/buildinfo.disableSelfUpdate=${DISABLE_SELF_UPDATE}'"
           go build -trimpath -ldflags="${ldflags}" -o "${OUTPUT_NAME}" .
+          echo "binary_path=${OUTPUT_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify embedded toolchain
+        id: toolchain
+        run: |
+          version_json=$("./${{ steps.build.outputs.binary_path }}" version --json)
+          uv_version=$(jq -r '.uv_version' <<< "$version_json")
+          if [[ ! "$uv_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid embedded uv version: $uv_version" >&2
+            exit 1
+          fi
+          echo "uv_version=$uv_version" >> "$GITHUB_OUTPUT"
 
       - name: Verify self-update is disabled
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -181,3 +193,4 @@ jobs:
         with:
           token: ${{ secrets.PAT }}
           sb-go-release: ${{ steps.determine_version.outputs.version }}
+          uv-version: ${{ steps.toolchain.outputs.uv_version }}

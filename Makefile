@@ -8,7 +8,6 @@ MODULE := github.com/saltyorg/sb-go
 VERSION ?= 0.0.0-dev
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "dev")
 DISABLE_SELF_UPDATE := true
-UV_VERSION := $(shell tr -d '[:space:]' < .uv-version)
 
 # Go build flags
 CGO_ENABLED := 0
@@ -17,7 +16,6 @@ GO_TEST_FLAGS ?=
 LDFLAGS := -w -s \
 	-X '$(MODULE)/buildinfo.version=$(VERSION)' \
 	-X '$(MODULE)/buildinfo.gitCommit=$(GIT_COMMIT)' \
-	-X '$(MODULE)/buildinfo.uvVersion=$(UV_VERSION)' \
 	-X '$(MODULE)/buildinfo.disableSelfUpdate=$(DISABLE_SELF_UPDATE)'
 
 # Build output

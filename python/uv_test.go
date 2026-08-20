@@ -70,13 +70,9 @@ func TestEnsureVersionRejectsFloatingVersion(t *testing.T) {
 	}
 }
 
-func TestRuntimeUVVersionMatchesVersionFile(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", ".uv-version"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.TrimSpace(string(data)); got != buildinfo.Current().UVVersion {
-		t.Fatalf(".uv-version = %q, buildinfo UVVersion = %q", got, buildinfo.Current().UVVersion)
+func TestRuntimeUVVersionIsExact(t *testing.T) {
+	if got := buildinfo.Current().UVVersion; !exactUVVersionPattern.MatchString(got) {
+		t.Fatalf("runtime uv version = %q, want exact major.minor.patch release", got)
 	}
 }
 

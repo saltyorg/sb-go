@@ -2,9 +2,9 @@
 
 set -euo pipefail
 
-uv_version=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/.uv-version")
+uv_version=$UV_VERSION
 if [[ ! "$uv_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Invalid sb-go .uv-version: $uv_version" >&2
+    echo "Invalid embedded sb-go uv version: $uv_version" >&2
     exit 1
 fi
 if [[ ! "$PYTHON_MINOR" =~ ^[0-9]+\.[0-9]+$ ]]; then
