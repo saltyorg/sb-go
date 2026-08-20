@@ -92,11 +92,6 @@ if [[ "$(printf '%s\n%s\n' "$current_uv" "$uv_version" | sort -V | tail -n 1)" !
     echo "sb-go uv $uv_version would downgrade Saltbox's uv requirement $current_uv" >&2
     exit 1
 fi
-if [[ "$current" == "$candidate" && "$current_uv" == "$uv_version" ]]; then
-    echo "Saltbox already uses Python $current with uv $current_uv"
-    exit 0
-fi
-
 candidate_lock="$workdir/requirements-saltbox.txt"
 "$uv_bin" pip compile \
     --python-version "$candidate" \
@@ -160,7 +155,7 @@ fi
 update_toolchain_files
 
 if git diff --quiet -- .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt; then
-    echo "The Saltbox automation branch already contains the requested toolchain"
+    echo "Saltbox already contains the requested Python toolchain state"
     exit 0
 fi
 
