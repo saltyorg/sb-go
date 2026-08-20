@@ -51,8 +51,7 @@ candidate=$(jq -r --arg minor "$PYTHON_MINOR" '
     | last
     | .version // empty
 ' "$catalog")
-candidate_url=$(jq -r --arg version "$candidate" '.[] | select(.version == $version) | .url' "$catalog" | head -n 1)
-if [[ -z "$candidate" || -z "$candidate_url" ]]; then
+if [[ -z "$candidate" ]]; then
     echo "uv $uv_version did not report a compatible CPython $PYTHON_MINOR Linux x86_64 GNU build" >&2
     exit 1
 fi
@@ -72,8 +71,10 @@ if [[ "$($python_bin --version)" != "Python $candidate" ]]; then
     exit 1
 fi
 
-git clone --depth=1 "https://github.com/$SALTBOX_REPOSITORY.git" "$workdir/saltbox"
+saltbox_clone_url=${SALTBOX_CLONE_URL:-"https://github.com/$SALTBOX_REPOSITORY.git"}
+git clone --depth=1 "$saltbox_clone_url" "$workdir/saltbox"
 cd "$workdir/saltbox"
+base_commit=$(git rev-parse HEAD)
 current=$(tr -d '[:space:]' < .python-version)
 if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Saltbox .python-version is invalid: $current" >&2
@@ -145,13 +146,6 @@ if [[ "$DRY_RUN" == "true" ]]; then
     exit 0
 fi
 
-branch="automation/python-$candidate-uv-$uv_version"
-if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-    git fetch --depth=1 origin "$branch"
-    git checkout -B "$branch" FETCH_HEAD
-else
-    git checkout -b "$branch"
-fi
 update_toolchain_files
 
 if git diff --quiet -- .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt; then
@@ -159,44 +153,22 @@ if git diff --quiet -- .python-version .uv-version .github/renovate.json require
     exit 0
 fi
 
-git config user.name "saltyorg automation"
-git config user.email "actions@users.noreply.github.com"
+git config user.name "github-actions[bot]"
+git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 git add .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt
 git commit -m "chore(deps): update Python toolchain"
 
-auth_header=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 --wrap=0)
+git fetch origin master
+remote_commit=$(git rev-parse origin/master)
+if [[ "$remote_commit" != "$base_commit" ]]; then
+    echo "Saltbox master changed from $base_commit to $remote_commit during toolchain generation; refusing to push stale output" >&2
+    exit 1
+fi
+
+auth_header=$(printf 'x-access-token:%s' "$SALTBOX_TOKEN" | base64 --wrap=0)
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
 GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
-    git push origin "HEAD:refs/heads/$branch"
+    git push origin HEAD:refs/heads/master
 unset auth_header
-
-owner=${SALTBOX_REPOSITORY%%/*}
-existing_pr=$(gh api \
-    -X GET \
-    "repos/$SALTBOX_REPOSITORY/pulls" \
-    -f state=open \
-    -f head="$owner:$branch" \
-    --jq '.[0].html_url // empty')
-if [[ -n "$existing_pr" ]]; then
-    echo "Updated $existing_pr"
-    exit 0
-fi
-
-body=$(cat <<EOF
-uv $uv_version, released with sb-go $SB_GO_RELEASE, reports CPython $candidate as available for Linux x86_64 GNU.
-
-The automation installed that exact interpreter and successfully synchronized and checked the current Saltbox requirements lock before opening this PR.
-
-Python build: $candidate_url
-EOF
-)
-pr_url=$(gh api \
-    -X POST \
-    "repos/$SALTBOX_REPOSITORY/pulls" \
-    -f title="Update Python toolchain to Python $candidate and uv $uv_version" \
-    -f head="$branch" \
-    -f base=master \
-    -f body="$body" \
-    --jq .html_url)
-echo "Created $pr_url"
+echo "Updated Saltbox master for sb-go $SB_GO_RELEASE with Python $candidate and uv $uv_version"

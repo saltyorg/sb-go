@@ -1,9 +1,9 @@
 name: Update Saltbox Python
-description: Open a Saltbox Python update PR using versions supported by the released uv
+description: Commit Saltbox Python updates using versions supported by the released uv
 
 inputs:
   token:
-    description: Token with permission to create Saltbox branches and pull requests
+    description: Token with permission to update the Saltbox repository
     required: true
   saltbox-repository:
     description: Saltbox repository
@@ -30,7 +30,7 @@ runs:
     - name: Discover supported Python and update Saltbox
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.token }}
+        SALTBOX_TOKEN: ${{ inputs.token }}
         SALTBOX_REPOSITORY: ${{ inputs.saltbox-repository }}
         PYTHON_MINOR: ${{ inputs.python-minor }}
         SB_GO_RELEASE: ${{ inputs.sb-go-release }}
