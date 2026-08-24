@@ -5,6 +5,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,20 +26,30 @@ func TestUVBinaryPath(t *testing.T) {
 	}
 }
 
+func TestUVXBinaryPath(t *testing.T) {
+	const expected = "/usr/local/bin/uvx"
+	if UVXBinaryPath != expected {
+		t.Fatalf("UVXBinaryPath = %q, want %q", UVXBinaryPath, expected)
+	}
+}
+
 func TestExtractUVBinary(t *testing.T) {
 	dir := t.TempDir()
 	archivePath := filepath.Join(dir, "uv.tar.gz")
-	want := []byte("test uv binary")
+	wantUV := []byte("test uv binary")
+	wantUVX := []byte("test uvx binary")
 
 	var archive bytes.Buffer
 	gzipWriter := gzip.NewWriter(&archive)
 	tarWriter := tar.NewWriter(gzipWriter)
-	header := &tar.Header{Name: "uv-x86_64-unknown-linux-gnu/uv", Mode: 0755, Size: int64(len(want))}
-	if err := tarWriter.WriteHeader(header); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := tarWriter.Write(want); err != nil {
-		t.Fatal(err)
+	for name, content := range map[string][]byte{"uv": wantUV, "uvx": wantUVX} {
+		header := &tar.Header{Name: "uv-x86_64-unknown-linux-gnu/" + name, Mode: 0755, Size: int64(len(content))}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarWriter.Write(content); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := tarWriter.Close(); err != nil {
 		t.Fatal(err)
@@ -47,19 +61,21 @@ func TestExtractUVBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	destination := filepath.Join(dir, "uv")
-	if err := os.WriteFile(destination, nil, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := extractUVBinary(archivePath, destination, false); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(destination)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(got, want) {
-		t.Fatalf("extracted uv = %q, want %q", got, want)
+	for name, want := range map[string][]byte{"uv": wantUV, "uvx": wantUVX} {
+		destination := filepath.Join(dir, name)
+		if err := os.WriteFile(destination, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := extractUVBinary(archivePath, destination, name, false); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(destination)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("extracted %s = %q, want %q", name, got, want)
+		}
 	}
 }
 
@@ -68,6 +84,80 @@ func TestEnsureVersionRejectsFloatingVersion(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "exact release") {
 		t.Fatalf("EnsureVersion() error = %v, want exact-release rejection", err)
 	}
+}
+
+func TestEnsureVersionInstallsMissingUVXCompanion(t *testing.T) {
+	const version = "1.2.3"
+	archive := uvTestArchive(t, map[string][]byte{
+		"uv":  []byte("#!/bin/sh\necho 'uv 1.2.3'\n"),
+		"uvx": []byte("#!/bin/sh\necho 'uvx 1.2.3'\n"),
+	})
+	digest := sha256.Sum256(archive)
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		requests++
+		switch request.URL.Path {
+		case "/metadata":
+			_, _ = fmt.Fprintf(writer, `{"assets":[{"id":1,"name":"uv-x86_64-unknown-linux-gnu.tar.gz","size":%d,"digest":"sha256:%x","browser_download_url":"%s/archive"}]}`, len(archive), digest, serverURL(request))
+		case "/archive":
+			_, _ = writer.Write(archive)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	uvPath := filepath.Join(dir, "uv")
+	uvxPath := filepath.Join(dir, "uvx")
+	if err := os.WriteFile(uvPath, []byte("#!/bin/sh\necho 'uv 1.2.3'\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ensureVersion(context.Background(), version, uvPath, uvxPath, false, server.URL+"/metadata", server.Client()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := binaryVersion(context.Background(), uvPath, "uv"); err != nil || got != version {
+		t.Fatalf("uv version = %q, %v", got, err)
+	}
+	if got, err := binaryVersion(context.Background(), uvxPath, "uvx"); err != nil || got != version {
+		t.Fatalf("uvx version = %q, %v", got, err)
+	}
+
+	requestsBeforeNoop := requests
+	if err := ensureVersion(context.Background(), version, uvPath, uvxPath, false, server.URL+"/metadata", server.Client()); err != nil {
+		t.Fatal(err)
+	}
+	if requests != requestsBeforeNoop {
+		t.Fatalf("healthy uv pair triggered %d additional HTTP requests", requests-requestsBeforeNoop)
+	}
+}
+
+func uvTestArchive(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+	var archive bytes.Buffer
+	gzipWriter := gzip.NewWriter(&archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	for name, content := range files {
+		header := &tar.Header{Name: "uv-x86_64-unknown-linux-gnu/" + name, Mode: 0755, Size: int64(len(content))}
+		if err := tarWriter.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarWriter.Write(content); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return archive.Bytes()
+}
+
+func serverURL(request *http.Request) string {
+	return "https://" + request.Host
 }
 
 func TestRuntimeUVVersionIsExact(t *testing.T) {

@@ -21,41 +21,53 @@ import (
 )
 
 const (
-	UVBinaryPath = "/usr/local/bin/uv"
-	UVGitHubRepo = "astral-sh/uv"
+	UVBinaryPath  = "/usr/local/bin/uv"
+	UVXBinaryPath = "/usr/local/bin/uvx"
+	UVGitHubRepo  = "astral-sh/uv"
 )
 
 var exactUVVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
-// DownloadAndInstallUV ensures that the exact uv release pinned into sb-go is installed.
+// DownloadAndInstallUV ensures that the exact uv and uvx release pinned into sb-go is installed.
 func DownloadAndInstallUV(ctx context.Context, verbose bool) error {
 	return EnsureVersion(ctx, buildinfo.Current().UVVersion, UVBinaryPath, verbose)
 }
 
-// EnsureVersion downloads, verifies, and atomically installs an exact uv release.
+// EnsureVersion downloads, verifies, and atomically installs an exact uv and uvx release.
 func EnsureVersion(ctx context.Context, version, destPath string, verbose bool) error {
 	metadataURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", UVGitHubRepo, version)
-	return ensureVersion(ctx, version, destPath, verbose, metadataURL, assetrelease.HTTPClient(30*time.Second))
+	return ensureVersion(ctx, version, destPath, destPath+"x", verbose, metadataURL, assetrelease.HTTPClient(30*time.Second))
 }
 
-func ensureVersion(ctx context.Context, version, destPath string, verbose bool, metadataURL string, client *http.Client) error {
+func ensureVersion(ctx context.Context, version, uvPath, uvxPath string, verbose bool, metadataURL string, client *http.Client) error {
 	if !exactUVVersionPattern.MatchString(version) {
 		return fmt.Errorf("uv version must be an exact release, got %q", version)
 	}
 
-	installed, err := binaryVersion(ctx, destPath)
-	if err == nil && installed == version {
+	installedUV, uvErr := binaryVersion(ctx, uvPath, "uv")
+	installedUVX, uvxErr := binaryVersion(ctx, uvxPath, "uvx")
+	if uvErr == nil && uvxErr == nil && installedUV == version && installedUVX == version {
 		if verbose {
-			fmt.Printf("uv %s is already installed at %s\n", version, destPath)
+			fmt.Printf("uv and uvx %s are already installed at %s and %s\n", version, uvPath, uvxPath)
 		}
 		return nil
 	}
-	if err != nil {
-		if _, statErr := os.Stat(destPath); statErr != nil && !os.IsNotExist(statErr) {
-			return fmt.Errorf("error checking installed uv: %w", statErr)
+	for _, check := range []struct {
+		name string
+		path string
+		err  error
+	}{
+		{name: "uv", path: uvPath, err: uvErr},
+		{name: "uvx", path: uvxPath, err: uvxErr},
+	} {
+		if check.err == nil {
+			continue
 		}
-		if verbose && !os.IsNotExist(err) {
-			fmt.Printf("Replacing unusable uv at %s: %v\n", destPath, err)
+		if _, statErr := os.Stat(check.path); statErr != nil && !os.IsNotExist(statErr) {
+			return fmt.Errorf("error checking installed %s: %w", check.name, statErr)
+		}
+		if verbose && !os.IsNotExist(check.err) {
+			fmt.Printf("Replacing unusable %s at %s: %v\n", check.name, check.path, check.err)
 		}
 	}
 
@@ -72,39 +84,52 @@ func ensureVersion(ctx context.Context, version, destPath string, verbose bool, 
 	}
 	defer func() { _ = os.Remove(tarballPath) }()
 
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+	if filepath.Dir(uvPath) != filepath.Dir(uvxPath) {
+		return fmt.Errorf("uv and uvx destinations must share a directory")
+	}
+	if err := os.MkdirAll(filepath.Dir(uvPath), 0755); err != nil {
 		return fmt.Errorf("error creating uv destination directory: %w", err)
 	}
-	staged, err := os.CreateTemp(filepath.Dir(destPath), ".uv-*")
-	if err != nil {
-		return fmt.Errorf("error creating staged uv binary: %w", err)
+	type uvExecutable struct {
+		name   string
+		target string
+		staged string
 	}
-	stagedPath := staged.Name()
-	if err := staged.Close(); err != nil {
-		_ = os.Remove(stagedPath)
-		return fmt.Errorf("error closing staged uv binary: %w", err)
-	}
-	defer func() { _ = os.Remove(stagedPath) }()
+	executables := []uvExecutable{{name: "uv", target: uvPath}, {name: "uvx", target: uvxPath}}
+	for index := range executables {
+		staged, err := os.CreateTemp(filepath.Dir(executables[index].target), "."+executables[index].name+"-*")
+		if err != nil {
+			return fmt.Errorf("error creating staged %s binary: %w", executables[index].name, err)
+		}
+		executables[index].staged = staged.Name()
+		if err := staged.Close(); err != nil {
+			_ = os.Remove(executables[index].staged)
+			return fmt.Errorf("error closing staged %s binary: %w", executables[index].name, err)
+		}
+		defer func(path string) { _ = os.Remove(path) }(executables[index].staged)
 
-	if err := extractUVBinary(tarballPath, stagedPath, verbose); err != nil {
-		return fmt.Errorf("error extracting uv binary: %w", err)
+		if err := extractUVBinary(tarballPath, executables[index].staged, executables[index].name, verbose); err != nil {
+			return fmt.Errorf("error extracting %s binary: %w", executables[index].name, err)
+		}
+		if err := os.Chmod(executables[index].staged, 0755); err != nil {
+			return fmt.Errorf("error setting %s permissions: %w", executables[index].name, err)
+		}
+		stagedVersion, err := binaryVersion(ctx, executables[index].staged, executables[index].name)
+		if err != nil {
+			return fmt.Errorf("error verifying staged %s: %w", executables[index].name, err)
+		}
+		if stagedVersion != version {
+			return fmt.Errorf("downloaded %s reports version %s, expected %s", executables[index].name, stagedVersion, version)
+		}
 	}
-	if err := os.Chmod(stagedPath, 0755); err != nil {
-		return fmt.Errorf("error setting uv permissions: %w", err)
-	}
-	stagedVersion, err := binaryVersion(ctx, stagedPath)
-	if err != nil {
-		return fmt.Errorf("error verifying staged uv: %w", err)
-	}
-	if stagedVersion != version {
-		return fmt.Errorf("downloaded uv reports version %s, expected %s", stagedVersion, version)
-	}
-	if err := assetrelease.Activate(stagedPath, destPath, 0755); err != nil {
-		return fmt.Errorf("error activating uv %s: %w", version, err)
+	for _, executable := range executables {
+		if err := assetrelease.Activate(executable.staged, executable.target, 0755); err != nil {
+			return fmt.Errorf("error activating %s %s: %w", executable.name, version, err)
+		}
 	}
 
 	if verbose {
-		fmt.Printf("Installed uv %s to %s\n", version, destPath)
+		fmt.Printf("Installed uv and uvx %s to %s and %s\n", version, uvPath, uvxPath)
 	}
 	return nil
 }
@@ -146,7 +171,7 @@ func fetchUVAsset(ctx context.Context, client *http.Client, metadataURL string) 
 	return assetrelease.Asset{}, fmt.Errorf("release is missing %s", assetName)
 }
 
-func binaryVersion(ctx context.Context, path string) (string, error) {
+func binaryVersion(ctx context.Context, path, name string) (string, error) {
 	if _, err := os.Stat(path); err != nil {
 		return "", err
 	}
@@ -155,13 +180,13 @@ func binaryVersion(ctx context.Context, path string) (string, error) {
 		return "", err
 	}
 	fields := strings.Fields(strings.TrimSpace(string(result.Combined)))
-	if len(fields) < 2 || fields[0] != "uv" {
-		return "", fmt.Errorf("unexpected uv version output %q", strings.TrimSpace(string(result.Combined)))
+	if len(fields) < 2 || fields[0] != name {
+		return "", fmt.Errorf("unexpected %s version output %q", name, strings.TrimSpace(string(result.Combined)))
 	}
 	return fields[1], nil
 }
 
-func extractUVBinary(tarballPath, destPath string, verbose bool) error {
+func extractUVBinary(tarballPath, destPath, name string, verbose bool) error {
 	file, err := os.Open(tarballPath)
 	if err != nil {
 		return fmt.Errorf("error opening tarball: %w", err)
@@ -183,21 +208,21 @@ func extractUVBinary(tarballPath, destPath string, verbose bool) error {
 		if err != nil {
 			return fmt.Errorf("error reading tar: %w", err)
 		}
-		if !strings.HasSuffix(header.Name, "/uv") && header.Name != "uv" {
+		if !strings.HasSuffix(header.Name, "/"+name) && header.Name != name {
 			continue
 		}
 		if !header.FileInfo().Mode().IsRegular() {
-			return fmt.Errorf("uv archive entry is not a regular file")
+			return fmt.Errorf("%s archive entry is not a regular file", name)
 		}
 		if header.Size <= 0 || header.Size > 128<<20 {
-			return fmt.Errorf("uv archive entry has invalid size %d", header.Size)
+			return fmt.Errorf("%s archive entry has invalid size %d", name, header.Size)
 		}
 		if verbose {
 			fmt.Printf("Extracting %s to %s\n", header.Name, destPath)
 		}
 		outFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_TRUNC, 0755)
 		if err != nil {
-			return fmt.Errorf("error opening staged uv binary: %w", err)
+			return fmt.Errorf("error opening staged %s binary: %w", name, err)
 		}
 		written, copyErr := io.Copy(outFile, io.LimitReader(tr, header.Size+1))
 		if copyErr != nil {
@@ -209,14 +234,14 @@ func extractUVBinary(tarballPath, destPath string, verbose bool) error {
 			return fmt.Errorf("error syncing uv binary: %w", err)
 		}
 		if err := outFile.Close(); err != nil {
-			return fmt.Errorf("error closing uv binary: %w", err)
+			return fmt.Errorf("error closing %s binary: %w", name, err)
 		}
 		if written != header.Size {
-			return fmt.Errorf("uv archive entry size mismatch: expected %d bytes, got %d", header.Size, written)
+			return fmt.Errorf("%s archive entry size mismatch: expected %d bytes, got %d", name, header.Size, written)
 		}
 		return nil
 	}
-	return fmt.Errorf("uv binary not found in tarball")
+	return fmt.Errorf("%s binary not found in tarball", name)
 }
 
 func InstallPythonAt(ctx context.Context, version, installDir string, reinstall, noCache, verbose bool) error {
