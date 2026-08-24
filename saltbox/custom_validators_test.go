@@ -3,6 +3,7 @@ package saltbox
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -202,6 +203,103 @@ func TestValidateCloudflareCredentialsAuthHeaders(t *testing.T) {
 				t.Fatalf("user endpoint called = %t, want %t", userCalled, test.wantUserCall)
 			}
 		})
+	}
+}
+
+func TestValidateCloudflareCredentialsPermissionGuidance(t *testing.T) {
+	tests := []struct {
+		name           string
+		failedPath     string
+		wantPermission string
+	}{
+		{
+			name:           "zone read",
+			failedPath:     "/zones",
+			wantPermission: "DNS and Zones → Zone → Read",
+		},
+		{
+			name:           "zone settings read",
+			failedPath:     "/zones/zone-id/settings/ssl",
+			wantPermission: "DNS and Zones → Zone Settings → Read",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				if request.URL.Path == test.failedPath {
+					writer.WriteHeader(http.StatusForbidden)
+					_, _ = writer.Write([]byte(`{"success":false,"errors":[{"code":10000,"message":"Authentication error"}],"messages":[],"result":null}`))
+					return
+				}
+				switch request.URL.Path {
+				case "/zones":
+					_, _ = writer.Write([]byte(`{"success":true,"result":[{"id":"zone-id","name":"example.com","status":"active"}],"result_info":{"page":1,"per_page":20,"count":1,"total_count":1,"total_pages":1}}`))
+				case "/zones/zone-id/settings/ssl":
+					_, _ = writer.Write([]byte(`{"success":true,"result":{"id":"ssl","value":"full","editable":true}}`))
+				default:
+					http.NotFound(writer, request)
+				}
+			}))
+			defer server.Close()
+
+			err := validateCloudflareCredentialsWithOptions(
+				t.Context(),
+				cloudflareCredentials{ScopedToken: "scoped-token"},
+				"app.example.com",
+				false,
+				option.WithBaseURL(server.URL),
+				option.WithHTTPClient(server.Client()),
+			)
+			if err == nil {
+				t.Fatal("validateCloudflareCredentialsWithOptions() returned nil, want permission error")
+			}
+			message := err.Error()
+			for _, want := range []string{
+				test.wantPermission,
+				"Manage Account → Account API Tokens",
+				"My Profile → API Tokens",
+				"Include → Specific zone → example.com",
+				"Authentication error",
+			} {
+				if !strings.Contains(message, want) {
+					t.Errorf("permission error missing %q:\n%s", want, message)
+				}
+			}
+		})
+	}
+}
+
+func TestCloudflareGlobalAPIKeyErrorStaysOnPoint(t *testing.T) {
+	err := cloudflarePermissionError(
+		cloudflareCredentials{APIKey: "global-key", Email: "user@example.com"},
+		"Cloudflare zone lookup failed",
+		"DNS and Zones",
+		"Zone",
+		"Read",
+		"example.com",
+		errors.New("access denied"),
+	)
+	message := err.Error()
+	for _, want := range []string{
+		"access denied",
+		"User Profile → API Tokens",
+		"API Keys",
+		"Global API Key",
+		"cloudflare.api",
+		"cloudflare.email",
+		"example.com zone",
+		"#preferred-global-api-key",
+	} {
+		if !strings.Contains(message, want) {
+			t.Errorf("Global API Key error missing %q:\n%s", want, message)
+		}
+	}
+	for _, unwanted := range []string{"scoped", "Account API Tokens", "My Profile"} {
+		if strings.Contains(message, unwanted) {
+			t.Errorf("Global API Key error contains unrelated %q guidance:\n%s", unwanted, message)
+		}
 	}
 }
 

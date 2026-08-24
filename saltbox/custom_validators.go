@@ -215,6 +215,47 @@ type cloudflareCredentials struct {
 	ScopedToken string
 }
 
+func cloudflarePermissionError(
+	credentials cloudflareCredentials,
+	operation, section, setting, access, zone string,
+	err error,
+) error {
+	if credentials.ScopedToken == "" {
+		return fmt.Errorf(
+			"%s: %w\n"+
+				"  Fix the Global API Key configuration:\n"+
+				"  1. Open User Profile → API Tokens in the Cloudflare dashboard.\n"+
+				"  2. In API Keys, find Global API Key and select View.\n"+
+				"  3. Confirm cloudflare.api in accounts.yml contains that key.\n"+
+				"  4. Confirm cloudflare.email contains the email for the same Cloudflare user.\n"+
+				"  5. Confirm that user has access to the %s zone.\n"+
+				"  6. Save accounts.yml and rerun the command.\n"+
+				"  Full instructions: https://docs.saltbox.dev/reference/domain/#preferred-global-api-key",
+			operation,
+			err,
+			zone,
+		)
+	}
+
+	return fmt.Errorf(
+		"%s: %w\n"+
+			"  Fix the scoped token in the Cloudflare dashboard:\n"+
+			"  1. For an account-owned token, select the account and open Manage Account → Account API Tokens.\n"+
+			"     For a user-owned token, open My Profile → API Tokens.\n"+
+			"  2. Find the token used by Saltbox and select Edit.\n"+
+			"  3. Add or correct %s → %s → %s.\n"+
+			"  4. Under Zone Resources, select Include → Specific zone → %s.\n"+
+			"  5. Save the token and rerun the command.\n"+
+			"  Full instructions: https://docs.saltbox.dev/reference/domain/#alternative-scoped-api-token",
+		operation,
+		err,
+		section,
+		setting,
+		access,
+		zone,
+	)
+}
+
 func parseCloudflareCredentials(value any) (cloudflareCredentials, bool, error) {
 	cfConfig, ok := value.(map[string]any)
 	if !ok {
@@ -599,11 +640,27 @@ func validateCloudflareCredentialsWithOptions(
 	})
 
 	if err != nil {
-		return fmt.Errorf("domain verification failed (zone not found): %w", err)
+		return cloudflarePermissionError(
+			credentials,
+			"Cloudflare zone lookup failed",
+			"DNS and Zones",
+			"Zone",
+			"Read",
+			rootDomain,
+			err,
+		)
 	}
 
 	if len(zonesList.Result) == 0 {
-		return fmt.Errorf("domain verification failed: %s not found in Cloudflare account", rootDomain)
+		return cloudflarePermissionError(
+			credentials,
+			"Cloudflare zone lookup failed",
+			"DNS and Zones",
+			"Zone",
+			"Read",
+			rootDomain,
+			fmt.Errorf("zone %s was not returned for these credentials", rootDomain),
+		)
 	}
 
 	zone := zonesList.Result[0]
@@ -618,7 +675,15 @@ func validateCloudflareCredentialsWithOptions(
 		ZoneID: cloudflare.F(zoneID),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get zone SSL settings: %w", err)
+		return cloudflarePermissionError(
+			credentials,
+			"Cloudflare SSL/TLS mode lookup failed",
+			"DNS and Zones",
+			"Zone Settings",
+			"Read",
+			rootDomain,
+			err,
+		)
 	}
 
 	// Check for incompatible SSL modes
