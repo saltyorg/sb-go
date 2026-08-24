@@ -14,6 +14,7 @@ func TestVerboseSchemaValidationDoesNotLogCredentialValues(t *testing.T) {
 		password        = "password-secret-sentinel"
 		cloudflareAPI   = "cloudflare-api-secret-sentinel"
 		cloudflareEmail = "cloudflare-login-sentinel@example.com"
+		cloudflareToken = "cloudflare-scoped-token-secret-sentinel"
 		dockerhubUser   = "dockerhub-login-sentinel"
 		dockerhubToken  = "dockerhub-token-secret-sentinel"
 	)
@@ -30,8 +31,9 @@ func TestVerboseSchemaValidationDoesNotLogCredentialValues(t *testing.T) {
 			"cloudflare": {
 				Type: "object",
 				Properties: map[string]*SchemaRule{
-					"api":   {Type: "string"},
-					"email": {Type: "string", Format: "email"},
+					"api":          {Type: "string"},
+					"email":        {Type: "string", Format: "email"},
+					"scoped_token": {Type: "string"},
 				},
 			},
 			"dockerhub": {
@@ -45,7 +47,7 @@ func TestVerboseSchemaValidationDoesNotLogCredentialValues(t *testing.T) {
 	}
 	config := map[string]any{
 		"user":       map[string]any{"pass": password},
-		"cloudflare": map[string]any{"api": cloudflareAPI, "email": cloudflareEmail},
+		"cloudflare": map[string]any{"api": cloudflareAPI, "email": cloudflareEmail, "scoped_token": cloudflareToken},
 		"dockerhub":  map[string]any{"user": dockerhubUser, "token": dockerhubToken},
 	}
 
@@ -54,7 +56,7 @@ func TestVerboseSchemaValidationDoesNotLogCredentialValues(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	for _, credential := range []string{password, cloudflareAPI, cloudflareEmail, dockerhubUser, dockerhubToken} {
+	for _, credential := range []string{password, cloudflareAPI, cloudflareEmail, cloudflareToken, dockerhubUser, dockerhubToken} {
 		if strings.Contains(output, credential) {
 			t.Fatalf("verbose validation output disclosed credential %q: %s", credential, output)
 		}

@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/cloudflare/cloudflare-go/v7/option"
 )
 
 func captureStdout(t *testing.T, fn func()) string {
@@ -37,6 +41,7 @@ func TestCredentialValidatorsDoNotLogSecrets(t *testing.T) {
 	const (
 		cloudflareSecret = "cloudflare-secret-sentinel"
 		cloudflareLogin  = "cloudflare-login-sentinel@example.com"
+		cloudflareToken  = "cloudflare-scoped-token-secret-sentinel"
 		dockerLogin      = "docker-login-sentinel"
 		dockerSecret     = "docker-secret-sentinel"
 	)
@@ -45,6 +50,13 @@ func TestCredentialValidatorsDoNotLogSecrets(t *testing.T) {
 	output := captureStdout(t, func() {
 		if err := validateCloudflareConfigSync(
 			map[string]any{"api": cloudflareSecret, "email": cloudflareLogin},
+			map[string]any{"user": map[string]any{"domain": "example.com"}},
+			true,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if err := validateCloudflareConfigSync(
+			map[string]any{"scoped_token": cloudflareToken},
 			map[string]any{"user": map[string]any{"domain": "example.com"}},
 			true,
 		); err != nil {
@@ -63,6 +75,12 @@ func TestCredentialValidatorsDoNotLogSecrets(t *testing.T) {
 			map[string]any{"user": map[string]any{"domain": "example.com"}},
 			true,
 		)
+		_ = validateCloudflareConfigAsync(
+			canceledContext,
+			map[string]any{"scoped_token": cloudflareToken},
+			map[string]any{"user": map[string]any{"domain": "example.com"}},
+			true,
+		)
 		_ = validateDockerhubConfigAsync(
 			canceledContext,
 			map[string]any{"user": dockerLogin, "token": dockerSecret},
@@ -70,10 +88,120 @@ func TestCredentialValidatorsDoNotLogSecrets(t *testing.T) {
 			true,
 		)
 	})
-	for _, secret := range []string{cloudflareSecret, cloudflareLogin, dockerLogin, dockerSecret} {
+	for _, secret := range []string{cloudflareSecret, cloudflareLogin, cloudflareToken, dockerLogin, dockerSecret} {
 		if strings.Contains(output, secret) {
 			t.Fatalf("verbose validation output disclosed credential %q: %s", secret, output)
 		}
+	}
+}
+
+func TestParseCloudflareCredentials(t *testing.T) {
+	tests := []struct {
+		name       string
+		value      any
+		configured bool
+		tokenMode  bool
+		wantError  string
+	}{
+		{name: "disabled", value: map[string]any{}},
+		{name: "global api key", value: map[string]any{"api": "key", "email": "user@example.com"}, configured: true},
+		{name: "scoped token", value: map[string]any{"scoped_token": "token"}, configured: true, tokenMode: true},
+		{name: "API key only", value: map[string]any{"api": "key"}, wantError: "both 'api' and 'email'"},
+		{name: "email only", value: map[string]any{"email": "user@example.com"}, wantError: "both 'api' and 'email'"},
+		{name: "mixed token and key", value: map[string]any{"scoped_token": "token", "api": "key", "email": "user@example.com"}, wantError: "cannot be combined"},
+		{name: "mixed token and email", value: map[string]any{"scoped_token": "token", "email": "user@example.com"}, wantError: "cannot be combined"},
+		{name: "wrong type", value: "token", wantError: "must be an object"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			credentials, configured, err := parseCloudflareCredentials(test.value)
+			if test.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantError) {
+					t.Fatalf("parseCloudflareCredentials() error = %v, want containing %q", err, test.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if configured != test.configured {
+				t.Fatalf("configured = %t, want %t", configured, test.configured)
+			}
+			if tokenMode := credentials.ScopedToken != ""; tokenMode != test.tokenMode {
+				t.Fatalf("token mode = %t, want %t", tokenMode, test.tokenMode)
+			}
+		})
+	}
+}
+
+func TestValidateCloudflareCredentialsAuthHeaders(t *testing.T) {
+	tests := []struct {
+		name          string
+		credentials   cloudflareCredentials
+		authorization string
+		apiKey        string
+		email         string
+		wantUserCall  bool
+	}{
+		{
+			name:          "scoped token",
+			credentials:   cloudflareCredentials{ScopedToken: "scoped-token"},
+			authorization: "Bearer scoped-token",
+		},
+		{
+			name:         "Global API key",
+			credentials:  cloudflareCredentials{APIKey: "global-key", Email: "user@example.com"},
+			apiKey:       "global-key",
+			email:        "user@example.com",
+			wantUserCall: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			userCalled := false
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				if got := request.Header.Get("Authorization"); got != test.authorization {
+					t.Errorf("Authorization = %q, want %q", got, test.authorization)
+				}
+				if got := request.Header.Get("X-Auth-Key"); got != test.apiKey {
+					t.Errorf("X-Auth-Key = %q, want %q", got, test.apiKey)
+				}
+				if got := request.Header.Get("X-Auth-Email"); got != test.email {
+					t.Errorf("X-Auth-Email = %q, want %q", got, test.email)
+				}
+
+				writer.Header().Set("Content-Type", "application/json")
+				switch request.URL.Path {
+				case "/user":
+					userCalled = true
+					_, _ = writer.Write([]byte(`{"success":true,"result":{"id":"user-id","email":"user@example.com"}}`))
+				case "/zones":
+					_, _ = writer.Write([]byte(`{"success":true,"result":[{"id":"zone-id","name":"example.com","status":"active"}],"result_info":{"page":1,"per_page":20,"count":1,"total_count":1,"total_pages":1}}`))
+				case "/zones/zone-id/settings/ssl":
+					_, _ = writer.Write([]byte(`{"success":true,"result":{"id":"ssl","value":"full","editable":true}}`))
+				default:
+					http.NotFound(writer, request)
+				}
+			}))
+			defer server.Close()
+
+			err := validateCloudflareCredentialsWithOptions(
+				context.Background(),
+				test.credentials,
+				"app.example.com",
+				false,
+				option.WithBaseURL(server.URL),
+				option.WithHTTPClient(server.Client()),
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if userCalled != test.wantUserCall {
+				t.Fatalf("user endpoint called = %t, want %t", userCalled, test.wantUserCall)
+			}
+		})
 	}
 }
 

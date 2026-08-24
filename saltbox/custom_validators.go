@@ -209,24 +209,54 @@ func passwordStrengthWarning(value any) string {
 	return fmt.Sprintf("WARNING: Password is shorter than 12 characters (%d). It's recommended to use a stronger password as some automated application setup flows may require it (Portainer skips user setup as an example).", len(password))
 }
 
-// validateCloudflareConfigSync validates Cloudflare configuration structure only (no API calls)
-func validateCloudflareConfigSync(value any, config map[string]any, verbose ...bool) error {
+type cloudflareCredentials struct {
+	APIKey      string
+	Email       string
+	ScopedToken string
+}
+
+func parseCloudflareCredentials(value any) (cloudflareCredentials, bool, error) {
 	cfConfig, ok := value.(map[string]any)
 	if !ok {
-		return fmt.Errorf("cloudflare config must be an object")
+		return cloudflareCredentials{}, false, fmt.Errorf("cloudflare config must be an object")
 	}
 
-	_, hasAPI := getNonEmptyString(cfConfig, "api")
-	_, hasEmail := getNonEmptyString(cfConfig, "email")
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigSync called (api configured: %t, email configured: %t)", hasAPI, hasEmail)
+	apiKey, hasAPIKey := getNonEmptyString(cfConfig, "api")
+	email, hasEmail := getNonEmptyString(cfConfig, "email")
+	scopedToken, hasScopedToken := getNonEmptyString(cfConfig, "scoped_token")
 
-	if !hasAPI && !hasEmail {
-		terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigSync - both API and email missing, skipping validation")
-		return nil // Both missing is OK
+	if hasScopedToken && (hasAPIKey || hasEmail) {
+		return cloudflareCredentials{}, false, fmt.Errorf("'scoped_token' cannot be combined with 'api' or 'email'")
+	}
+	if hasScopedToken {
+		return cloudflareCredentials{ScopedToken: scopedToken}, true, nil
+	}
+	if !hasAPIKey && !hasEmail {
+		return cloudflareCredentials{}, false, nil
+	}
+	if !hasAPIKey || !hasEmail {
+		return cloudflareCredentials{}, false, fmt.Errorf("both 'api' and 'email' must be provided together")
 	}
 
-	if !hasAPI || !hasEmail {
-		return fmt.Errorf("both 'api' and 'email' must be provided together")
+	return cloudflareCredentials{APIKey: apiKey, Email: email}, true, nil
+}
+
+// validateCloudflareConfigSync validates Cloudflare configuration structure only (no API calls)
+func validateCloudflareConfigSync(value any, config map[string]any, verbose ...bool) error {
+	credentials, configured, err := parseCloudflareCredentials(value)
+	if err != nil {
+		return err
+	}
+	terminal.DebugBool(
+		validationVerbose(verbose),
+		"validateCloudflareConfigSync called (configured: %t, scoped token mode: %t)",
+		configured,
+		credentials.ScopedToken != "",
+	)
+
+	if !configured {
+		terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigSync - credentials missing, skipping validation")
+		return nil
 	}
 
 	// Validate that user config exists for async validation
@@ -250,22 +280,15 @@ func validateCloudflareConfigAsync(ctx context.Context, value any, config map[st
 	startTime := time.Now()
 	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigAsync starting at %v", startTime)
 
-	cfConfig, ok := value.(map[string]any)
-	if !ok {
-		return fmt.Errorf("cloudflare config must be an object")
+	credentials, configured, err := parseCloudflareCredentials(value)
+	if err != nil {
+		terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigAsync completed in %v (error - invalid credential structure)", time.Since(startTime))
+		return err
 	}
 
-	api, hasAPI := getNonEmptyString(cfConfig, "api")
-	email, hasEmail := getNonEmptyString(cfConfig, "email")
-
-	if !hasAPI && !hasEmail {
+	if !configured {
 		terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigAsync completed in %v (skipped - no credentials)", time.Since(startTime))
-		return nil // Both missing is OK
-	}
-
-	if !hasAPI || !hasEmail {
-		terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigAsync completed in %v (error - incomplete credentials)", time.Since(startTime))
-		return fmt.Errorf("both 'api' and 'email' must be provided together")
+		return nil
 	}
 
 	// Get domain from user config for validation
@@ -283,7 +306,7 @@ func validateCloudflareConfigAsync(ctx context.Context, value any, config map[st
 
 	// Perform actual Cloudflare API validation
 	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareConfigAsync starting API calls for domain: %s", domain)
-	err := validateCloudflareCredentials(ctx, api, email, domain, validationVerbose(verbose))
+	err = validateCloudflareCredentials(ctx, credentials, domain, validationVerbose(verbose))
 	duration := time.Since(startTime)
 
 	if err != nil {
@@ -521,25 +544,46 @@ func isValidSSHKey(key string) bool {
 }
 
 // validateCloudflareCredentials performs actual Cloudflare API validation
-func validateCloudflareCredentials(ctx context.Context, apiKey, email, domain string, verbose ...bool) error {
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials called for domain: %s", domain)
+func validateCloudflareCredentials(
+	ctx context.Context,
+	credentials cloudflareCredentials,
+	domain string,
+	verbose ...bool,
+) error {
+	return validateCloudflareCredentialsWithOptions(ctx, credentials, domain, validationVerbose(verbose))
+}
 
-	// Create Cloudflare API client with timeout
-	api := cloudflare.NewClient(
-		option.WithAPIKey(apiKey),
-		option.WithAPIEmail(email),
-		option.WithHTTPClient(&http.Client{
-			Timeout: 10 * time.Second, // 10 second timeout per request
-		}),
-	)
+func validateCloudflareCredentialsWithOptions(
+	ctx context.Context,
+	credentials cloudflareCredentials,
+	domain string,
+	verbose bool,
+	extraOptions ...option.RequestOption,
+) error {
+	terminal.DebugBool(verbose, "validateCloudflareCredentials called for domain: %s", domain)
 
-	// Verify API key
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials - verifying API key")
-	_, err := api.User.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("cloudflare API key verification failed: %w", err)
+	options := []option.RequestOption{
+		option.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}),
 	}
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials - API key verified")
+	options = append(options, extraOptions...)
+	if credentials.ScopedToken != "" {
+		options = append(options, option.WithAPIToken(credentials.ScopedToken))
+	} else {
+		options = append(
+			options,
+			option.WithAPIKey(credentials.APIKey),
+			option.WithAPIEmail(credentials.Email),
+		)
+	}
+	api := cloudflare.NewClient(options...)
+
+	if credentials.ScopedToken == "" {
+		terminal.DebugBool(verbose, "validateCloudflareCredentials - verifying Global API key")
+		if _, err := api.User.Get(ctx); err != nil {
+			return fmt.Errorf("cloudflare Global API key verification failed: %w", err)
+		}
+		terminal.DebugBool(verbose, "validateCloudflareCredentials - Global API key verified")
+	}
 
 	// Get root domain for zone lookup
 	rootDomain, err := getRootDomain(domain)
@@ -548,7 +592,7 @@ func validateCloudflareCredentials(ctx context.Context, apiKey, email, domain st
 	}
 
 	// Verify domain ownership
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials - checking domain ownership for %s", rootDomain)
+	terminal.DebugBool(verbose, "validateCloudflareCredentials - checking domain ownership for %s", rootDomain)
 	domainStart := time.Now()
 	zonesList, err := api.Zones.List(ctx, zones.ZoneListParams{
 		Name: cloudflare.F(rootDomain),
@@ -564,11 +608,11 @@ func validateCloudflareCredentials(ctx context.Context, apiKey, email, domain st
 
 	zone := zonesList.Result[0]
 	zoneID := zone.ID
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials - domain ownership verified in %v", time.Since(domainStart))
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials - zone info: ID=%s, Name=%s, Status=%s", zone.ID, zone.Name, zone.Status)
+	terminal.DebugBool(verbose, "validateCloudflareCredentials - domain ownership verified in %v", time.Since(domainStart))
+	terminal.DebugBool(verbose, "validateCloudflareCredentials - zone info: ID=%s, Name=%s, Status=%s", zone.ID, zone.Name, zone.Status)
 
 	// Check SSL settings directly (most efficient approach)
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials - checking SSL settings")
+	terminal.DebugBool(verbose, "validateCloudflareCredentials - checking SSL settings")
 	sslStart := time.Now()
 	sslSettings, err := api.Zones.Settings.Get(ctx, "ssl", zones.SettingGetParams{
 		ZoneID: cloudflare.F(zoneID),
@@ -594,7 +638,7 @@ func validateCloudflareCredentials(ctx context.Context, apiKey, email, domain st
 			}
 		}
 	}
-	terminal.DebugBool(validationVerbose(verbose), "validateCloudflareCredentials - SSL settings verified in %v", time.Since(sslStart))
+	terminal.DebugBool(verbose, "validateCloudflareCredentials - SSL settings verified in %v", time.Since(sslStart))
 
 	return nil
 }
