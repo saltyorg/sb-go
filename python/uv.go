@@ -90,6 +90,12 @@ func ensureVersion(ctx context.Context, version, uvPath, uvxPath string, verbose
 	if err := os.MkdirAll(filepath.Dir(uvPath), 0755); err != nil {
 		return fmt.Errorf("error creating uv destination directory: %w", err)
 	}
+	stagingDir, err := os.MkdirTemp(filepath.Dir(uvPath), ".uv-install-*")
+	if err != nil {
+		return fmt.Errorf("error creating uv staging directory: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(stagingDir) }()
+
 	type uvExecutable struct {
 		name   string
 		target string
@@ -97,16 +103,10 @@ func ensureVersion(ctx context.Context, version, uvPath, uvxPath string, verbose
 	}
 	executables := []uvExecutable{{name: "uv", target: uvPath}, {name: "uvx", target: uvxPath}}
 	for index := range executables {
-		staged, err := os.CreateTemp(filepath.Dir(executables[index].target), "."+executables[index].name+"-*")
-		if err != nil {
+		executables[index].staged = filepath.Join(stagingDir, executables[index].name)
+		if err := os.WriteFile(executables[index].staged, nil, 0600); err != nil {
 			return fmt.Errorf("error creating staged %s binary: %w", executables[index].name, err)
 		}
-		executables[index].staged = staged.Name()
-		if err := staged.Close(); err != nil {
-			_ = os.Remove(executables[index].staged)
-			return fmt.Errorf("error closing staged %s binary: %w", executables[index].name, err)
-		}
-		defer func(path string) { _ = os.Remove(path) }(executables[index].staged)
 
 		if err := extractUVBinary(tarballPath, executables[index].staged, executables[index].name, verbose); err != nil {
 			return fmt.Errorf("error extracting %s binary: %w", executables[index].name, err)
@@ -121,6 +121,23 @@ func ensureVersion(ctx context.Context, version, uvPath, uvxPath string, verbose
 		if stagedVersion != version {
 			return fmt.Errorf("downloaded %s reports version %s, expected %s", executables[index].name, stagedVersion, version)
 		}
+	}
+	for index := range executables {
+		activationFile, err := os.CreateTemp(filepath.Dir(executables[index].target), "."+executables[index].name+"-*")
+		if err != nil {
+			return fmt.Errorf("error creating staged %s activation file: %w", executables[index].name, err)
+		}
+		activationPath := activationFile.Name()
+		if err := activationFile.Close(); err != nil {
+			_ = os.Remove(activationPath)
+			return fmt.Errorf("error closing staged %s activation file: %w", executables[index].name, err)
+		}
+		if err := os.Rename(executables[index].staged, activationPath); err != nil {
+			_ = os.Remove(activationPath)
+			return fmt.Errorf("error preparing staged %s for activation: %w", executables[index].name, err)
+		}
+		executables[index].staged = activationPath
+		defer func(path string) { _ = os.Remove(path) }(activationPath)
 	}
 	for _, executable := range executables {
 		if err := assetrelease.Activate(executable.staged, executable.target, 0755); err != nil {

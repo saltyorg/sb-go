@@ -86,11 +86,11 @@ func TestEnsureVersionRejectsFloatingVersion(t *testing.T) {
 	}
 }
 
-func TestEnsureVersionInstallsMissingUVXCompanion(t *testing.T) {
+func TestEnsureVersionInstallsUVPair(t *testing.T) {
 	const version = "1.2.3"
 	archive := uvTestArchive(t, map[string][]byte{
 		"uv":  []byte("#!/bin/sh\necho 'uv 1.2.3'\n"),
-		"uvx": []byte("#!/bin/sh\necho 'uvx 1.2.3'\n"),
+		"uvx": []byte("#!/bin/sh\nuv=\"$(dirname \"$0\")/uv\"\nversion=\"$(\"$uv\" --version)\" || exit $?\nprintf 'uvx %s\\n' \"${version#uv }\"\n"),
 	})
 	digest := sha256.Sum256(archive)
 	requests := 0
@@ -110,9 +110,6 @@ func TestEnsureVersionInstallsMissingUVXCompanion(t *testing.T) {
 	dir := t.TempDir()
 	uvPath := filepath.Join(dir, "uv")
 	uvxPath := filepath.Join(dir, "uvx")
-	if err := os.WriteFile(uvPath, []byte("#!/bin/sh\necho 'uv 1.2.3'\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
 
 	if err := ensureVersion(context.Background(), version, uvPath, uvxPath, false, server.URL+"/metadata", server.Client()); err != nil {
 		t.Fatal(err)
