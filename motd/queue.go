@@ -362,6 +362,7 @@ func getSonarrQueueDetailed(ctx context.Context, instance AppInstance, verbose b
 	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
 	queue, err := client.GetQueue(0, 100)
 	if err != nil {
+		err = censorProviderError(err, instance.APIKey)
 		if verbose {
 			fmt.Printf("DEBUG: Error fetching Sonarr queue: %v\n", err)
 		}
@@ -413,6 +414,7 @@ func getRadarrQueueDetailed(ctx context.Context, instance AppInstance, verbose b
 	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
 	queue, err := client.GetQueue(0, 100)
 	if err != nil {
+		err = censorProviderError(err, instance.APIKey)
 		if verbose {
 			fmt.Printf("DEBUG: Error fetching Radarr queue: %v\n", err)
 		}
@@ -464,6 +466,7 @@ func getLidarrQueueDetailed(ctx context.Context, instance AppInstance, verbose b
 	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
 	queue, err := client.GetQueue(0, 100)
 	if err != nil {
+		err = censorProviderError(err, instance.APIKey)
 		if verbose {
 			fmt.Printf("DEBUG: Error fetching Lidarr queue: %v\n", err)
 		}
@@ -515,6 +518,7 @@ func getReadarrQueueDetailed(ctx context.Context, instance AppInstance, verbose 
 	// GetQueue(records, perPage) - 0 records means get all, 100 perPage for internal pagination
 	queue, err := client.GetQueue(0, 100)
 	if err != nil {
+		err = censorProviderError(err, instance.APIKey)
 		if verbose {
 			fmt.Printf("DEBUG: Error fetching Readarr queue: %v\n", err)
 		}
@@ -578,7 +582,7 @@ func formatProviderError(err error) string {
 	if err == nil {
 		return "instance error"
 	}
-	msg := strings.TrimSpace(err.Error())
+	msg := strings.TrimSpace(censorProviderError(err).Error())
 	if msg == "" {
 		return "instance error"
 	}

@@ -97,6 +97,7 @@ func GetQbittorrentInfo(ctx context.Context, verbose bool) string {
 
 			info, err := getQbittorrentStats(ctx, inst)
 			if err != nil {
+				err = censorProviderError(err, inst.Password)
 				if verbose {
 					fmt.Printf("DEBUG: Error getting qBittorrent info for %s, recording error: %v\n", inst.Name, err)
 				}

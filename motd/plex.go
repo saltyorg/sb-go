@@ -150,6 +150,7 @@ func GetPlexInfo(ctx context.Context, verbose bool) string {
 
 			info, err := getPlexStreamInfo(ctx, inst)
 			if err != nil {
+				err = censorProviderError(err, inst.Token)
 				if verbose {
 					fmt.Printf("DEBUG: Error getting Plex stream info for %s, recording error: %v\n", inst.Name, err)
 				}

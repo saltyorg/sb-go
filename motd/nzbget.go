@@ -122,6 +122,7 @@ func GetNzbgetInfo(ctx context.Context, verbose bool) string {
 
 			info, err := getNzbgetQueueInfo(ctx, inst)
 			if err != nil {
+				err = censorProviderError(err, inst.Password)
 				if verbose {
 					fmt.Printf("DEBUG: Error getting NZBGet info for %s, recording error: %v\n", inst.Name, err)
 				}
@@ -162,10 +163,11 @@ func callNzbgetAPI(ctx context.Context, instance UserPassAppInstance, method str
 
 	parsedURL, err := url.Parse(strings.TrimSuffix(instance.URL, "/"))
 	if err != nil {
-		return fmt.Errorf("invalid URL: %w", err)
+		return fmt.Errorf("invalid URL: %w", censorProviderError(err, instance.Password))
 	}
-	parsedURL.User = url.UserPassword(instance.User, instance.Password)
-	apiURL := fmt.Sprintf("%s/jsonrpc", parsedURL.String())
+	parsedURL.User = nil
+	parsedURL.Path = strings.TrimSuffix(parsedURL.Path, "/") + "/jsonrpc"
+	apiURL := parsedURL.String()
 
 	jsonReq, err := json.Marshal(jsonRPCRequest{Method: method, Params: []any{}, ID: 1})
 	if err != nil {
@@ -174,13 +176,14 @@ func callNzbgetAPI(ctx context.Context, instance UserPassAppInstance, method str
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonReq))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create request: %w", censorProviderError(err, instance.Password))
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.SetBasicAuth(instance.User, instance.Password)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to connect to NZBGet: %w", err)
+		return fmt.Errorf("failed to connect to NZBGet: %w", censorProviderError(err, instance.Password))
 	}
 	defer func() { _ = resp.Body.Close() }()
 

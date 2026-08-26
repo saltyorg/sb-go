@@ -109,6 +109,7 @@ func GetEmbyInfo(ctx context.Context, verbose bool) string {
 
 			info, err := getEmbyStreamInfo(ctx, inst)
 			if err != nil {
+				err = censorProviderError(err, inst.Token)
 				if verbose {
 					fmt.Printf("DEBUG: Error getting Emby stream info for %s, recording error: %v\n", inst.Name, err)
 				}
@@ -153,17 +154,18 @@ func getEmbyStreamInfo(ctx context.Context, instance EmbyInstance) (EmbyStreamIn
 	}
 
 	client := &http.Client{Timeout: timeout}
-	url := fmt.Sprintf("%s/emby/Sessions?api_key=%s", strings.TrimSuffix(instance.URL, "/"), instance.Token)
+	endpoint := strings.TrimSuffix(instance.URL, "/") + "/emby/Sessions"
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
 	if err != nil {
-		return result, fmt.Errorf("failed to create request: %w", err)
+		return result, fmt.Errorf("failed to create request: %w", censorProviderError(err, instance.Token))
 	}
-	req.Header.Add("Accept", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Emby-Token", instance.Token)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return result, fmt.Errorf("failed to connect to Emby: %w", err)
+		return result, fmt.Errorf("failed to connect to Emby: %w", censorProviderError(err, instance.Token))
 	}
 	defer func() { _ = resp.Body.Close() }()
 

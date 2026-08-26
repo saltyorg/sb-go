@@ -96,6 +96,7 @@ func GetJellyfinInfo(ctx context.Context, verbose bool) string {
 
 			info, err := getJellyfinStreamInfo(ctx, inst)
 			if err != nil {
+				err = censorProviderError(err, inst.Token)
 				if verbose {
 					fmt.Printf("DEBUG: Error getting Jellyfin stream info for %s, recording error: %v\n", inst.Name, err)
 				}

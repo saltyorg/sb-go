@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -110,6 +111,7 @@ func GetSabnzbdInfo(ctx context.Context, verbose bool) string {
 
 			info, err := getSabnzbdQueueInfo(ctx, inst)
 			if err != nil {
+				err = censorProviderError(err, inst.APIKey)
 				if verbose {
 					fmt.Printf("DEBUG: Error getting SABnzbd info for %s, recording error: %v\n", inst.Name, err)
 				}
@@ -154,16 +156,25 @@ func getSabnzbdQueueInfo(ctx context.Context, instance AppInstance) (SabnzbdInfo
 	}
 
 	client := &http.Client{Timeout: timeout}
-	url := fmt.Sprintf("%s/api?mode=queue&output=json&apikey=%s", strings.TrimSuffix(instance.URL, "/"), instance.APIKey)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	apiURL, err := url.Parse(strings.TrimSuffix(instance.URL, "/"))
 	if err != nil {
-		return result, fmt.Errorf("failed to create request: %w", err)
+		return result, fmt.Errorf("invalid SABnzbd URL: %w", censorProviderError(err, instance.APIKey))
+	}
+	apiURL.Path = strings.TrimSuffix(apiURL.Path, "/") + "/api"
+	query := apiURL.Query()
+	query.Set("mode", "queue")
+	query.Set("output", "json")
+	query.Set("apikey", instance.APIKey)
+	apiURL.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL.String(), nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to create request: %w", censorProviderError(err, instance.APIKey))
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return result, fmt.Errorf("failed to connect to SABnzbd: %w", err)
+		return result, fmt.Errorf("failed to connect to SABnzbd: %w", censorProviderError(err, instance.APIKey))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
