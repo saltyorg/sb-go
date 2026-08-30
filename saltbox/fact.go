@@ -290,19 +290,17 @@ func downloadAndInstallSaltboxFact(ctx context.Context, task *terminal.Task, alw
 		}
 
 		if err := task.Run(ctx, terminal.TaskSpec{Running: taskMessage}, func(ctx context.Context, downloadTask *terminal.Task) error {
-			return retryWithBackoff(ctx, func() error {
-				staged, err := release.DownloadVerified(ctx, release.HTTPClient(30*time.Second), asset, 32<<20, filepath.Dir(targetPath), ".saltbox.fact-*")
-				if err != nil {
-					return fmt.Errorf("error downloading saltbox.fact: %w", err)
-				}
-				defer func() { _ = os.Remove(staged) }()
-				if err := downloadTask.Run(ctx, terminal.TaskSpec{Running: "Validating downloaded saltbox.fact"}, func(context.Context, *terminal.Task) error {
-					return validateBinary(staged, asset.Size, verbose)
-				}); err != nil {
-					return fmt.Errorf("downloaded binary validation failed: %w", err)
-				}
-				return release.Activate(staged, targetPath, 0755)
-			}, 3, 2*time.Second)
+			staged, err := release.DownloadVerified(ctx, release.HTTPClient(30*time.Second), asset, 32<<20, filepath.Dir(targetPath), ".saltbox.fact-*")
+			if err != nil {
+				return fmt.Errorf("error downloading saltbox.fact: %w", err)
+			}
+			defer func() { _ = os.Remove(staged) }()
+			if err := downloadTask.Run(ctx, terminal.TaskSpec{Running: "Validating downloaded saltbox.fact"}, func(context.Context, *terminal.Task) error {
+				return validateBinary(staged, asset.Size, verbose)
+			}); err != nil {
+				return fmt.Errorf("downloaded binary validation failed: %w", err)
+			}
+			return release.Activate(staged, targetPath, 0755)
 		}); err != nil {
 			return err
 		}

@@ -81,64 +81,137 @@ func HTTPClient(timeout time.Duration) *http.Client {
 	}
 }
 
-// DownloadVerified stages an asset in dir, verifies its exact size and digest,
-// and returns the staged path. The caller owns the returned file.
+// DownloadVerified retries transient download failures into fresh staging files,
+// verifies the exact size and digest, and returns the staged path. The caller owns the returned file.
 func DownloadVerified(ctx context.Context, client *http.Client, asset Asset, maxSize int64, dir, pattern string) (path string, err error) {
+	return downloadVerified(ctx, client, asset, maxSize, dir, pattern, defaultRetryPolicy())
+}
+
+func downloadVerified(ctx context.Context, client *http.Client, asset Asset, maxSize int64, dir, pattern string, policy retryPolicy) (string, error) {
 	if client == nil {
 		return "", fmt.Errorf("release asset HTTP client is required")
 	}
 	if asset.Size > maxSize {
 		return "", fmt.Errorf("release asset %q exceeds the %d byte limit", asset.Name, maxSize)
 	}
+	policy = normalizeRetryPolicy(policy)
+	var lastErr error
+	for attempt := 1; attempt <= policy.maxAttempts; attempt++ {
+		path, headers, retryable, err := downloadVerifiedAttempt(ctx, client, asset, dir, pattern)
+		if err == nil {
+			return path, nil
+		}
+		lastErr = err
+		if !retryable || attempt == policy.maxAttempts || ctx.Err() != nil {
+			break
+		}
 
+		var response *http.Response
+		if headers != nil {
+			response = &http.Response{Header: headers}
+		}
+		delay, retry := retryDelay(response, attempt, policy)
+		if !retry {
+			return "", fmt.Errorf("%w; retry wait %s exceeds %s limit", lastErr, delay, policy.maxHeaderWait)
+		}
+		if err := policy.wait(ctx, delay); err != nil {
+			return "", err
+		}
+	}
+	return "", lastErr
+}
+
+func downloadVerifiedAttempt(ctx context.Context, client *http.Client, asset Asset, dir, pattern string) (path string, headers http.Header, retryable bool, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
 	if err != nil {
-		return "", fmt.Errorf("create release asset request: %w", err)
+		return "", nil, false, fmt.Errorf("create release asset request: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("download release asset %q: %w", asset.Name, err)
+		return "", nil, true, fmt.Errorf("download release asset %q: %w", asset.Name, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download release asset %q: unexpected HTTP status %s", asset.Name, resp.Status)
+		return "", resp.Header.Clone(), isRetryableHTTPStatus(resp.StatusCode), fmt.Errorf("download release asset %q: unexpected HTTP status %s", asset.Name, resp.Status)
 	}
 
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", fmt.Errorf("create release asset staging directory: %w", err)
+		return "", nil, false, fmt.Errorf("create release asset staging directory: %w", err)
 	}
 	staged, err := os.CreateTemp(dir, pattern)
 	if err != nil {
-		return "", fmt.Errorf("create staged release asset: %w", err)
+		return "", nil, false, fmt.Errorf("create staged release asset: %w", err)
 	}
 	path = staged.Name()
+	stagedPath := path
 	keep := false
 	defer func() {
 		if !keep {
 			_ = staged.Close()
-			_ = os.Remove(path)
+			_ = os.Remove(stagedPath)
 		}
 	}()
 
 	hash := sha256.New()
-	written, err := io.Copy(io.MultiWriter(staged, hash), io.LimitReader(resp.Body, asset.Size+1))
+	written, retryable, err := copyDownload(staged, hash, resp.Body, asset.Size+1)
 	if err != nil {
-		return "", fmt.Errorf("write staged release asset %q: %w", asset.Name, err)
+		var headers http.Header
+		if retryable {
+			headers = resp.Header.Clone()
+		}
+		return "", headers, retryable, fmt.Errorf("copy release asset %q into staging: %w", asset.Name, err)
 	}
 	if written != asset.Size {
-		return "", fmt.Errorf("release asset %q size mismatch: expected %d bytes, got %d", asset.Name, asset.Size, written)
+		if written < asset.Size {
+			return "", resp.Header.Clone(), true, fmt.Errorf("release asset %q size mismatch: expected %d bytes, got %d", asset.Name, asset.Size, written)
+		}
+		return "", nil, false, fmt.Errorf("release asset %q size mismatch: expected %d bytes, got %d", asset.Name, asset.Size, written)
 	}
 	if !equalDigest(hash.Sum(nil), asset.Expected[:]) {
-		return "", fmt.Errorf("release asset %q SHA-256 mismatch", asset.Name)
+		return "", nil, false, fmt.Errorf("release asset %q SHA-256 mismatch", asset.Name)
 	}
 	if err := staged.Sync(); err != nil {
-		return "", fmt.Errorf("sync staged release asset %q: %w", asset.Name, err)
+		return "", nil, false, fmt.Errorf("sync staged release asset %q: %w", asset.Name, err)
 	}
 	if err := staged.Close(); err != nil {
-		return "", fmt.Errorf("close staged release asset %q: %w", asset.Name, err)
+		return "", nil, false, fmt.Errorf("close staged release asset %q: %w", asset.Name, err)
 	}
 	keep = true
-	return path, nil
+	return path, nil, false, nil
+}
+
+func copyDownload(destination, digest io.Writer, source io.Reader, maxBytes int64) (written int64, retryable bool, err error) {
+	reader := io.LimitReader(source, maxBytes)
+	buffer := make([]byte, 32<<10)
+	for {
+		read, readErr := reader.Read(buffer)
+		if read > 0 {
+			if err := writeDownloadChunk(destination, buffer[:read]); err != nil {
+				return written, false, fmt.Errorf("write staged file: %w", err)
+			}
+			if err := writeDownloadChunk(digest, buffer[:read]); err != nil {
+				return written, false, fmt.Errorf("hash staged file: %w", err)
+			}
+			written += int64(read)
+		}
+		switch {
+		case readErr == io.EOF:
+			return written, false, nil
+		case readErr != nil:
+			return written, true, fmt.Errorf("read response body: %w", readErr)
+		}
+	}
+}
+
+func writeDownloadChunk(writer io.Writer, chunk []byte) error {
+	written, err := writer.Write(chunk)
+	if err != nil {
+		return err
+	}
+	if written != len(chunk) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 // Activate atomically replaces target with an already verified staged file.

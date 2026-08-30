@@ -16,9 +16,11 @@ workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 
 archive="$workdir/uv.tar.gz"
-curl --fail --location --silent --show-error \
+# shellcheck disable=SC1091 # GitHub supplies GITHUB_ACTION_PATH at action runtime.
+source "$GITHUB_ACTION_PATH/download.sh"
+download_with_retry \
     "https://github.com/astral-sh/uv/releases/download/$uv_version/uv-x86_64-unknown-linux-gnu.tar.gz" \
-    --output "$archive"
+    "$archive"
 tar --extract --gzip --file "$archive" --directory "$workdir"
 uv_bin=$(find "$workdir" -type f -path '*/uv' -print -quit)
 if [[ -z "$uv_bin" ]]; then

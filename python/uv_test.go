@@ -97,7 +97,7 @@ func TestEnsureVersionInstallsUVPair(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests++
 		switch request.URL.Path {
-		case "/metadata":
+		case "/version", "/metadata":
 			_, _ = fmt.Fprintf(writer, `{"assets":[{"id":1,"name":"uv-x86_64-unknown-linux-gnu.tar.gz","size":%d,"digest":"sha256:%x","browser_download_url":"%s/archive"}]}`, len(archive), digest, serverURL(request))
 		case "/archive":
 			_, _ = writer.Write(archive)
@@ -111,7 +111,7 @@ func TestEnsureVersionInstallsUVPair(t *testing.T) {
 	uvPath := filepath.Join(dir, "uv")
 	uvxPath := filepath.Join(dir, "uvx")
 
-	if err := ensureVersion(context.Background(), version, uvPath, uvxPath, false, server.URL+"/metadata", server.Client()); err != nil {
+	if err := ensureVersionWithProxy(context.Background(), version, uvPath, uvxPath, false, server.URL+"/version", server.URL+"/metadata", server.Client()); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := binaryVersion(context.Background(), uvPath, "uv"); err != nil || got != version {
@@ -122,11 +122,92 @@ func TestEnsureVersionInstallsUVPair(t *testing.T) {
 	}
 
 	requestsBeforeNoop := requests
-	if err := ensureVersion(context.Background(), version, uvPath, uvxPath, false, server.URL+"/metadata", server.Client()); err != nil {
+	if err := ensureVersionWithProxy(context.Background(), version, uvPath, uvxPath, false, server.URL+"/version", server.URL+"/metadata", server.Client()); err != nil {
 		t.Fatal(err)
 	}
 	if requests != requestsBeforeNoop {
 		t.Fatalf("healthy uv pair triggered %d additional HTTP requests", requests-requestsBeforeNoop)
+	}
+}
+
+func TestFetchUVAssetRetriesSVMBeforeGitHub(t *testing.T) {
+	const digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	proxyRequests := 0
+	directRequests := 0
+	proxiedURL := ""
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/version":
+			proxyRequests++
+			proxiedURL = request.URL.Query().Get("url")
+			if proxyRequests == 1 {
+				writer.Header().Set("Retry-After", "0")
+				writer.WriteHeader(http.StatusForbidden)
+				return
+			}
+			_, _ = fmt.Fprintf(writer, `{"assets":[{"id":1,"name":"uv-x86_64-unknown-linux-gnu.tar.gz","size":1,"digest":"%s","browser_download_url":"https://example.com/archive"}]}`, digest)
+		case "/metadata":
+			directRequests++
+			_, _ = fmt.Fprintf(writer, `{"assets":[{"id":1,"name":"uv-x86_64-unknown-linux-gnu.tar.gz","size":1,"digest":"%s","browser_download_url":"https://example.com/archive"}]}`, digest)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	asset, err := fetchUVAssetWithFallback(t.Context(), server.Client(), server.URL+"/version", server.URL+"/metadata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asset.Name != "uv-x86_64-unknown-linux-gnu.tar.gz" {
+		t.Fatalf("asset name = %q, want uv archive", asset.Name)
+	}
+	if proxyRequests != 2 {
+		t.Fatalf("SVM requests = %d, want 2", proxyRequests)
+	}
+	if want := server.URL + "/metadata"; proxiedURL != want {
+		t.Fatalf("proxied GitHub URL = %q, want %q", proxiedURL, want)
+	}
+	if directRequests != 0 {
+		t.Fatalf("direct GitHub requests = %d, want 0", directRequests)
+	}
+}
+
+func TestFetchUVAssetRetriesGitHubAfterSVMFallback(t *testing.T) {
+	const digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	proxyRequests := 0
+	directRequests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/version":
+			proxyRequests++
+			http.NotFound(writer, request)
+		case "/metadata":
+			directRequests++
+			if directRequests == 1 {
+				writer.Header().Set("Retry-After", "0")
+				writer.WriteHeader(http.StatusForbidden)
+				return
+			}
+			_, _ = fmt.Fprintf(writer, `{"assets":[{"id":1,"name":"uv-x86_64-unknown-linux-gnu.tar.gz","size":1,"digest":"%s","browser_download_url":"https://example.com/archive"}]}`, digest)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	asset, err := fetchUVAssetWithFallback(t.Context(), server.Client(), server.URL+"/version", server.URL+"/metadata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asset.Name != "uv-x86_64-unknown-linux-gnu.tar.gz" {
+		t.Fatalf("asset name = %q, want uv archive", asset.Name)
+	}
+	if proxyRequests != 1 {
+		t.Fatalf("SVM requests = %d, want 1", proxyRequests)
+	}
+	if directRequests != 2 {
+		t.Fatalf("direct GitHub requests = %d, want 2", directRequests)
 	}
 }
 

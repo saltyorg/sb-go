@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,10 +37,10 @@ func DownloadAndInstallUV(ctx context.Context, verbose bool) error {
 // EnsureVersion downloads, verifies, and atomically installs an exact uv and uvx release.
 func EnsureVersion(ctx context.Context, version, destPath string, verbose bool) error {
 	metadataURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", UVGitHubRepo, version)
-	return ensureVersion(ctx, version, destPath, destPath+"x", verbose, metadataURL, assetrelease.HTTPClient(30*time.Second))
+	return ensureVersionWithProxy(ctx, version, destPath, destPath+"x", verbose, layout.SVMVersionProxyURL, metadataURL, assetrelease.HTTPClient(30*time.Second))
 }
 
-func ensureVersion(ctx context.Context, version, uvPath, uvxPath string, verbose bool, metadataURL string, client *http.Client) error {
+func ensureVersionWithProxy(ctx context.Context, version, uvPath, uvxPath string, verbose bool, proxyBaseURL, metadataURL string, client *http.Client) error {
 	if !exactUVVersionPattern.MatchString(version) {
 		return fmt.Errorf("uv version must be an exact release, got %q", version)
 	}
@@ -71,7 +72,7 @@ func ensureVersion(ctx context.Context, version, uvPath, uvxPath string, verbose
 		}
 	}
 
-	asset, err := fetchUVAsset(ctx, client, metadataURL)
+	asset, err := fetchUVAssetWithFallback(ctx, client, proxyBaseURL, metadataURL)
 	if err != nil {
 		return fmt.Errorf("error fetching uv %s release metadata: %w", version, err)
 	}
@@ -162,11 +163,7 @@ type uvRelease struct {
 }
 
 func fetchUVAsset(ctx context.Context, client *http.Client, metadataURL string) (assetrelease.Asset, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
-	if err != nil {
-		return assetrelease.Asset{}, fmt.Errorf("create release metadata request: %w", err)
-	}
-	resp, err := client.Do(req)
+	resp, err := assetrelease.GetWithRetry(ctx, client, metadataURL)
 	if err != nil {
 		return assetrelease.Asset{}, fmt.Errorf("download release metadata: %w", err)
 	}
@@ -186,6 +183,26 @@ func fetchUVAsset(ctx context.Context, client *http.Client, metadataURL string) 
 		return assetrelease.NewAsset(candidate.ID, candidate.Name, candidate.BrowserDownloadURL, candidate.Size, candidate.Digest)
 	}
 	return assetrelease.Asset{}, fmt.Errorf("release is missing %s", assetName)
+}
+
+func fetchUVAssetWithFallback(ctx context.Context, client *http.Client, proxyBaseURL, metadataURL string) (assetrelease.Asset, error) {
+	proxyURL, err := url.Parse(proxyBaseURL)
+	if err != nil || proxyURL.Scheme != "https" || proxyURL.Host == "" {
+		return assetrelease.Asset{}, fmt.Errorf("invalid SVM proxy URL %q", proxyBaseURL)
+	}
+	query := proxyURL.Query()
+	query.Set("url", metadataURL)
+	proxyURL.RawQuery = query.Encode()
+
+	asset, proxyErr := fetchUVAsset(ctx, client, proxyURL.String())
+	if proxyErr == nil {
+		return asset, nil
+	}
+	asset, githubErr := fetchUVAsset(ctx, client, metadataURL)
+	if githubErr != nil {
+		return assetrelease.Asset{}, fmt.Errorf("SVM proxy request failed: %w; direct GitHub API request failed: %w", proxyErr, githubErr)
+	}
+	return asset, nil
 }
 
 func binaryVersion(ctx context.Context, path, name string) (string, error) {
