@@ -6,12 +6,95 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/saltyorg/sb-go/release"
 	"github.com/saltyorg/sb-go/terminal"
 )
+
+func TestGetCurrentFactVersion(t *testing.T) {
+	tests := []struct {
+		name   string
+		script string
+		want   string
+	}{
+		{
+			name: "passes exact version argument and reads plain version",
+			script: `#!/bin/sh
+if [ "$#" -ne 1 ] || [ "$1" != "--version" ]; then
+	exit 64
+fi
+printf '1.2.3\n'
+`,
+			want: "1.2.3",
+		},
+		{
+			name: "reads legacy full JSON output",
+			script: `#!/bin/sh
+printf '%s\n' '{"groups":{},"ip":{"error_ipv4":null,"error_ipv6":null,"failed_ipv4":false,"failed_ipv6":false,"ipv6_check_error":null,"public_ip":"203.0.113.10","public_ipv6":"2001:db8::10"},"saltbox_facts_version":"1.0.9","timezone":{"timezone":"UTC"},"users":{}}'
+`,
+			want: "1.0.9",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binaryPath := filepath.Join(t.TempDir(), "saltbox-facts")
+			if err := os.WriteFile(binaryPath, []byte(tt.script), 0o755); err != nil {
+				t.Fatalf("write test executable: %v", err)
+			}
+
+			got, err := getCurrentFactVersion(t.Context(), binaryPath)
+			if err != nil {
+				t.Fatalf("getCurrentFactVersion() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("getCurrentFactVersion() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseFactVersionOutput(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		want    string
+		wantErr bool
+	}{
+		{name: "plain version", output: " 1.2.3\n", want: "1.2.3"},
+		{name: "v-prefixed version", output: "v2.3.4\n", want: "v2.3.4"},
+		{name: "legacy JSON", output: `{"saltbox_facts_version":"1.0.9","groups":{},"users":{}}`, want: "1.0.9"},
+		{name: "empty output", output: " \n\t", wantErr: true},
+		{name: "malformed JSON", output: `{"saltbox_facts_version":`, wantErr: true},
+		{name: "missing JSON version", output: `{"groups":{},"users":{}}`, wantErr: true},
+		{name: "empty JSON version", output: `{"saltbox_facts_version":""}`, wantErr: true},
+		{name: "non-string JSON version", output: `{"saltbox_facts_version":109}`, wantErr: true},
+		{name: "invalid plain output", output: "not-a-version", wantErr: true},
+		{name: "multi-line plain output", output: "1.2.3\nunexpected", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseFactVersionOutput([]byte(tt.output))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseFactVersionOutput() = %q, want error", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseFactVersionOutput() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("parseFactVersionOutput() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestFetchLatestReleaseInfoFromURL(t *testing.T) {
 	digest := "sha256:" + strings.Repeat("0", 64)

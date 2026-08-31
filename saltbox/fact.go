@@ -90,32 +90,60 @@ func validateBinary(filePath string, expectedSize int64, verbose bool) error {
 	return nil
 }
 
-// getCurrentFactVersion runs the existing saltbox.fact and extracts its version
+func parseFactVersionOutput(output []byte) (string, error) {
+	trimmed := strings.TrimSpace(string(output))
+	if trimmed == "" {
+		return "", fmt.Errorf("fact version output is empty")
+	}
+
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		var currentData map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(trimmed), &currentData); err != nil {
+			return "", fmt.Errorf("parsing legacy fact JSON: %w", err)
+		}
+
+		rawVersion, ok := currentData["saltbox_facts_version"]
+		if !ok {
+			return "", fmt.Errorf("legacy fact JSON has no saltbox_facts_version")
+		}
+
+		var currentVersion string
+		if err := json.Unmarshal(rawVersion, &currentVersion); err != nil {
+			return "", fmt.Errorf("parsing saltbox_facts_version from legacy fact JSON: %w", err)
+		}
+		currentVersion = strings.TrimSpace(currentVersion)
+		if currentVersion == "" {
+			return "", fmt.Errorf("legacy fact JSON has an empty saltbox_facts_version")
+		}
+
+		return currentVersion, nil
+	}
+
+	if strings.ContainsAny(trimmed, "\r\n") {
+		return "", fmt.Errorf("plain fact version output must be one line")
+	}
+	if _, err := semver.StrictNewVersion(strings.TrimPrefix(trimmed, "v")); err != nil {
+		return "", fmt.Errorf("invalid plain fact version %q: %w", trimmed, err)
+	}
+
+	return trimmed, nil
+}
+
+// getCurrentFactVersion runs the existing saltbox.fact and extracts its version.
 func getCurrentFactVersion(ctx context.Context, targetPath string) (string, error) {
 	// Use context with timeout for executing the binary
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	result, err := executor.Run(ctx, targetPath,
+		executor.WithArgs("--version"),
 		executor.WithOutputMode(executor.OutputModeCombined),
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to run saltbox.fact: %w", err)
 	}
 
-	output := result.Combined
-
-	var currentData map[string]any
-	if err = json.Unmarshal(output, &currentData); err != nil {
-		return "", fmt.Errorf("failed to parse output: %w", err)
-	}
-
-	currentVersion, ok := currentData["saltbox_facts_version"].(string)
-	if !ok {
-		return "", fmt.Errorf("no version info found")
-	}
-
-	return currentVersion, nil
+	return parseFactVersionOutput(result.Combined)
 }
 
 // checkIfUpdateNeeded determines if saltbox.fact needs to be updated
