@@ -188,6 +188,69 @@ func updateSaltbox(ctx context.Context, runner *terminal.Runner, verbose bool, b
 	})
 }
 
+type saltboxRuntimeOperations struct {
+	cleanupDeadsnakes func(context.Context, bool) (bool, error)
+	manageAnsibleVenv func(context.Context, *terminal.Task, bool, string, bool) error
+	updateFact        func(context.Context, *terminal.Task, bool, bool) error
+}
+
+func defaultSaltboxRuntimeOperations() saltboxRuntimeOperations {
+	return saltboxRuntimeOperations{
+		cleanupDeadsnakes: python.CleanupDeadsnakesIfNeeded,
+		manageAnsibleVenv: python.ManageAnsibleVenv,
+		updateFact:        saltbox.DownloadAndInstallSaltboxFact,
+	}
+}
+
+func reconcileSaltboxRuntime(ctx context.Context, task *terminal.Task, saltboxUser string, verbose bool) error {
+	return reconcileSaltboxRuntimeWith(ctx, task, saltboxUser, verbose, defaultSaltboxRuntimeOperations())
+}
+
+func reconcileSaltboxRuntimeWith(
+	ctx context.Context,
+	task *terminal.Task,
+	saltboxUser string,
+	verbose bool,
+	operations saltboxRuntimeOperations,
+) error {
+	if err := task.Run(ctx, terminal.TaskSpec{Running: "Checking for old deadsnakes Python packages"}, func(taskCtx context.Context, _ *terminal.Task) error {
+		cleaned, err := operations.cleanupDeadsnakes(taskCtx, verbose)
+		if err != nil {
+			return err
+		}
+		if cleaned && verbose {
+			fmt.Println("Removed old deadsnakes Python packages")
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("error cleaning up deadsnakes packages: %w", err)
+	}
+
+	if err := task.Run(ctx, terminal.TaskSpec{
+		Running:      "Preparing Ansible virtual environment",
+		Success:      "Ansible virtual environment ready",
+		Failure:      "Ansible virtual environment",
+		ChildDisplay: terminal.CollapseChildTasks,
+	}, func(ctx context.Context, venvTask *terminal.Task) error {
+		return operations.manageAnsibleVenv(ctx, venvTask, false, saltboxUser, verbose)
+	}); err != nil {
+		return fmt.Errorf("error managing Ansible venv: %w", err)
+	}
+
+	if err := task.Run(ctx, terminal.TaskSpec{
+		Running:      "Checking saltbox.fact",
+		Success:      "saltbox.fact is ready",
+		Failure:      "saltbox.fact update",
+		ChildDisplay: terminal.CollapseChildTasks,
+	}, func(ctx context.Context, factTask *terminal.Task) error {
+		return operations.updateFact(ctx, factTask, false, verbose)
+	}); err != nil {
+		return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
+	}
+
+	return nil
+}
+
 func updateSaltboxComponents(ctx context.Context, task *terminal.Task, verbose bool, branch string) error {
 	// Check if Saltbox repo exists
 	if err := requireDirectory(layout.SaltboxRepoPath); err != nil {
@@ -218,41 +281,8 @@ func updateSaltboxComponents(ctx context.Context, task *terminal.Task, verbose b
 		return fmt.Errorf("error fetching and resetting git: %w", err)
 	}
 
-	if err := task.Run(ctx, terminal.TaskSpec{Running: "Checking for old deadsnakes Python packages"}, func(taskCtx context.Context, _ *terminal.Task) error {
-		cleaned, err := python.CleanupDeadsnakesIfNeeded(taskCtx, verbose)
-		if err != nil {
-			return err
-		}
-		if cleaned && verbose {
-			fmt.Println("Removed old deadsnakes Python packages")
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error cleaning up deadsnakes packages: %w", err)
-	}
-
-	// Manage Ansible venv - this function already has internal spinners
-	if err := task.Run(ctx, terminal.TaskSpec{
-		Running:      "Preparing Ansible virtual environment",
-		Success:      "Ansible virtual environment ready",
-		Failure:      "Ansible virtual environment",
-		ChildDisplay: terminal.CollapseChildTasks,
-	}, func(ctx context.Context, venvTask *terminal.Task) error {
-		return python.ManageAnsibleVenv(ctx, venvTask, false, saltboxUser, verbose)
-	}); err != nil {
-		return fmt.Errorf("error managing Ansible venv: %w", err)
-	}
-
-	// Download and install Saltbox fact - this function already has internal spinners
-	if err := task.Run(ctx, terminal.TaskSpec{
-		Running:      "Checking saltbox.fact",
-		Success:      "saltbox.fact is ready",
-		Failure:      "saltbox.fact update",
-		ChildDisplay: terminal.CollapseChildTasks,
-	}, func(ctx context.Context, factTask *terminal.Task) error {
-		return saltbox.DownloadAndInstallSaltboxFact(ctx, factTask, false, verbose)
-	}); err != nil {
-		return fmt.Errorf("error downloading and installing saltbox fact: %w", err)
+	if err := reconcileSaltboxRuntime(ctx, task, saltboxUser, verbose); err != nil {
+		return err
 	}
 
 	// Get commit hash after fetch and reset

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/saltyorg/sb-go/host"
-	"github.com/saltyorg/sb-go/python"
 	"github.com/saltyorg/sb-go/terminal"
 
 	"github.com/spf13/cobra"
@@ -15,8 +14,8 @@ func newUpdateVenvCommand() *cobra.Command {
 	var verbose bool
 	updateVenvCmd := &cobra.Command{
 		Use:    "update-venv",
-		Short:  "Update the Ansible virtual environment from the current Saltbox checkout",
-		Long:   `Update the Ansible virtual environment from the current Saltbox checkout without updating Git repositories`,
+		Short:  "Update the Ansible virtual environment and saltbox.fact",
+		Long:   `Update the Ansible virtual environment from the current Saltbox checkout and refresh saltbox.fact without updating Git repositories`,
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -32,25 +31,32 @@ func addUpdateVenvCommand(rootCmd *cobra.Command) {
 }
 
 func handleUpdateVenv(ctx context.Context, verbose bool) error {
-	saltboxUser, err := host.GetSaltboxUser()
+	runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: verbose})
+	return handleUpdateVenvWith(ctx, runner, verbose, host.GetSaltboxUser, reconcileSaltboxRuntime)
+}
+
+func handleUpdateVenvWith(
+	ctx context.Context,
+	runner *terminal.Runner,
+	verbose bool,
+	getSaltboxUser func() (string, error),
+	reconcileRuntime func(context.Context, *terminal.Task, string, bool) error,
+) error {
+	saltboxUser, err := getSaltboxUser()
 	if err != nil {
 		return fmt.Errorf("error getting saltbox user: %w", err)
 	}
 
-	runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: verbose})
 	return runner.Run(ctx, updateVenvTaskSpec(), func(ctx context.Context, task *terminal.Task) error {
-		if err := python.ManageAnsibleVenv(ctx, task, false, saltboxUser, verbose); err != nil {
-			return fmt.Errorf("error managing Ansible venv: %w", err)
-		}
-		return nil
+		return reconcileRuntime(ctx, task, saltboxUser, verbose)
 	})
 }
 
 func updateVenvTaskSpec() terminal.TaskSpec {
 	return terminal.TaskSpec{
-		Running:      "Checking Ansible virtual environment for updates",
-		Success:      "Ansible virtual environment is ready",
-		Failure:      "Ansible virtual environment update check",
+		Running:      "Checking Ansible virtual environment and saltbox.fact for updates",
+		Success:      "Ansible virtual environment and saltbox.fact are ready",
+		Failure:      "Saltbox runtime dependency update check",
 		ChildDisplay: terminal.RetainChildTasks,
 	}
 }
