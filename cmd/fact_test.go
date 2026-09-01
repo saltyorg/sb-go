@@ -33,6 +33,31 @@ func TestValidateFactCommandRejectsUnsafeOrIncompleteOperations(t *testing.T) {
 			args:   []string{"plex", "default"},
 			config: factConfig{method: "delete", deleteType: "unknown"},
 		},
+		{
+			name:   "reserved default instance",
+			args:   []string{"plex", "DEFAULT"},
+			config: factConfig{method: "save", keyValues: []string{"token=value"}},
+		},
+		{
+			name:   "save key with newline",
+			args:   []string{"plex", "default"},
+			config: factConfig{method: "save", keyValues: []string{"safe\ninjected=value"}},
+		},
+		{
+			name:   "save key interpreted as hash comment",
+			args:   []string{"plex", "default"},
+			config: factConfig{method: "save", keyValues: []string{"  #hidden=value"}},
+		},
+		{
+			name:   "save key interpreted as semicolon comment",
+			args:   []string{"plex", "default"},
+			config: factConfig{method: "save", keyValues: []string{";hidden=value"}},
+		},
+		{
+			name:   "delete key with carriage return",
+			args:   []string{"plex", "default"},
+			config: factConfig{method: "delete", deleteType: "key", keyValues: []string{"unsafe\rkey"}},
+		},
 	}
 
 	for _, tt := range tests {

@@ -242,8 +242,11 @@ func validateFactCommand(args []string, config *factConfig) error {
 		}
 		for _, keyValue := range config.keyValues {
 			key, _, found := strings.Cut(keyValue, "=")
-			if !found || strings.TrimSpace(key) == "" {
+			if !found {
 				return fmt.Errorf("invalid save key %q: expected key=value", keyValue)
+			}
+			if err := validateFactKey(key); err != nil {
+				return err
 			}
 		}
 	case "delete":
@@ -271,8 +274,8 @@ func validateFactCommand(args []string, config *factConfig) error {
 			}
 			for _, keyValue := range config.keyValues {
 				key, _, _ := strings.Cut(keyValue, "=")
-				if strings.TrimSpace(key) == "" {
-					return fmt.Errorf("key name must not be empty")
+				if err := validateFactKey(key); err != nil {
+					return err
 				}
 			}
 		default:
@@ -291,8 +294,25 @@ func validateFactIdentifier(kind, value string, fileName bool) error {
 	if strings.IndexFunc(value, unicode.IsControl) >= 0 || strings.ContainsAny(value, "[]") {
 		return fmt.Errorf("%s name contains unsupported characters", kind)
 	}
+	if kind == "instance" && value == ini.DefaultSection {
+		return fmt.Errorf("instance name must not be %q", ini.DefaultSection)
+	}
 	if fileName && (value == "." || value == ".." || filepath.Base(value) != value || strings.ContainsAny(value, `/\`)) {
 		return fmt.Errorf("role name must not contain a path")
+	}
+	return nil
+}
+
+func validateFactKey(key string) error {
+	if strings.TrimSpace(key) == "" {
+		return fmt.Errorf("key name must not be empty")
+	}
+	if strings.IndexFunc(key, unicode.IsControl) >= 0 || strings.Contains(key, "=") {
+		return fmt.Errorf("key name %q contains unsupported characters", key)
+	}
+	trimmed := strings.TrimLeftFunc(key, unicode.IsSpace)
+	if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+		return fmt.Errorf("key name %q must not be interpreted as a comment", key)
 	}
 	return nil
 }
@@ -562,6 +582,23 @@ func loadFacts(filePath, instance string, defaults map[string]string) (map[strin
 
 // saveFacts saves facts to an ini file
 func saveFacts(filePath, instance string, keys map[string]string, saltboxUser string) (map[string]string, bool, error) {
+	if _, err := inspectFactsDirectory(filepath.Dir(filePath), true); err != nil {
+		return nil, false, err
+	}
+
+	var (
+		facts   map[string]string
+		changed bool
+	)
+	err := withFactFileLock(filePath, func() error {
+		var err error
+		facts, changed, err = saveFactsUnlocked(filePath, instance, keys, saltboxUser)
+		return err
+	})
+	return facts, changed, err
+}
+
+func saveFactsUnlocked(filePath, instance string, keys map[string]string, saltboxUser string) (map[string]string, bool, error) {
 	facts := make(map[string]string)
 	changed := false
 
@@ -630,6 +667,21 @@ func saveFacts(filePath, instance string, keys map[string]string, saltboxUser st
 
 // deleteFacts deletes facts from an ini file
 func deleteFacts(filePath, deleteType, instance string, keys map[string]string, saltboxUser string) (bool, error) {
+	dirExists, err := inspectFactsDirectory(filepath.Dir(filePath), false)
+	if err != nil || !dirExists {
+		return false, err
+	}
+
+	var changed bool
+	err = withFactFileLock(filePath, func() error {
+		var err error
+		changed, err = deleteFactsUnlocked(filePath, deleteType, instance, keys, saltboxUser)
+		return err
+	})
+	return changed, err
+}
+
+func deleteFactsUnlocked(filePath, deleteType, instance string, keys map[string]string, saltboxUser string) (bool, error) {
 	changed := false
 
 	// For role deletion, just remove the file
