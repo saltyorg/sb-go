@@ -61,6 +61,30 @@ func TestExecuteWithEnvironment(t *testing.T) {
 	}
 }
 
+func TestExecuteDisablesGitTerminalPrompts(t *testing.T) {
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not installed")
+	}
+
+	t.Setenv("GIT_TERMINAL_PROMPT", "1")
+	t.Setenv("GIT_ASKPASS", "/bin/false")
+	t.Setenv("SSH_ASKPASS", "/bin/false")
+
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	result, err := Run(ctx, gitPath,
+		WithArgs("-c", "credential.helper=", "credential", "fill"),
+		WithStdin(strings.NewReader("protocol=https\nhost=github.com\n\n")),
+	)
+	if err == nil {
+		t.Fatal("expected Git credential lookup to fail")
+	}
+	if output := string(result.Combined); !strings.Contains(output, "terminal prompts disabled") {
+		t.Fatalf("Git was allowed to prompt on the terminal:\n%s", output)
+	}
+}
+
 func TestExecuteWithContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()

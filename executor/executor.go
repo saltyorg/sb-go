@@ -117,6 +117,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/creack/pty"
@@ -558,6 +559,10 @@ func (e *DefaultExecutor) Execute(config *Config) (*Result, error) {
 	if config.Env != nil {
 		cmd.Env = config.Env
 	}
+	// Git can open the controlling terminal even when stdin is not attached.
+	if filepath.Base(config.Command) == "git" && config.OutputMode != OutputModeInteractive {
+		cmd.Env = withEnvironmentOverride(cmd.Environ(), "GIT_TERMINAL_PROMPT", "0")
+	}
 
 	result := &Result{}
 
@@ -716,6 +721,17 @@ func (e *DefaultExecutor) Execute(config *Config) (*Result, error) {
 	setExitCode(result)
 
 	return result, result.Error
+}
+
+func withEnvironmentOverride(env []string, name, value string) []string {
+	prefix := name + "="
+	overridden := make([]string, 0, len(env)+1)
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, prefix) {
+			overridden = append(overridden, entry)
+		}
+	}
+	return append(overridden, prefix+value)
 }
 
 func setExitCode(result *Result) {
