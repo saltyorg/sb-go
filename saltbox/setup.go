@@ -200,17 +200,19 @@ func SaltboxRepo(ctx context.Context, task *terminal.Task, verbose bool, branch 
 	if os.IsNotExist(err) {
 		// Clone the repository if it doesn't exist.
 		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch)}, func(taskCtx context.Context) error {
-			return git.CloneRepository(taskCtx, saltboxRepoURL, saltboxPath, branch, verbose)
+			return git.CloneRepository(taskCtx, "Saltbox", saltboxRepoURL, saltboxPath, branch, verbose)
 		}); err != nil {
 			return fmt.Errorf("error cloning Saltbox repository: %w", err)
 		}
 
 		// Run submodule update after cloning.
 		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating git submodules"}, func(taskCtx context.Context) error {
-			_, err := executor.Run(taskCtx, "git",
-				executor.WithArgs("submodule", "update", "--progress", "--init", "--recursive"),
-				executor.WithWorkingDir(saltboxPath),
-				executor.WithOutputMode(executor.OutputModeDiscard),
+			_, err := git.RunRemoteCommand(
+				taskCtx,
+				"Saltbox",
+				saltboxPath,
+				executor.OutputModeDiscard,
+				"submodule", "update", "--progress", "--init", "--recursive",
 			)
 			return err
 		}); err != nil {
@@ -231,13 +233,14 @@ func SaltboxRepo(ctx context.Context, task *terminal.Task, verbose bool, branch 
 			initSteps := []struct {
 				name    string
 				command []string
+				remote  bool
 			}{
 				{name: "Creating Git repository", command: []string{"git", "init"}},
 				{name: "Configuring Git remote", command: []string{"git", "remote", "add", "origin", saltboxRepoURL}},
-				{name: "Fetching repository branches", command: []string{"git", "fetch", "--progress", "--all", "--prune"}},
+				{name: "Fetching repository branches", command: []string{"git", "fetch", "--progress", "--all", "--prune"}, remote: true},
 				{name: fmt.Sprintf("Creating branch %s", branch), command: []string{"git", "branch", branch, "origin/" + branch}},
 				{name: fmt.Sprintf("Resetting to branch %s", branch), command: []string{"git", "reset", "--hard", "origin/" + branch}},
-				{name: "Updating git submodules", command: []string{"git", "submodule", "update", "--progress", "--init", "--recursive"}},
+				{name: "Updating git submodules", command: []string{"git", "submodule", "update", "--progress", "--init", "--recursive"}, remote: true},
 			}
 
 			if err := task.Run(ctx, terminal.TaskSpec{
@@ -246,6 +249,16 @@ func SaltboxRepo(ctx context.Context, task *terminal.Task, verbose bool, branch 
 			}, func(ctx context.Context, initTask *terminal.Task) error {
 				for _, step := range initSteps {
 					if err := initTask.RunStreaming(ctx, terminal.TaskSpec{Running: step.name}, func(taskCtx context.Context) error {
+						if step.remote {
+							_, err := git.RunRemoteCommand(
+								taskCtx,
+								"Saltbox",
+								saltboxPath,
+								executor.OutputModeDiscard,
+								step.command[1:]...,
+							)
+							return err
+						}
 						_, err := executor.Run(taskCtx, step.command[0],
 							executor.WithArgs(step.command[1:]...),
 							executor.WithWorkingDir(saltboxPath),

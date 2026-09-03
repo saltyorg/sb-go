@@ -15,7 +15,7 @@ import (
 // CloneRepository clones a Git repository to a specified path and branch.
 // The verbose flag controls whether stdout and stderr are directly outputted.
 // The context parameter allows for cancellation of the clone operation.
-func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verbose bool) error {
+func CloneRepository(ctx context.Context, repoName, repoURL, destPath, branch string, verbose bool) error {
 	if _, err := os.Stat(destPath); !os.IsNotExist(err) {
 		return fmt.Errorf("destination path '%s' already exists", destPath)
 	}
@@ -30,17 +30,10 @@ func CloneRepository(ctx context.Context, repoURL, destPath, branch string, verb
 		mode = executor.OutputModeCapture
 	}
 
-	result, err := executor.Run(ctx, "git",
-		executor.WithArgs(cloneArgs...),
-		executor.WithOutputMode(mode))
-
+	_, err := RunRemoteCommand(ctx, repoName, "", mode, cloneArgs...)
 	if err != nil {
-		if !verbose && len(result.Stderr) > 0 {
-			return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s' (exit code %d)\nStderr:\n%s",
-				repoURL, branch, destPath, result.ExitCode, string(result.Stderr))
-		}
-		return fmt.Errorf("failed to clone repository '%s' (branch: '%s') to '%s' (exit code %d): %w",
-			repoURL, branch, destPath, result.ExitCode, err)
+		return fmt.Errorf("failed to clone %s repository '%s' (branch: '%s') to '%s': %w",
+			repoName, repoURL, branch, destPath, err)
 	}
 
 	if verbose {
@@ -162,8 +155,20 @@ func FetchAndResetBranch(
 	submoduleCommands := [][]string{
 		{"git", "submodule", "update", "--progress", "--init", "--recursive"},
 	}
-	runCommands := func(commandCtx context.Context, commands [][]string) error {
+	runCommands := func(commandCtx context.Context, commands [][]string, remote bool) error {
 		for _, command := range commands {
+			if remote {
+				if _, err := RunRemoteCommand(
+					commandCtx,
+					repoName,
+					repoPath,
+					executor.OutputModeCombined,
+					command[1:]...,
+				); err != nil {
+					return err
+				}
+				continue
+			}
 			result, err := executor.Run(commandCtx, command[0],
 				executor.WithArgs(command[1:]...),
 				executor.WithWorkingDir(repoPath))
@@ -177,14 +182,15 @@ func FetchAndResetBranch(
 	steps := []struct {
 		name     string
 		commands [][]string
+		remote   bool
 	}{
-		{name: "Fetching repository changes", commands: fetchCommands},
+		{name: "Fetching repository changes", commands: fetchCommands, remote: true},
 		{name: fmt.Sprintf("Resetting repository to %s", branch), commands: resetCommands},
-		{name: "Updating git submodules", commands: submoduleCommands},
+		{name: "Updating git submodules", commands: submoduleCommands, remote: true},
 	}
 	for _, step := range steps {
 		if err := parent.RunStreaming(ctx, terminal.TaskSpec{Running: step.name}, func(taskCtx context.Context) error {
-			return runCommands(taskCtx, step.commands)
+			return runCommands(taskCtx, step.commands, step.remote)
 		}); err != nil {
 			return err
 		}
@@ -197,7 +203,7 @@ func FetchAndResetBranch(
 
 	if len(customCommands) > 0 {
 		if err := parent.RunStreaming(ctx, terminal.TaskSpec{Running: "Running repository update hooks"}, func(taskCtx context.Context) error {
-			return runCommands(taskCtx, customCommands)
+			return runCommands(taskCtx, customCommands, false)
 		}); err != nil {
 			return err
 		}
