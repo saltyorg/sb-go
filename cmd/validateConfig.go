@@ -19,9 +19,8 @@ func newConfigCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: verbose})
 			return runner.Run(cmd.Context(), terminal.TaskSpec{
-				Running:      "Validating Saltbox configuration",
-				Success:      "Saltbox configuration validated",
-				ChildDisplay: terminal.RetainChildTasks,
+				Running: "Validating Saltbox configuration",
+				Success: "Saltbox configuration validated",
 			}, func(ctx context.Context, task *terminal.Task) error {
 				return saltbox.AllSaltboxConfigs(ctx, task, verbose)
 			})

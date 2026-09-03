@@ -58,10 +58,9 @@ func changeBranch(ctx context.Context, branchName string) error {
 		Failure: "Saltbox branch switch",
 	}, func(ctx context.Context, task *terminal.Task) error {
 		if err := task.Run(ctx, terminal.TaskSpec{
-			Running:      "Updating Saltbox repository",
-			Success:      fmt.Sprintf("Saltbox repository updated (%s)", selectedBranch),
-			Failure:      "Saltbox repository update",
-			ChildDisplay: terminal.CollapseChildTasks,
+			Running: "Updating Saltbox repository",
+			Success: fmt.Sprintf("Saltbox repository updated (%s)", selectedBranch),
+			Failure: "Saltbox repository update",
 		}, func(ctx context.Context, gitTask *terminal.Task) error {
 			return git.FetchAndResetBranch(ctx, gitTask, layout.SaltboxRepoPath, selectedBranch, saltboxUser, nil, "Saltbox")
 		}); err != nil {
@@ -69,10 +68,9 @@ func changeBranch(ctx context.Context, branchName string) error {
 		}
 
 		if err := task.Run(ctx, terminal.TaskSpec{
-			Running:      "Checking saltbox.fact",
-			Success:      "saltbox.fact is ready",
-			Failure:      "saltbox.fact update",
-			ChildDisplay: terminal.CollapseChildTasks,
+			Running: "Checking saltbox.fact",
+			Success: "saltbox.fact is ready",
+			Failure: "saltbox.fact update",
 		}, func(ctx context.Context, factTask *terminal.Task) error {
 			return saltbox.DownloadAndInstallSaltboxFact(ctx, factTask, false, false)
 		}); err != nil {
@@ -80,10 +78,9 @@ func changeBranch(ctx context.Context, branchName string) error {
 		}
 
 		if err := task.Run(ctx, terminal.TaskSpec{
-			Running:      "Preparing Ansible virtual environment",
-			Success:      "Ansible virtual environment ready",
-			Failure:      "Ansible virtual environment",
-			ChildDisplay: terminal.CollapseChildTasks,
+			Running: "Preparing Ansible virtual environment",
+			Success: "Ansible virtual environment ready",
+			Failure: "Ansible virtual environment",
 		}, func(ctx context.Context, venvTask *terminal.Task) error {
 			return python.ManageAnsibleVenv(ctx, venvTask, false, saltboxUser, false)
 		}); err != nil {

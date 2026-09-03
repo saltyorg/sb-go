@@ -100,7 +100,7 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 		return err
 	}
 
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Ensuring uv %s is installed", uvVersion)}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Ensuring uv %s is installed", uvVersion)}, func(taskCtx context.Context, _ *terminal.Task) error {
 		return DownloadAndInstallUV(taskCtx, options.Verbose)
 	}); err != nil {
 		return fmt.Errorf("install pinned uv: %w", err)
@@ -111,12 +111,12 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 		return fmt.Errorf("check native Python build prerequisites: %w", err)
 	}
 	if !libpqInstalled {
-		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating apt package cache"}, func(taskCtx context.Context) error {
+		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating apt package cache"}, func(taskCtx context.Context, _ *terminal.Task) error {
 			return host.UpdatePackageLists(taskCtx, options.Verbose)()
 		}); err != nil {
 			return fmt.Errorf("update apt cache for native Python build prerequisites: %w", err)
 		}
-		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing native Python build prerequisites"}, func(taskCtx context.Context) error {
+		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing native Python build prerequisites"}, func(taskCtx context.Context, _ *terminal.Task) error {
 			return host.InstallPackage(taskCtx, []string{"libpq-dev"}, options.Verbose)()
 		}); err != nil {
 			return fmt.Errorf("install native Python build prerequisites: %w", err)
@@ -262,7 +262,7 @@ func createPythonRelease(ctx context.Context, task *terminal.Task, version strin
 			_ = os.RemoveAll(installDir)
 		}
 	}()
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Installing Python %s", version)}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Installing Python %s", version)}, func(taskCtx context.Context, _ *terminal.Task) error {
 		return InstallPythonAt(taskCtx, version, installDir, options.ForcePython, options.noCache(), options.Verbose)
 	}); err != nil {
 		return "", "", fmt.Errorf("install Python release: %w", err)

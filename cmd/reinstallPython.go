@@ -34,18 +34,13 @@ func addReinstallPythonCommand(rootCmd *cobra.Command) {
 
 func handleReinstallPython(ctx context.Context, verbose bool) error {
 	runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: verbose})
-	return runner.Run(ctx, reinstallPythonTaskSpec(), func(ctx context.Context, task *terminal.Task) error {
+	return runner.Run(ctx, terminal.TaskSpec{
+		Running: "Reinstalling Saltbox Python and Ansible environment",
+		Success: "Saltbox Python and Ansible environment reinstalled",
+		Failure: "Python and Ansible environment reinstall",
+	}, func(ctx context.Context, task *terminal.Task) error {
 		return reinstallPython(ctx, task, verbose)
 	})
-}
-
-func reinstallPythonTaskSpec() terminal.TaskSpec {
-	return terminal.TaskSpec{
-		Running:      "Reinstalling Saltbox Python and Ansible environment",
-		Success:      "Saltbox Python and Ansible environment reinstalled",
-		Failure:      "Python and Ansible environment reinstall",
-		ChildDisplay: terminal.RetainChildTasks,
-	}
 }
 
 func reinstallPython(ctx context.Context, task *terminal.Task, verbose bool) error {
@@ -55,7 +50,11 @@ func reinstallPython(ctx context.Context, task *terminal.Task, verbose bool) err
 		return fmt.Errorf("error getting saltbox user: %w", err)
 	}
 
-	if err := task.Run(ctx, reinstallPythonVenvTaskSpec(), func(ctx context.Context, venvTask *terminal.Task) error {
+	if err := task.Run(ctx, terminal.TaskSpec{
+		Running: "Recreating Ansible virtual environment",
+		Success: "Ansible virtual environment recreated",
+		Failure: "Ansible virtual environment",
+	}, func(ctx context.Context, venvTask *terminal.Task) error {
 		return python.Reconcile(ctx, venvTask, python.Options{
 			ForceVenv:   true,
 			ForcePython: true,
@@ -67,13 +66,4 @@ func reinstallPython(ctx context.Context, task *terminal.Task, verbose bool) err
 	}
 
 	return nil
-}
-
-func reinstallPythonVenvTaskSpec() terminal.TaskSpec {
-	return terminal.TaskSpec{
-		Running:      "Recreating Ansible virtual environment",
-		Success:      "Ansible virtual environment recreated",
-		Failure:      "Ansible virtual environment",
-		ChildDisplay: terminal.RetainChildTasks,
-	}
 }

@@ -16,7 +16,7 @@ import (
 func TestRunRemoteCommandRetriesGitHubAuthenticationOverHTTP11(t *testing.T) {
 	callLog := installFakeGit(t, "retry-succeeds")
 
-	_, err := RunRemoteCommand(t.Context(), "Saltbox", t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
+	_, err := RunRemoteCommand(t.Context(), nil, "Saltbox", t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
 	if err != nil {
 		t.Fatalf("RunRemoteCommand() error = %v", err)
 	}
@@ -27,12 +27,36 @@ func TestRunRemoteCommandRetriesGitHubAuthenticationOverHTTP11(t *testing.T) {
 	})
 }
 
+func TestRunRemoteCommandShowsHTTP11FallbackTask(t *testing.T) {
+	installFakeGit(t, "retry-succeeds")
+	var output bytes.Buffer
+	runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: true, Output: &output})
+
+	err := runner.Run(t.Context(), terminal.TaskSpec{Running: "Updating Saltbox repository"}, func(ctx context.Context, task *terminal.Task) error {
+		return task.RunStreaming(ctx, terminal.TaskSpec{Running: "Fetching repository changes"}, func(taskCtx context.Context, fetchTask *terminal.Task) error {
+			_, err := RunRemoteCommand(taskCtx, fetchTask, "Saltbox", t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
+			return err
+		})
+	})
+	if err != nil {
+		t.Fatalf("RunRemoteCommand() error = %v", err)
+	}
+	for _, message := range []string{
+		"Retrying Saltbox Git fetch over HTTP/1.1...",
+		"Retried Saltbox Git fetch over HTTP/1.1",
+	} {
+		if strings.Count(output.String(), message) != 1 {
+			t.Fatalf("fallback task lifecycle missing from output:\n%s", output.String())
+		}
+	}
+}
+
 func TestRunRemoteCommandReturnsRepositorySpecificGitHubError(t *testing.T) {
 	for _, repository := range []string{"Saltbox", "Sandbox"} {
 		t.Run(repository, func(t *testing.T) {
 			callLog := installFakeGit(t, "always-auth")
 
-			_, err := RunRemoteCommand(t.Context(), repository, t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
+			_, err := RunRemoteCommand(t.Context(), nil, repository, t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
 			if err == nil {
 				t.Fatal("RunRemoteCommand() error = nil, want authentication error")
 			}
@@ -58,7 +82,7 @@ func TestRunRemoteCommandReturnsRepositorySpecificGitHubError(t *testing.T) {
 func TestRunRemoteCommandPreservesUnknownGitError(t *testing.T) {
 	callLog := installFakeGit(t, "unknown-failure")
 
-	_, err := RunRemoteCommand(t.Context(), "Saltbox", t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
+	_, err := RunRemoteCommand(t.Context(), nil, "Saltbox", t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
 	if err == nil {
 		t.Fatal("RunRemoteCommand() error = nil, want Git error")
 	}
@@ -76,7 +100,7 @@ func TestRunRemoteCommandPreservesUnknownGitError(t *testing.T) {
 func TestRunRemoteCommandDoesNotRetrySuccess(t *testing.T) {
 	callLog := installFakeGit(t, "success")
 
-	_, err := RunRemoteCommand(t.Context(), "Saltbox", t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
+	_, err := RunRemoteCommand(t.Context(), nil, "Saltbox", t.TempDir(), executor.OutputModeCombined, "fetch", "--progress")
 	if err != nil {
 		t.Fatalf("RunRemoteCommand() error = %v", err)
 	}
@@ -120,6 +144,7 @@ func TestCloneRepositoryUsesRemoteGitRetry(t *testing.T) {
 
 	err := CloneRepository(
 		t.Context(),
+		nil,
 		"Saltbox",
 		"https://github.com/saltyorg/saltbox.git",
 		destination,
@@ -139,13 +164,22 @@ func TestCloneRepositoryUsesRemoteGitRetry(t *testing.T) {
 func TestFetchAndResetBranchUsesRemoteGitRetry(t *testing.T) {
 	callLog := installFakeGit(t, "remote-retry-succeeds")
 	repositoryPath := t.TempDir()
-	runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: true, Output: &bytes.Buffer{}})
+	var output bytes.Buffer
+	runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: true, Output: &output})
 
 	err := runner.Run(t.Context(), terminal.TaskSpec{Running: "test"}, func(ctx context.Context, task *terminal.Task) error {
 		return FetchAndResetBranch(ctx, task, repositoryPath, "master", "root", nil, "Saltbox")
 	})
 	if err != nil {
 		t.Fatalf("FetchAndResetBranch() error = %v", err)
+	}
+	for _, message := range []string{
+		"Retried Saltbox Git fetch over HTTP/1.1",
+		"Retried Saltbox Git submodule update over HTTP/1.1",
+	} {
+		if !strings.Contains(output.String(), message) {
+			t.Fatalf("fallback task %q missing from output:\n%s", message, output.String())
+		}
 	}
 
 	assertGitCalls(t, callLog, []string{

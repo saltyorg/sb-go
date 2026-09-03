@@ -23,7 +23,7 @@ func newDockerStartCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: verbose})
-			return runDockerStart(ctx, runner, verbose, terminal.CollapseChildTasks)
+			return runDockerStart(ctx, runner, verbose)
 		},
 	}
 	startCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
@@ -34,13 +34,11 @@ func runDockerStart(
 	ctx context.Context,
 	runner *terminal.Runner,
 	verbose bool,
-	childDisplay terminal.ChildDisplay,
 ) error {
 	return runner.Run(ctx, terminal.TaskSpec{
-		Running:      "Starting Docker containers",
-		Success:      "Docker containers started",
-		Failure:      "Docker container start",
-		ChildDisplay: childDisplay,
+		Running: "Starting Docker containers",
+		Success: "Docker containers started",
+		Failure: "Docker container start",
 	}, func(ctx context.Context, task *terminal.Task) error {
 		return performDockerStart(ctx, task, verbose)
 	})

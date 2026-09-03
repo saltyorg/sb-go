@@ -45,9 +45,8 @@ func handleReinstallVenv(ctx context.Context, verbose bool) error {
 	// Manage Ansible venv with the force recreate flag set to true
 	// This function already has internal spinners
 	return runner.Run(ctx, terminal.TaskSpec{
-		Running:      "Reinstalling Ansible virtual environment",
-		Success:      "Ansible virtual environment reinstalled",
-		ChildDisplay: terminal.RetainChildTasks,
+		Running: "Reinstalling Ansible virtual environment",
+		Success: "Ansible virtual environment reinstalled",
 	}, func(ctx context.Context, task *terminal.Task) error {
 		if err := python.ManageAnsibleVenv(ctx, task, true, saltboxUser, verbose); err != nil {
 			return fmt.Errorf("error managing Ansible venv: %w", err)

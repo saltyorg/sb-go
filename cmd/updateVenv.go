@@ -54,9 +54,8 @@ func handleUpdateVenvWith(
 
 func updateVenvTaskSpec() terminal.TaskSpec {
 	return terminal.TaskSpec{
-		Running:      "Checking Ansible virtual environment and saltbox.fact for updates",
-		Success:      "Ansible virtual environment and saltbox.fact are ready",
-		Failure:      "Saltbox runtime dependency update check",
-		ChildDisplay: terminal.RetainChildTasks,
+		Running: "Checking Ansible virtual environment and saltbox.fact for updates",
+		Success: "Ansible virtual environment and saltbox.fact are ready",
+		Failure: "Saltbox runtime dependency update check",
 	}
 }

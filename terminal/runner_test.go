@@ -11,7 +11,7 @@ import (
 )
 
 func TestProgressTreeUsesExplicitParentsAndCreationOrder(t *testing.T) {
-	model := newProgressModel(TaskSpec{Running: "root", ChildDisplay: RetainChildTasks}, func() error { return nil })
+	model := newProgressModel(TaskSpec{Running: "root"}, func() error { return nil })
 	updated, _ := model.Update(progressStartMsg{id: 1, parentID: 0, spec: TaskSpec{Running: "first"}})
 	model = updated.(progressModel)
 	updated, _ = model.Update(progressStartMsg{id: 2, parentID: 0, spec: TaskSpec{Running: "second"}})
@@ -31,13 +31,12 @@ func TestProgressTreeUsesExplicitParentsAndCreationOrder(t *testing.T) {
 	}
 }
 
-func TestCollapseKeepsChildrenLiveThenHidesThemOnSuccess(t *testing.T) {
+func TestCompletedTreeRetainsSuccessfulDescendants(t *testing.T) {
 	model := newProgressModel(TaskSpec{
-		Running:      "restart",
-		Success:      "restarted",
-		ChildDisplay: CollapseChildTasks,
+		Running: "restart",
+		Success: "restarted",
 	}, func() error { return nil })
-	updated, _ := model.Update(progressStartMsg{id: 1, parentID: 0, spec: TaskSpec{Running: "stop", Success: "stopped", ChildDisplay: CollapseChildTasks}})
+	updated, _ := model.Update(progressStartMsg{id: 1, parentID: 0, spec: TaskSpec{Running: "stop", Success: "stopped"}})
 	model = updated.(progressModel)
 	updated, _ = model.Update(progressStartMsg{id: 2, parentID: 1, spec: TaskSpec{Running: "request", Success: "requested"}})
 	model = updated.(progressModel)
@@ -55,46 +54,16 @@ func TestCollapseKeepsChildrenLiveThenHidesThemOnSuccess(t *testing.T) {
 	updated, _ = model.Update(progressFinishMsg{id: 1})
 	model = updated.(progressModel)
 	view := model.View().Content
-	if !strings.Contains(view, "stopped") || strings.Contains(view, "requested") || strings.Contains(view, "waiting") {
-		t.Fatalf("child boundary collapsed incorrectly: %q", view)
+	if !strings.Contains(view, "stopped") || !strings.Contains(view, "requested") || !strings.Contains(view, "waiting") {
+		t.Fatalf("completed descendants were not retained: %q", view)
 	}
 
 	updated, _ = model.Update(progressSuccessMsg{})
 	model = updated.(progressModel)
 	output := model.finalOutput()
-	if !strings.Contains(output, "restarted") || strings.Contains(output, "stopped") {
-		t.Fatalf("root hierarchy was not collapsed: %q", output)
-	}
-}
-
-func TestRetainKeepsCompletedHierarchy(t *testing.T) {
-	model := newProgressModel(TaskSpec{
-		Running:      "root",
-		Success:      "root done",
-		ChildDisplay: RetainChildTasks,
-	}, func() error { return nil })
-	updated, _ := model.Update(progressStartMsg{id: 1, parentID: 0, spec: TaskSpec{Running: "child", Success: "child done"}})
-	model = updated.(progressModel)
-	updated, _ = model.Update(progressFinishMsg{id: 1})
-	model = updated.(progressModel)
-	updated, _ = model.Update(progressSuccessMsg{})
-	model = updated.(progressModel)
-	if output := model.finalOutput(); !strings.Contains(output, "root done") || !strings.Contains(output, "child done") {
-		t.Fatalf("retained hierarchy missing: %q", output)
-	}
-}
-
-func TestRetainIsTheDefaultChildDisplay(t *testing.T) {
-	model := newProgressModel(TaskSpec{Running: "root"}, func() error { return nil })
-	updated, _ := model.Update(progressStartMsg{id: 1, parentID: 0, spec: TaskSpec{Running: "child", Success: "child done"}})
-	model = updated.(progressModel)
-	updated, _ = model.Update(progressFinishMsg{id: 1})
-	model = updated.(progressModel)
-	updated, _ = model.Update(progressSuccessMsg{})
-	model = updated.(progressModel)
-
-	if output := model.finalOutput(); !strings.Contains(output, "child done") {
-		t.Fatalf("default child display did not retain completed child: %q", output)
+	if !strings.Contains(output, "restarted") || !strings.Contains(output, "stopped") ||
+		!strings.Contains(output, "requested") || !strings.Contains(output, "waiting") {
+		t.Fatalf("completed tree lost successful descendants: %q", output)
 	}
 }
 
@@ -110,7 +79,7 @@ func TestCompletedMarkerUsesTaskResultColor(t *testing.T) {
 }
 
 func TestFailureRetainsAncestorPathAndOutput(t *testing.T) {
-	model := newProgressModel(TaskSpec{Running: "root", Failure: "root", ChildDisplay: CollapseChildTasks}, func() error { return nil })
+	model := newProgressModel(TaskSpec{Running: "root", Failure: "root"}, func() error { return nil })
 	childErr := errors.New("failed")
 	updated, _ := model.Update(progressStartMsg{id: 1, parentID: 0, spec: TaskSpec{Running: "child", Failure: "child"}})
 	model = updated.(progressModel)
@@ -234,14 +203,11 @@ func TestRunnerPlainModeIsIndependent(t *testing.T) {
 
 func TestRunnerRejectsInvalidTaskSpec(t *testing.T) {
 	runner := NewRunner(RunnerOptions{Verbose: true, Output: io.Discard})
-	err := runner.Run(context.Background(), TaskSpec{
-		Running:      "invalid",
-		ChildDisplay: CollapseChildTasks + 1,
-	}, func(context.Context, *Task) error {
+	err := runner.Run(context.Background(), TaskSpec{}, func(context.Context, *Task) error {
 		return nil
 	})
 	if err == nil {
-		t.Fatal("invalid child display mode was accepted")
+		t.Fatal("task without a running message was accepted")
 	}
 }
 

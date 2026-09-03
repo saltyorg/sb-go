@@ -346,7 +346,7 @@ func TestCloneRepository(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 
-			err := CloneRepository(ctx, "Test", tt.repoURL, tt.destPath, tt.branch, tt.verbose)
+			err := CloneRepository(ctx, nil, "Test", tt.repoURL, tt.destPath, tt.branch, tt.verbose)
 
 			if tt.expectedError {
 				if err == nil {
@@ -367,7 +367,7 @@ func TestCloneRepository_ContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately
 
 	destPath := filepath.Join(t.TempDir(), "test-repo-cancel")
-	err := CloneRepository(ctx, "Test", "https://github.com/user/repo.git", destPath, "main", false)
+	err := CloneRepository(ctx, nil, "Test", "https://github.com/user/repo.git", destPath, "main", false)
 
 	// With a cancelled context, we expect an error (but the exact error depends on timing)
 	// It could be "context canceled" or "failed to clone"
@@ -417,7 +417,7 @@ func TestCloneRepository_ErrorMessageFormat(t *testing.T) {
 	destPath := filepath.Join(t.TempDir(), "test-repo-error")
 
 	// Use invalid git URL to trigger error
-	err := CloneRepository(ctx, "Test", "invalid://url", destPath, "main", false)
+	err := CloneRepository(ctx, nil, "Test", "invalid://url", destPath, "main", false)
 
 	if err == nil {
 		t.Errorf("Expected error but got none")

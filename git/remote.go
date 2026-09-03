@@ -6,14 +6,17 @@ import (
 	"strings"
 
 	"github.com/saltyorg/sb-go/executor"
+	"github.com/saltyorg/sb-go/terminal"
 )
 
 const gitHTTP11Config = "http.version=HTTP/1.1"
 
 // RunRemoteCommand executes a Git operation that may contact a remote. When
 // GitHub unexpectedly requests credentials, it retries once over HTTP/1.1.
+// If task is non-nil, the retry is shown as its child task.
 func RunRemoteCommand(
 	ctx context.Context,
+	task *terminal.Task,
 	repositoryName, workingDir string,
 	outputMode executor.OutputMode,
 	args ...string,
@@ -29,7 +32,15 @@ func RunRemoteCommand(
 	retryArgs := make([]string, 0, len(args)+2)
 	retryArgs = append(retryArgs, "-c", gitHTTP11Config)
 	retryArgs = append(retryArgs, args...)
-	retryResult, retryErr := runGit(ctx, workingDir, outputMode, retryArgs)
+	retryResult, retryErr := runGitHTTP11Fallback(
+		ctx,
+		task,
+		repositoryName,
+		gitRemoteOperation(args),
+		workingDir,
+		outputMode,
+		retryArgs,
+	)
 	if retryErr == nil {
 		return retryResult, nil
 	}
@@ -42,6 +53,40 @@ func RunRemoteCommand(
 		details:        resultOutput(retryResult),
 		cause:          retryErr,
 	}
+}
+
+func runGitHTTP11Fallback(
+	ctx context.Context,
+	task *terminal.Task,
+	repositoryName, operation, workingDir string,
+	outputMode executor.OutputMode,
+	args []string,
+) (*executor.Result, error) {
+	if task == nil {
+		return runGit(ctx, workingDir, outputMode, args)
+	}
+
+	var result *executor.Result
+	err := task.RunStreaming(ctx, terminal.TaskSpec{
+		Running: fmt.Sprintf("Retrying %s Git %s over HTTP/1.1", repositoryName, operation),
+		Success: fmt.Sprintf("Retried %s Git %s over HTTP/1.1", repositoryName, operation),
+		Failure: fmt.Sprintf("%s Git %s retry over HTTP/1.1", repositoryName, operation),
+	}, func(taskCtx context.Context, _ *terminal.Task) error {
+		var err error
+		result, err = runGit(taskCtx, workingDir, outputMode, args)
+		return err
+	})
+	return result, err
+}
+
+func gitRemoteOperation(args []string) string {
+	if len(args) == 0 {
+		return "operation"
+	}
+	if args[0] == "submodule" && len(args) > 1 {
+		return strings.Join(args[:2], " ")
+	}
+	return args[0]
 }
 
 func runGit(

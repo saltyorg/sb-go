@@ -222,10 +222,9 @@ func processValidationJob(ctx context.Context, task *terminal.Task, job configVa
 	failureMessage := fmt.Sprintf("Validation of %s", job.name)
 
 	validationError := task.Run(ctx, terminal.TaskSpec{
-		Running:      fmt.Sprintf("Validating %s", job.name),
-		Success:      successMessage,
-		Failure:      failureMessage,
-		ChildDisplay: terminal.RetainChildTasks,
+		Running: fmt.Sprintf("Validating %s", job.name),
+		Success: successMessage,
+		Failure: failureMessage,
 	}, func(ctx context.Context, validationTask *terminal.Task) error {
 		return validateConfigWithSchema(ctx, validationTask, configFile, job.configPath, schemaPath, verbose)
 	})

@@ -27,7 +27,7 @@ func newDockerRestartCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: opts.verbose})
-			return runDockerRestart(ctx, runner, opts.verbose, opts.ignore, terminal.CollapseChildTasks)
+			return runDockerRestart(ctx, runner, opts.verbose, opts.ignore)
 		},
 	}
 	restartCmd.Flags().BoolVarP(&opts.verbose, "verbose", "v", false, "Enable verbose output")
@@ -40,15 +40,13 @@ func runDockerRestart(
 	runner *terminal.Runner,
 	verbose bool,
 	ignoreContainers []string,
-	childDisplay terminal.ChildDisplay,
 ) error {
 	return runner.Run(ctx, terminal.TaskSpec{
-		Running:      "Restarting Docker containers",
-		Success:      "Docker containers restarted",
-		Failure:      "Docker container restart",
-		ChildDisplay: childDisplay,
+		Running: "Restarting Docker containers",
+		Success: "Docker containers restarted",
+		Failure: "Docker container restart",
 	}, func(ctx context.Context, task *terminal.Task) error {
-		return performDockerRestart(ctx, task, verbose, ignoreContainers, childDisplay)
+		return performDockerRestart(ctx, task, verbose, ignoreContainers)
 	})
 }
 
@@ -57,7 +55,6 @@ func performDockerRestart(
 	task *terminal.Task,
 	verbose bool,
 	ignoreContainers []string,
-	childDisplay terminal.ChildDisplay,
 ) error {
 	serviceCheckTask := func() error {
 		exists, running, err := isServiceExistAndRunning(ctx)
@@ -108,8 +105,6 @@ func performDockerRestart(
 			stopTask.Info(fmt.Sprintf("Stopping containers. Job ID: %s", stopJobResp.JobID))
 		}
 
-		// Display polling while it is active. The parent stop task collapses
-		// this child on success and retains it when it fails.
 		var success bool
 		if err := stopTask.Run(ctx, terminal.TaskSpec{Running: "Waiting for Docker stop job"}, func(context.Context, *terminal.Task) error {
 			var err error
@@ -142,8 +137,6 @@ func performDockerRestart(
 			startTask.Info(fmt.Sprintf("Starting containers. Job ID: %s", startJobResp.JobID))
 		}
 
-		// Display polling while it is active. The parent start task collapses
-		// this child on success and retains it when it fails.
 		var success bool
 		if err := startTask.Run(ctx, terminal.TaskSpec{Running: "Waiting for Docker start job"}, func(context.Context, *terminal.Task) error {
 			var err error
@@ -162,16 +155,14 @@ func performDockerRestart(
 
 	// Run spinner for stopping containers
 	stopSpec := terminal.TaskSpec{
-		Running:      "Stopping Docker containers",
-		Success:      "Stopped Docker containers",
-		Failure:      "Stop Docker containers",
-		ChildDisplay: childDisplay,
+		Running: "Stopping Docker containers",
+		Success: "Stopped Docker containers",
+		Failure: "Stop Docker containers",
 	}
 	startSpec := terminal.TaskSpec{
-		Running:      "Starting Docker containers",
-		Success:      "Started Docker containers",
-		Failure:      "Start Docker containers",
-		ChildDisplay: childDisplay,
+		Running: "Starting Docker containers",
+		Success: "Started Docker containers",
+		Failure: "Start Docker containers",
 	}
 
 	if err := task.Run(ctx, stopSpec, func(_ context.Context, stopTask *terminal.Task) error {

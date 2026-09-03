@@ -17,24 +17,11 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// ChildDisplay controls how successful direct children are shown after their
-// parent completes.
-type ChildDisplay uint8
-
-const (
-	// RetainChildTasks is the safe default: tasks remain in the live tree
-	// unless their caller explicitly chooses to collapse them.
-	RetainChildTasks ChildDisplay = iota
-	CollapseChildTasks
-)
-
-// TaskSpec describes one task and how its direct children behave when it
-// completes. Failed descendants are always retained.
+// TaskSpec describes one task and its lifecycle messages.
 type TaskSpec struct {
-	Running      string
-	Success      string
-	Failure      string
-	ChildDisplay ChildDisplay
+	Running string
+	Success string
+	Failure string
 }
 
 // RunnerOptions configures one independent progress renderer.
@@ -163,6 +150,7 @@ func (r *Runner) Run(
 }
 
 // RunOutput executes a root task with task-scoped stdout and stderr writers.
+// Interactive output is temporary on success and retained for failures.
 func (r *Runner) RunOutput(
 	ctx context.Context,
 	spec TaskSpec,
@@ -190,29 +178,33 @@ func (t *Task) Run(
 }
 
 // RunOutput executes a child task with task-scoped stdout and stderr writers.
+// Interactive output is temporary on success and retained for failures.
 func (t *Task) RunOutput(
 	ctx context.Context,
 	spec TaskSpec,
 	fn func(context.Context, io.Writer, io.Writer) error,
 ) error {
-	return t.runTask(ctx, spec, fn, nil)
+	return t.runTask(ctx, spec, func(ctx context.Context, _ *Task, stdout, stderr io.Writer) error {
+		return fn(ctx, stdout, stderr)
+	}, nil)
 }
 
 // RunStreaming executes work that writes through executor's managed output.
+// The callback receives the active output task so fallback work can be nested.
 func (t *Task) RunStreaming(
 	ctx context.Context,
 	spec TaskSpec,
-	fn func(context.Context) error,
+	fn func(context.Context, *Task) error,
 ) error {
-	return t.RunOutput(ctx, spec, func(taskCtx context.Context, stdout, stderr io.Writer) error {
-		return fn(executor.WithManagedOutput(taskCtx, stdout, stderr))
-	})
+	return t.runTask(ctx, spec, func(taskCtx context.Context, task *Task, stdout, stderr io.Writer) error {
+		return fn(executor.WithManagedOutput(taskCtx, stdout, stderr), task)
+	}, nil)
 }
 
 func (t *Task) runTask(
 	ctx context.Context,
 	spec TaskSpec,
-	outputFn func(context.Context, io.Writer, io.Writer) error,
+	outputFn func(context.Context, *Task, io.Writer, io.Writer) error,
 	fn func(context.Context, *Task) error,
 ) error {
 	spec = normalizeTaskSpec(spec)
@@ -229,7 +221,7 @@ func (t *Task) runTask(
 		t.run.runner.printPlain(0, spec.Running+"...")
 		var err error
 		if outputFn != nil {
-			err = outputFn(ctx, t.run.runner.output, t.run.runner.output)
+			err = outputFn(ctx, child, t.run.runner.output, t.run.runner.output)
 		} else {
 			err = fn(ctx, child)
 		}
@@ -248,6 +240,7 @@ func (t *Task) runTask(
 		stdout := &outputCapture{}
 		stderr := &outputCapture{}
 		err = outputFn(ctx,
+			child,
 			&progressOutputWriter{program: t.run.program, id: id, capture: stdout},
 			&progressOutputWriter{program: t.run.program, id: id, capture: stderr},
 		)
@@ -324,9 +317,6 @@ func normalizeTaskSpec(spec TaskSpec) TaskSpec {
 func validateTaskSpec(spec TaskSpec) error {
 	if strings.TrimSpace(spec.Running) == "" {
 		return fmt.Errorf("task running message is required")
-	}
-	if spec.ChildDisplay > CollapseChildTasks {
-		return fmt.Errorf("invalid child display mode %d", spec.ChildDisplay)
 	}
 	return nil
 }
@@ -466,6 +456,7 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			} else {
 				node.state = progressSucceeded
+				node.output = taskOutputBuffer{}
 			}
 		}
 	case progressOutputMsg:
@@ -481,7 +472,9 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case progressSuccessMsg:
 		m.finished = true
-		m.nodes[m.rootID].state = progressSucceeded
+		root := m.nodes[m.rootID]
+		root.state = progressSucceeded
+		root.output = taskOutputBuffer{}
 		if m.terminalSettled {
 			return m, tea.Quit
 		}
@@ -521,15 +514,12 @@ func (m progressModel) View() tea.View {
 }
 
 func (m progressModel) finalOutput() string {
-	return strings.Join(m.renderNode(m.rootID, 0, true), "\n")
+	return strings.Join(m.renderNode(m.rootID, 0), "\n")
 }
 
-func (m progressModel) renderNode(id uint64, depth int, forceVisible bool) []string {
+func (m progressModel) renderNode(id uint64, depth int) []string {
 	node, ok := m.nodes[id]
 	if !ok {
-		return nil
-	}
-	if !forceVisible && !m.nodeVisible(node) {
 		return nil
 	}
 
@@ -563,47 +553,12 @@ func (m progressModel) renderNode(id uint64, depth int, forceVisible bool) []str
 
 	for _, childID := range node.children {
 		child := m.nodes[childID]
-		if child == nil || !m.childVisible(node, child) {
-			continue
-		}
-		lines = append(lines, m.renderNode(childID, depth+1, true)...)
-	}
-	return lines
-}
-
-func (m progressModel) nodeVisible(node *progressNode) bool {
-	parent := m.nodes[node.parentID]
-	return parent == nil || m.childVisible(parent, node)
-}
-
-func (m progressModel) childVisible(parent, child *progressNode) bool {
-	if child.state == progressFailed || m.hasFailedDescendant(child) {
-		return true
-	}
-	if parent.state == progressRunning {
-		return true
-	}
-	switch parent.spec.ChildDisplay {
-	case RetainChildTasks:
-		return true
-	case CollapseChildTasks:
-		return false
-	default:
-		return true
-	}
-}
-
-func (m progressModel) hasFailedDescendant(node *progressNode) bool {
-	for _, childID := range node.children {
-		child := m.nodes[childID]
 		if child == nil {
 			continue
 		}
-		if child.state == progressFailed || m.hasFailedDescendant(child) {
-			return true
-		}
+		lines = append(lines, m.renderNode(childID, depth+1)...)
 	}
-	return false
+	return lines
 }
 
 type progressOutputWriter struct {

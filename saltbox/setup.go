@@ -19,7 +19,7 @@ import (
 // The context parameter allows for cancellation of long-running operations.
 func InitialSetup(ctx context.Context, task *terminal.Task, verbose bool) error {
 	// Update apt cache
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating apt package cache"}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating apt package cache"}, func(taskCtx context.Context, _ *terminal.Task) error {
 		updateCache := host.UpdatePackageLists(taskCtx, verbose)
 		return updateCache()
 	}); err != nil {
@@ -27,7 +27,7 @@ func InitialSetup(ctx context.Context, task *terminal.Task, verbose bool) error 
 	}
 
 	// Install git and curl
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing git and curl"}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing git and curl"}, func(taskCtx context.Context, _ *terminal.Task) error {
 		installGitCurl := host.InstallPackage(taskCtx, []string{"git", "curl"}, verbose)
 		return installGitCurl()
 	}); err != nil {
@@ -51,7 +51,7 @@ func InitialSetup(ctx context.Context, task *terminal.Task, verbose bool) error 
 	}
 
 	// Install software-properties-common and apt-transport-https
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing software-properties-common and apt-transport-https"}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing software-properties-common and apt-transport-https"}, func(taskCtx context.Context, _ *terminal.Task) error {
 		installPropsTransport := host.InstallPackage(taskCtx, []string{"software-properties-common", "apt-transport-https"}, verbose)
 		return installPropsTransport()
 	}); err != nil {
@@ -59,14 +59,14 @@ func InitialSetup(ctx context.Context, task *terminal.Task, verbose bool) error 
 	}
 
 	// Add apt repos
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Adding apt repositories"}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Adding apt repositories"}, func(taskCtx context.Context, _ *terminal.Task) error {
 		return host.AddAptRepositories(taskCtx, verbose)
 	}); err != nil {
 		return fmt.Errorf("error adding apt repositories: %w", err)
 	}
 
 	// Update apt cache again after adding repositories
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating apt package cache again"}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating apt package cache again"}, func(taskCtx context.Context, _ *terminal.Task) error {
 		updateCacheAgain := host.UpdatePackageLists(taskCtx, verbose)
 		return updateCacheAgain()
 	}); err != nil {
@@ -74,7 +74,7 @@ func InitialSetup(ctx context.Context, task *terminal.Task, verbose bool) error 
 	}
 
 	// Install additional required packages.
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing additional required packages"}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Installing additional required packages"}, func(taskCtx context.Context, _ *terminal.Task) error {
 		packages := []string{
 			"locales", "nano", "wget", "jq", "file", "gpg-agent", "libpq-dev",
 			"build-essential", "libssl-dev", "libffi-dev", "python3-dev",
@@ -199,16 +199,17 @@ func SaltboxRepo(ctx context.Context, task *terminal.Task, verbose bool, branch 
 	_, err := os.Stat(saltboxPath)
 	if os.IsNotExist(err) {
 		// Clone the repository if it doesn't exist.
-		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch)}, func(taskCtx context.Context) error {
-			return git.CloneRepository(taskCtx, "Saltbox", saltboxRepoURL, saltboxPath, branch, verbose)
+		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: fmt.Sprintf("Cloning Saltbox repository to %s (branch: %s)", saltboxPath, branch)}, func(taskCtx context.Context, cloneTask *terminal.Task) error {
+			return git.CloneRepository(taskCtx, cloneTask, "Saltbox", saltboxRepoURL, saltboxPath, branch, verbose)
 		}); err != nil {
 			return fmt.Errorf("error cloning Saltbox repository: %w", err)
 		}
 
 		// Run submodule update after cloning.
-		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating git submodules"}, func(taskCtx context.Context) error {
+		if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Updating git submodules"}, func(taskCtx context.Context, gitTask *terminal.Task) error {
 			_, err := git.RunRemoteCommand(
 				taskCtx,
+				gitTask,
 				"Saltbox",
 				saltboxPath,
 				executor.OutputModeDiscard,
@@ -244,14 +245,14 @@ func SaltboxRepo(ctx context.Context, task *terminal.Task, verbose bool, branch 
 			}
 
 			if err := task.Run(ctx, terminal.TaskSpec{
-				Running:      "Initializing Git repository",
-				ChildDisplay: terminal.CollapseChildTasks,
+				Running: "Initializing Git repository",
 			}, func(ctx context.Context, initTask *terminal.Task) error {
 				for _, step := range initSteps {
-					if err := initTask.RunStreaming(ctx, terminal.TaskSpec{Running: step.name}, func(taskCtx context.Context) error {
+					if err := initTask.RunStreaming(ctx, terminal.TaskSpec{Running: step.name}, func(taskCtx context.Context, stepTask *terminal.Task) error {
 						if step.remote {
 							_, err := git.RunRemoteCommand(
 								taskCtx,
+								stepTask,
 								"Saltbox",
 								saltboxPath,
 								executor.OutputModeDiscard,
@@ -280,10 +281,9 @@ func SaltboxRepo(ctx context.Context, task *terminal.Task, verbose bool, branch 
 		} else {
 			// It's a git repo, fetch and reset
 			if err := task.Run(ctx, terminal.TaskSpec{
-				Running:      "Updating Saltbox repository",
-				Success:      fmt.Sprintf("Saltbox repository updated (%s)", branch),
-				Failure:      "Saltbox repository update",
-				ChildDisplay: terminal.CollapseChildTasks,
+				Running: "Updating Saltbox repository",
+				Success: fmt.Sprintf("Saltbox repository updated (%s)", branch),
+				Failure: "Saltbox repository update",
 			}, func(ctx context.Context, gitTask *terminal.Task) error {
 				return git.FetchAndResetBranch(ctx, gitTask, saltboxPath, branch, "root", nil, "Saltbox")
 			}); err != nil {
@@ -294,10 +294,9 @@ func SaltboxRepo(ctx context.Context, task *terminal.Task, verbose bool, branch 
 
 	// These functions already have internal spinners
 	if err := task.Run(ctx, terminal.TaskSpec{
-		Running:      "Checking saltbox.fact",
-		Success:      "saltbox.fact is ready",
-		Failure:      "saltbox.fact update",
-		ChildDisplay: terminal.CollapseChildTasks,
+		Running: "Checking saltbox.fact",
+		Success: "saltbox.fact is ready",
+		Failure: "saltbox.fact update",
 	}, func(ctx context.Context, factTask *terminal.Task) error {
 		return DownloadAndInstallSaltboxFact(ctx, factTask, false, verbose)
 	}); err != nil {
@@ -324,7 +323,7 @@ func InitializeGitHooks(ctx context.Context, task *terminal.Task) error {
 		return fmt.Errorf("error checking for init-hooks script: %w", err)
 	}
 
-	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Activating Git hooks"}, func(taskCtx context.Context) error {
+	if err := task.RunStreaming(ctx, terminal.TaskSpec{Running: "Activating Git hooks"}, func(taskCtx context.Context, _ *terminal.Task) error {
 		result, err := executor.Run(taskCtx, "bash",
 			executor.WithArgs(initHooksScript),
 			executor.WithWorkingDir(saltboxPath),

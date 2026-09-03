@@ -27,7 +27,7 @@ func newDockerStopCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			runner := terminal.NewRunner(terminal.RunnerOptions{Verbose: opts.verbose})
-			return runDockerStop(ctx, runner, opts.verbose, opts.ignore, terminal.CollapseChildTasks)
+			return runDockerStop(ctx, runner, opts.verbose, opts.ignore)
 		},
 	}
 	stopCmd.Flags().BoolVarP(&opts.verbose, "verbose", "v", false, "Enable verbose output")
@@ -40,13 +40,11 @@ func runDockerStop(
 	runner *terminal.Runner,
 	verbose bool,
 	ignoreContainers []string,
-	childDisplay terminal.ChildDisplay,
 ) error {
 	return runner.Run(ctx, terminal.TaskSpec{
-		Running:      "Stopping Docker containers",
-		Success:      "Docker containers stopped",
-		Failure:      "Docker container stop",
-		ChildDisplay: childDisplay,
+		Running: "Stopping Docker containers",
+		Success: "Docker containers stopped",
+		Failure: "Docker container stop",
 	}, func(ctx context.Context, task *terminal.Task) error {
 		return performDockerStop(ctx, task, verbose, ignoreContainers)
 	})

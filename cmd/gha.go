@@ -46,10 +46,9 @@ func newGHACommand() *cobra.Command {
 				}
 
 				if err := task.Run(ctx, terminal.TaskSpec{
-					Running:      "Checking saltbox.fact",
-					Success:      "saltbox.fact is ready",
-					Failure:      "saltbox.fact update",
-					ChildDisplay: terminal.CollapseChildTasks,
+					Running: "Checking saltbox.fact",
+					Success: "saltbox.fact is ready",
+					Failure: "saltbox.fact update",
 				}, func(ctx context.Context, factTask *terminal.Task) error {
 					return saltbox.DownloadAndInstallSaltboxFact(ctx, factTask, false, true)
 				}); err != nil {

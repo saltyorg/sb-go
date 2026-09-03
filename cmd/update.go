@@ -89,7 +89,7 @@ func handleUpdate(ctx context.Context, rootCmd *cobra.Command, verbose bool, bra
 
 	// Update apt cache
 	if err := runner.Run(ctx, terminal.TaskSpec{Running: "Updating apt package cache"}, func(ctx context.Context, task *terminal.Task) error {
-		return task.RunStreaming(ctx, terminal.TaskSpec{Running: "Refreshing apt package lists"}, func(taskCtx context.Context) error {
+		return task.RunStreaming(ctx, terminal.TaskSpec{Running: "Refreshing apt package lists"}, func(taskCtx context.Context, _ *terminal.Task) error {
 			updateCache := host.UpdatePackageLists(taskCtx, verbose)
 			return updateCache()
 		})
@@ -227,10 +227,9 @@ func reconcileSaltboxRuntimeWith(
 	}
 
 	if err := task.Run(ctx, terminal.TaskSpec{
-		Running:      "Preparing Ansible virtual environment",
-		Success:      "Ansible virtual environment ready",
-		Failure:      "Ansible virtual environment",
-		ChildDisplay: terminal.CollapseChildTasks,
+		Running: "Preparing Ansible virtual environment",
+		Success: "Ansible virtual environment ready",
+		Failure: "Ansible virtual environment",
 	}, func(ctx context.Context, venvTask *terminal.Task) error {
 		return operations.manageAnsibleVenv(ctx, venvTask, false, saltboxUser, verbose)
 	}); err != nil {
@@ -238,10 +237,9 @@ func reconcileSaltboxRuntimeWith(
 	}
 
 	if err := task.Run(ctx, terminal.TaskSpec{
-		Running:      "Checking saltbox.fact",
-		Success:      "saltbox.fact is ready",
-		Failure:      "saltbox.fact update",
-		ChildDisplay: terminal.CollapseChildTasks,
+		Running: "Checking saltbox.fact",
+		Success: "saltbox.fact is ready",
+		Failure: "saltbox.fact update",
 	}, func(ctx context.Context, factTask *terminal.Task) error {
 		return operations.updateFact(ctx, factTask, false, verbose)
 	}); err != nil {
@@ -271,10 +269,9 @@ func updateSaltboxComponents(ctx context.Context, task *terminal.Task, verbose b
 
 	// Fetch and reset git repo - this function already has internal spinners
 	if err := task.Run(ctx, terminal.TaskSpec{
-		Running:      "Updating Saltbox repository",
-		Success:      fmt.Sprintf("Saltbox repository updated (%s)", branch),
-		Failure:      "Saltbox repository update",
-		ChildDisplay: terminal.CollapseChildTasks,
+		Running: "Updating Saltbox repository",
+		Success: fmt.Sprintf("Saltbox repository updated (%s)", branch),
+		Failure: "Saltbox repository update",
 	}, func(ctx context.Context, gitTask *terminal.Task) error {
 		return git.FetchAndResetBranch(ctx, gitTask, layout.SaltboxRepoPath, branch, saltboxUser, nil, "Saltbox")
 	}); err != nil {
@@ -353,10 +350,9 @@ func updateSandboxComponents(ctx context.Context, task *terminal.Task, branch st
 
 	// Fetch and reset git repo - this function already has internal spinners
 	if err := task.Run(ctx, terminal.TaskSpec{
-		Running:      "Updating Sandbox repository",
-		Success:      fmt.Sprintf("Sandbox repository updated (%s)", branch),
-		Failure:      "Sandbox repository update",
-		ChildDisplay: terminal.CollapseChildTasks,
+		Running: "Updating Sandbox repository",
+		Success: fmt.Sprintf("Sandbox repository updated (%s)", branch),
+		Failure: "Sandbox repository update",
 	}, func(ctx context.Context, gitTask *terminal.Task) error {
 		return git.FetchAndResetBranch(ctx, gitTask, layout.Current().SandboxRepoPath, branch, saltboxUser, nil, "Sandbox")
 	}); err != nil {

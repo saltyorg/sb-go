@@ -47,14 +47,13 @@ func TestFinalTreeDoesNotLeaveLiveFrameInScrollback(t *testing.T) {
 
 func TestInlineRendererTerminalLifecycleScenarios(t *testing.T) {
 	requireTmux(t)
-	t.Run("collapse managed output", func(t *testing.T) {
-		rendered := runTmuxSpinnerScenario(t, "collapse-output", 80, 12, "", nil)
+	t.Run("temporary managed output", func(t *testing.T) {
+		rendered := runTmuxSpinnerScenario(t, "transient-output", 80, 12, "", nil)
 		assertTmuxSpinnerCapture(t, rendered,
-			[]string{"Managed output complete"},
+			[]string{"Managed output complete", "Streamed package output"},
 			[]string{
 				"Processing managed output",
 				"Streaming package output",
-				"Streamed package output",
 				"transient managed row",
 			},
 		)
@@ -129,8 +128,8 @@ func TestInlineRendererTmuxHelper(t *testing.T) {
 	switch scenario {
 	case "retained":
 		runRetainedTreeScenario(t)
-	case "collapse-output":
-		runCollapsedOutputScenario(t)
+	case "transient-output":
+		runTransientOutputScenario(t)
 	case "failure":
 		runFailureScenario(t)
 	case "interrupt":
@@ -178,13 +177,12 @@ func runRetainedTreeScenario(t *testing.T) {
 	}
 }
 
-func runCollapsedOutputScenario(t *testing.T) {
+func runTransientOutputScenario(t *testing.T) {
 	t.Helper()
 	runner := NewRunner(RunnerOptions{})
 	err := runner.Run(context.Background(), TaskSpec{
-		Running:      "Processing managed output",
-		Success:      "Managed output complete",
-		ChildDisplay: CollapseChildTasks,
+		Running: "Processing managed output",
+		Success: "Managed output complete",
 	}, func(ctx context.Context, root *Task) error {
 		return root.RunOutput(ctx, TaskSpec{
 			Running: "Streaming package output",
@@ -209,14 +207,12 @@ func runFailureScenario(t *testing.T) {
 	wantErr := errors.New("deliberate package failure")
 	runner := NewRunner(RunnerOptions{})
 	err := runner.Run(context.Background(), TaskSpec{
-		Running:      "Running failing pipeline",
-		Failure:      "Failed pipeline",
-		ChildDisplay: CollapseChildTasks,
+		Running: "Running failing pipeline",
+		Failure: "Failed pipeline",
 	}, func(ctx context.Context, root *Task) error {
 		return root.Run(ctx, TaskSpec{
-			Running:      "Preparing failing operation",
-			Failure:      "Failed preparation",
-			ChildDisplay: CollapseChildTasks,
+			Running: "Preparing failing operation",
+			Failure: "Failed preparation",
 		}, func(ctx context.Context, parent *Task) error {
 			return parent.RunOutput(ctx, TaskSpec{
 				Running: "Installing deliberately missing package",

@@ -55,10 +55,9 @@ func changeSandboxBranch(ctx context.Context, branchName string) error {
 		Failure: "Sandbox branch switch",
 	}, func(ctx context.Context, task *terminal.Task) error {
 		if err := task.Run(ctx, terminal.TaskSpec{
-			Running:      "Updating Sandbox repository",
-			Success:      fmt.Sprintf("Sandbox repository updated (%s)", selectedBranch),
-			Failure:      "Sandbox repository update",
-			ChildDisplay: terminal.CollapseChildTasks,
+			Running: "Updating Sandbox repository",
+			Success: fmt.Sprintf("Sandbox repository updated (%s)", selectedBranch),
+			Failure: "Sandbox repository update",
 		}, func(ctx context.Context, gitTask *terminal.Task) error {
 			return git.FetchAndResetBranch(ctx, gitTask, layout.Current().SandboxRepoPath, selectedBranch, saltboxUser, nil, "Sandbox")
 		}); err != nil {
