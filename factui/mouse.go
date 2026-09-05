@@ -49,20 +49,13 @@ func (m *Model) contextItems(n node) []contextItem {
 	if n.role == "" || m.blocked(n) {
 		return nil
 	}
-	var items []contextItem
-	if n.key == "" {
-		label := "Expand"
-		if m.expanded[n] {
-			label = "Collapse"
-		}
-		items = append(items, contextItem{label: label, action: mouseAction{kind: mouseToggle, node: n}})
-	}
 	if m.deleted[n] {
-		return append(items, contextItem{
+		return []contextItem{{
 			label:  "Undo staged deletion",
 			action: mouseAction{kind: mouseMutation, node: n, mutation: "d"},
-		})
+		}}
 	}
+	var items []contextItem
 	switch {
 	case n.key != "":
 		items = append(items,

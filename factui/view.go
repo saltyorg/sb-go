@@ -477,12 +477,9 @@ func (m *Model) mainView(width, height int) string {
 
 func (m *Model) header(width int) string {
 	roles, instances, factCount := m.counts()
-	left := titleStyle.Render("◆ Saltbox Facts") + "  " + mutedStyle.Render("TREE EDITOR")
+	left := titleStyle.Render("◆ Saltbox Facts")
 	right := mutedStyle.Render(fmt.Sprintf("%d roles  ·  %d instances  ·  %d facts", roles, instances, factCount))
 	innerWidth := max(1, width-2)
-	if ansi.StringWidth(left)+ansi.StringWidth(right)+1 > innerWidth {
-		left = titleStyle.Render("◆ Saltbox Facts")
-	}
 	space := strings.Repeat(" ", max(1, innerWidth-ansi.StringWidth(left)-ansi.StringWidth(right)))
 	line := ansi.Truncate(left+space+right, innerWidth, "")
 	return lipgloss.NewStyle().Width(width).Padding(0, 1).Render(line)

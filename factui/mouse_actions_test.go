@@ -23,8 +23,8 @@ func TestContextItemsMatchNodeAndDeletionState(t *testing.T) {
 		node node
 		want []string
 	}{
-		{name: "role", node: role, want: []string{"Collapse", "Stage role deletion"}},
-		{name: "instance", node: instance, want: []string{"Expand", "Add fact", "Stage instance deletion"}},
+		{name: "role", node: role, want: []string{"Stage role deletion"}},
+		{name: "instance", node: instance, want: []string{"Add fact", "Stage instance deletion"}},
 		{name: "fact", node: fact, want: []string{"Edit value", "Add sibling fact", "Stage fact deletion"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -39,7 +39,15 @@ func TestContextItemsMatchNodeAndDeletionState(t *testing.T) {
 		t.Fatalf("deleted fact context items = %q", got)
 	}
 	delete(m.deleted, fact)
+	m.deleted[role] = true
+	if got := contextLabels(m.contextItems(role)); !slices.Equal(got, []string{"Undo staged deletion"}) {
+		t.Fatalf("deleted role context items = %q", got)
+	}
+	delete(m.deleted, role)
 	m.deleted[instance] = true
+	if got := contextLabels(m.contextItems(instance)); !slices.Equal(got, []string{"Undo staged deletion"}) {
+		t.Fatalf("deleted instance context items = %q", got)
+	}
 	if got := contextLabels(m.contextItems(fact)); len(got) != 0 {
 		t.Fatalf("child deleted with parent has actions: %q", got)
 	}
