@@ -131,7 +131,7 @@ func (m *Model) contextMenuOverlay(base string, width, height int) (string, []mo
 		itemY := y + 3 + index
 		targets = append(targets, mouseTarget{
 			bounds: image.Rect(x+1, itemY, x+menuWidth-1, itemY+1),
-			left:   mouseAction{kind: mouseRunContextChoice, choice: index},
+			left:   mouseAction{kind: mouseRunContextChoice, choice: index, generation: m.contextMenu.generation},
 			menu:   true,
 		})
 	}

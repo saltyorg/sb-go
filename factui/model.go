@@ -77,6 +77,7 @@ type Model struct {
 	exitAfter             bool
 	reviewCursor, scroll  int
 	contextMenu           *contextMenuState
+	contextGeneration     uint64
 	err                   error
 	notice                string
 	outcome               string

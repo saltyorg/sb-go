@@ -23,18 +23,20 @@ const (
 )
 
 type mouseAction struct {
-	kind     mouseActionKind
-	node     node
-	delta    int
-	choice   int
-	x, y     int
-	mutation string
+	kind       mouseActionKind
+	node       node
+	delta      int
+	choice     int
+	x, y       int
+	mutation   string
+	generation uint64
 }
 
 type contextMenuState struct {
-	node   node
-	x, y   int
-	cursor int
+	node       node
+	x, y       int
+	cursor     int
+	generation uint64
 }
 
 type contextItem struct {
@@ -107,7 +109,8 @@ func (m *Model) handleMouseAction(action mouseAction) tea.Cmd {
 		}
 		m.err = nil
 		m.notice = ""
-		m.contextMenu = &contextMenuState{node: action.node, x: action.x, y: action.y}
+		m.contextGeneration++
+		m.contextMenu = &contextMenuState{node: action.node, x: action.x, y: action.y, generation: m.contextGeneration}
 	case mouseMoveTree:
 		m.contextMenu = nil
 		m.cursor = min(max(0, len(m.rows())-1), max(0, m.cursor+action.delta))
@@ -121,6 +124,9 @@ func (m *Model) handleMouseAction(action mouseAction) tea.Cmd {
 		m.reviewCursor = action.choice
 		return m.reviewKey([]string{"a", "d", "r"}[action.choice])
 	case mouseRunContextChoice:
+		if m.contextMenu == nil || action.generation == 0 || action.generation != m.contextMenu.generation {
+			return nil
+		}
 		return m.runContextItem(action.choice)
 	case mouseDismissContext:
 		m.contextMenu = nil

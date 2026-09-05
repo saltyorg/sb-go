@@ -179,6 +179,23 @@ func TestMouseRightClickReplacesOpenContextMenu(t *testing.T) {
 	}
 }
 
+func TestMouseRejectsChoiceFromReplacedContextMenu(t *testing.T) {
+	m, _ := fixture(t)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	press(m, "x")
+	fact := node{role: "plex", instance: "main", key: "token"}
+	m.handleMouseAction(mouseAction{kind: mouseOpenContext, node: fact, x: 5, y: 4})
+	oldView := m.View()
+	x, y := textPosition(t, oldView.Content, "Add sibling fact")
+
+	role := node{role: "plex"}
+	m.handleMouseAction(mouseAction{kind: mouseOpenContext, node: role, x: 30, y: 6})
+	cmd := oldView.OnMouse(tea.MouseClickMsg{X: x + 1, Y: y, Button: tea.MouseLeft})
+	if cmd != nil || m.contextMenu == nil || m.contextMenu.node != role || m.mode != browsing || len(m.changes()) != 0 {
+		t.Fatalf("stale menu choice cmd=%v menu=%+v mode=%v changes=%+v", cmd, m.contextMenu, m.mode, m.changes())
+	}
+}
+
 func TestMouseReviewButtonsExecuteImmediately(t *testing.T) {
 	t.Run("return", func(t *testing.T) {
 		m, _ := fixture(t)
