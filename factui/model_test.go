@@ -217,6 +217,57 @@ func TestEditDoesNotRenameKeyAndAddRejectsDuplicate(t *testing.T) {
 	}
 }
 
+func TestPastedSearchFiltersBeforeAndAfterEnter(t *testing.T) {
+	m, _ := fixture(t)
+	press(m, "/")
+	m.Update(tea.PasteMsg{Content: "plain-secret"})
+	for _, phase := range []string{"after paste", "after enter"} {
+		if phase == "after enter" {
+			press(m, "enter")
+		}
+		got := m.rows()
+		if len(got) != 3 || got[0].role != "plex" || got[1].instance != "main" || got[2].key != "token" {
+			t.Errorf("%s: filtered ancestors = %+v", phase, got)
+		}
+	}
+	if m.mode != browsing {
+		t.Fatal("Enter did not leave search")
+	}
+}
+
+func TestNewReviewClearsPreviousApplyOutcome(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "partial failure"}[partial], func(t *testing.T) {
+			m, f := fixture(t)
+			editValue(t, m, "plex", "main", "token", "changed")
+			editValue(t, m, "arr", "arr", "port", "9000")
+			f.apply = func(context.Context, []facts.Change) (facts.ApplyResult, error) {
+				if partial {
+					return facts.ApplyResult{Applied: []string{"arr"}, Failed: &facts.RoleFailure{Role: "plex", Err: errors.New("write failed")}}, nil
+				}
+				return facts.ApplyResult{Applied: []string{"arr", "plex"}}, nil
+			}
+			press(m, "s")
+			complete(m, press(m, "a"))
+			if partial {
+				if m.mode != reviewing || !strings.Contains(m.View().Content, "Applied: arr") || !strings.Contains(m.View().Content, "Failed: plex") {
+					t.Fatal("immediate partial-failure review lost apply outcome")
+				}
+				press(m, "r")
+			} else {
+				editValue(t, m, "plex", "main", "token", "another change")
+			}
+			press(m, "s")
+			if m.mode != reviewing || len(m.changes()) == 0 {
+				t.Fatal("fresh review missing pending changes")
+			}
+			if view := m.View().Content; strings.Contains(view, "Applied:") || strings.Contains(view, "Failed:") {
+				t.Fatalf("fresh review retained previous outcome: %s", view)
+			}
+		})
+	}
+}
+
 func TestLockWaitCancelAndTimeout(t *testing.T) {
 	m, f := fixture(t)
 	f.lock = func(ctx context.Context, role string) (*facts.Drift, error) { <-ctx.Done(); return nil, ctx.Err() }

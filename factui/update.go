@@ -139,6 +139,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch m.mode {
 		case searching:
 			m.search, cmd = m.search.Update(msg)
+			m.filter = m.search.Value()
+			m.cursor = 0
 		case adding:
 			if !m.valueFocus {
 				m.key, cmd = m.key.Update(msg)
@@ -196,6 +198,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case searching:
 		switch key {
 		case "enter":
+			m.filter = m.search.Value()
 			m.mode = browsing
 			m.search.Blur()
 			return nil
@@ -415,6 +418,7 @@ func (m *Model) openReview(exit bool) tea.Cmd {
 		return tea.Quit
 	}
 	m.mode = reviewing
+	m.outcome = ""
 	m.exitAfter = exit
 	m.reviewCursor = 0
 	m.scroll = 0
