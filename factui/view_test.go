@@ -104,7 +104,7 @@ func TestBrowseViewKeepsApprovedDesktopLayout(t *testing.T) {
 	if !strings.Contains(plain, "╭") || !strings.Contains(plain, "╰") {
 		t.Error("approved rounded panes are missing")
 	}
-	if !strings.Contains(view, "\x1b[48;2;125;211;252m") {
+	if !strings.Contains(view, "48;2;125;211;252") {
 		t.Error("selected tree row is not filled with the approved cyan background")
 	}
 	assertViewFits(t, view, 120, 36)

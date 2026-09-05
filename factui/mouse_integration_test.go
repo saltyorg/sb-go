@@ -2,6 +2,7 @@ package factui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -50,6 +51,17 @@ func TestMouseSelectsTreeRowsAndOnlyDisclosureToggles(t *testing.T) {
 	sendMouse(t, m, tea.MouseClickMsg{X: x + 2, Y: y, Button: tea.MouseLeft, Mod: tea.ModShift})
 	if m.selected() != before {
 		t.Fatalf("modified click changed selection to %+v", m.selected())
+	}
+}
+
+func TestMouseSelectionIsAppliedBeforeOnMouseReturns(t *testing.T) {
+	m, _ := fixture(t)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	view := m.View()
+	x, y := textPosition(t, view.Content, "main  (2 facts)")
+	cmd := view.OnMouse(tea.MouseClickMsg{X: x + 2, Y: y, Button: tea.MouseLeft})
+	if cmd != nil || m.selected() != (node{role: "plex", instance: "main"}) {
+		t.Fatalf("OnMouse returned cmd=%v before selecting %+v", cmd, m.selected())
 	}
 }
 
@@ -144,6 +156,11 @@ func TestMouseContextMenuNonActionAreaDoesNotClickThrough(t *testing.T) {
 	if m.contextMenu == nil || m.selected() != fact {
 		t.Fatalf("context menu click-through menu=%+v selected=%+v", m.contextMenu, m.selected())
 	}
+	// The border next to an action row is decoration, not part of the button.
+	sendMouse(t, m, tea.MouseClickMsg{X: 6, Y: 7, Button: tea.MouseLeft})
+	if m.contextMenu == nil || m.mode != browsing {
+		t.Fatalf("context menu border activated action: menu=%+v mode=%v", m.contextMenu, m.mode)
+	}
 }
 
 func TestMouseRightClickReplacesOpenContextMenu(t *testing.T) {
@@ -208,6 +225,49 @@ func TestMouseReviewButtonsExecuteImmediately(t *testing.T) {
 	})
 }
 
+func TestMouseReviewIgnoresOtherButtonsAndValueTextThatLooksLikeButton(t *testing.T) {
+	m, session := fixture(t)
+	m.catalog.Roles[0].Instances[0].Facts[0].Value = "[ Apply ]"
+	editValue(t, m, "plex", "main", "token", "changed")
+	session.apply = func(_ context.Context, _ []facts.Change) (facts.ApplyResult, error) {
+		return facts.ApplyResult{Applied: []string{"plex"}}, nil
+	}
+	press(m, "s")
+
+	view := m.View()
+	x, y := textPosition(t, view.Content, "[ Apply ]")
+	if cmd := sendMouse(t, m, tea.MouseClickMsg{X: x + 1, Y: y, Button: tea.MouseLeft}); cmd != nil || m.mode != reviewing {
+		t.Fatalf("value text activated Apply: mode=%v cmd=%v", m.mode, cmd)
+	}
+	view = m.View()
+	x, y = textPositionLast(t, view.Content, "[ Apply ]")
+	if cmd := sendMouse(t, m, tea.MouseClickMsg{X: x + 1, Y: y, Button: tea.MouseMiddle}); cmd != nil || m.mode != reviewing {
+		t.Fatalf("middle click activated Apply: mode=%v cmd=%v", m.mode, cmd)
+	}
+	cmd := sendMouse(t, m, tea.MouseClickMsg{X: x + 1, Y: y, Button: tea.MouseLeft})
+	if cmd == nil || m.mode != applying {
+		t.Fatalf("footer Apply did not activate: mode=%v cmd=%v", m.mode, cmd)
+	}
+}
+
+func TestMouseReviewWheelOnlyScrollsInsideModal(t *testing.T) {
+	m, _ := fixture(t)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
+	editValue(t, m, "plex", "main", "token", "changed")
+	press(m, "s")
+	sendMouse(t, m, tea.MouseWheelMsg{X: 0, Y: 0, Button: tea.MouseWheelDown})
+	sendMouse(t, m, tea.MouseWheelMsg{X: 119, Y: 10, Button: tea.MouseWheelDown})
+	if m.scroll != 0 {
+		t.Fatalf("wheel outside review modal changed scroll to %d", m.scroll)
+	}
+	view := m.View()
+	x, y := textPosition(t, view.Content, "REVIEW 1 PENDING CHANGE(S)")
+	sendMouse(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelDown})
+	if m.scroll != 1 {
+		t.Fatalf("wheel inside review modal scroll = %d, want 1", m.scroll)
+	}
+}
+
 func TestMouseSearchSelectionAndContextMenu(t *testing.T) {
 	m, _ := fixture(t)
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 36})
@@ -244,6 +304,11 @@ func TestMouseIgnoresReleaseOutOfBoundsAndEditorClicks(t *testing.T) {
 	if cmd := sendMouse(t, m, tea.MouseClickMsg{X: 10, Y: 10, Button: tea.MouseLeft}); cmd != nil || m.mode != editing {
 		t.Fatalf("editor click changed mode=%v cmd=%v", m.mode, cmd)
 	}
+	m.mode = applying
+	m.scroll = 0
+	if cmd := sendMouse(t, m, tea.MouseWheelMsg{X: 40, Y: 15, Button: tea.MouseWheelDown}); cmd != nil || m.scroll != 0 {
+		t.Fatalf("applying screen accepted wheel: scroll=%d cmd=%v", m.scroll, cmd)
+	}
 }
 
 func sendMouse(t *testing.T, m *Model, msg tea.MouseMsg) tea.Cmd {
@@ -253,17 +318,16 @@ func sendMouse(t *testing.T, m *Model, msg tea.MouseMsg) tea.Cmd {
 		return nil
 	}
 	cmd := handler(msg)
-	if cmd == nil {
-		return nil
+	if _, updateCmd := m.Update(msg); updateCmd != nil {
+		t.Fatal("raw mouse event unexpectedly returned an Update command")
 	}
-	_, next := m.Update(cmd())
-	return next
+	return cmd
 }
 
 func clickText(t *testing.T, m *Model, text string) tea.Cmd {
 	t.Helper()
 	view := m.View()
-	x, y := textPosition(t, view.Content, text)
+	x, y := textPositionLast(t, view.Content, text)
 	return sendMouse(t, m, tea.MouseClickMsg{X: x + 1, Y: y, Button: tea.MouseLeft})
 }
 
@@ -272,6 +336,18 @@ func textPosition(t *testing.T, content, text string) (int, int) {
 	for y, line := range strings.Split(ansi.Strip(content), "\n") {
 		if before, _, ok := strings.Cut(line, text); ok {
 			return ansi.StringWidth(before), y
+		}
+	}
+	t.Fatalf("view does not contain %q:\n%s", text, ansi.Strip(content))
+	return 0, 0
+}
+
+func textPositionLast(t *testing.T, content, text string) (int, int) {
+	t.Helper()
+	lines := strings.Split(ansi.Strip(content), "\n")
+	for y, line := range slices.Backward(lines) {
+		if byteIndex := strings.LastIndex(line, text); byteIndex >= 0 {
+			return ansi.StringWidth(line[:byteIndex]), y
 		}
 	}
 	t.Fatalf("view does not contain %q:\n%s", text, ansi.Strip(content))

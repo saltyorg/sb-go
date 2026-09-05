@@ -2,7 +2,7 @@ package factui
 
 import (
 	"context"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,14 +28,14 @@ func TestContextItemsMatchNodeAndDeletionState(t *testing.T) {
 		{name: "fact", node: fact, want: []string{"Edit value", "Add sibling fact", "Stage fact deletion"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := contextLabels(m.contextItems(test.node)); !reflect.DeepEqual(got, test.want) {
+			if got := contextLabels(m.contextItems(test.node)); !slices.Equal(got, test.want) {
 				t.Fatalf("context items = %q, want %q", got, test.want)
 			}
 		})
 	}
 
 	m.deleted[fact] = true
-	if got := contextLabels(m.contextItems(fact)); !reflect.DeepEqual(got, []string{"Undo staged deletion"}) {
+	if got := contextLabels(m.contextItems(fact)); !slices.Equal(got, []string{"Undo staged deletion"}) {
 		t.Fatalf("deleted fact context items = %q", got)
 	}
 	delete(m.deleted, fact)

@@ -133,8 +133,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.exitAfter {
 			return m, tea.Quit
 		}
-	case mouseActionMsg:
-		return m, m.handleMouseAction(msg.action)
+	case tea.MouseMsg:
+		return m, nil
 	case tea.KeyPressMsg:
 		return m, m.handleKey(msg)
 	default:

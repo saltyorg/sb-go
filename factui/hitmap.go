@@ -158,30 +158,30 @@ func modalBounds(content string) image.Rectangle {
 }
 
 func textBounds(content, text string) (image.Rectangle, bool) {
-	for y, line := range strings.Split(ansi.Strip(content), "\n") {
-		before, _, ok := strings.Cut(line, text)
-		if !ok {
+	lines := strings.Split(ansi.Strip(content), "\n")
+	for y, line := range slices.Backward(lines) {
+		byteIndex := strings.LastIndex(line, text)
+		if byteIndex < 0 {
 			continue
 		}
-		x := ansi.StringWidth(before)
+		x := ansi.StringWidth(line[:byteIndex])
 		return image.Rect(x, y, x+ansi.StringWidth(text), y+1), true
 	}
 	return image.Rectangle{}, false
 }
 
-func (screen mouseScreen) onMouse(msg tea.MouseMsg) tea.Cmd {
+func (screen mouseScreen) action(msg tea.MouseMsg) mouseAction {
 	event := msg.Mouse()
 	if event.Mod != 0 {
-		return nil
+		return mouseAction{}
 	}
 	point := image.Pt(event.X, event.Y)
 	switch msg.(type) {
 	case tea.MouseWheelMsg:
 		if !screen.menuBounds.Empty() {
-			return nil
+			return mouseAction{}
 		}
 		for _, target := range slices.Backward(screen.targets) {
-
 			if !point.In(target.bounds) {
 				continue
 			}
@@ -193,29 +193,31 @@ func (screen mouseScreen) onMouse(msg tea.MouseMsg) tea.Cmd {
 				action = target.wheelDown
 			}
 			if action.kind != 0 {
-				return mouseCommand(action)
+				return action
 			}
 		}
 	case tea.MouseClickMsg:
+		if event.Button != tea.MouseLeft && event.Button != tea.MouseRight {
+			return mouseAction{}
+		}
 		if !screen.menuBounds.Empty() {
 			if point.In(screen.menuBounds) {
 				if event.Button != tea.MouseLeft {
-					return nil
+					return mouseAction{}
 				}
-				return screen.clickCommand(point, event.Button, false)
+				return screen.clickAction(point, event.Button, false)
 			}
 			if event.Button == tea.MouseLeft {
-				return mouseCommand(mouseAction{kind: mouseDismissContext})
+				return mouseAction{kind: mouseDismissContext}
 			}
 		}
-		return screen.clickCommand(point, event.Button, true)
+		return screen.clickAction(point, event.Button, true)
 	}
-	return nil
+	return mouseAction{}
 }
 
-func (screen mouseScreen) clickCommand(point image.Point, button tea.MouseButton, includeUnderlying bool) tea.Cmd {
+func (screen mouseScreen) clickAction(point image.Point, button tea.MouseButton, includeUnderlying bool) mouseAction {
 	for _, target := range slices.Backward(screen.targets) {
-
 		if !includeUnderlying && !target.menu {
 			continue
 		}
@@ -228,18 +230,11 @@ func (screen mouseScreen) clickCommand(point image.Point, button tea.MouseButton
 			action.x, action.y = point.X, point.Y
 		}
 		if action.kind != 0 {
-			return mouseCommand(action)
+			return action
 		}
 		if !includeUnderlying {
-			return nil
+			return mouseAction{}
 		}
 	}
-	return nil
-}
-
-func mouseCommand(action mouseAction) tea.Cmd {
-	if action.kind == 0 {
-		return nil
-	}
-	return func() tea.Msg { return mouseActionMsg{action: action} }
+	return mouseAction{}
 }

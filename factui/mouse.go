@@ -31,8 +31,6 @@ type mouseAction struct {
 	mutation string
 }
 
-type mouseActionMsg struct{ action mouseAction }
-
 type contextMenuState struct {
 	node   node
 	x, y   int

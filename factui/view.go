@@ -410,14 +410,14 @@ func (m *Model) View() tea.View {
 	case reviewing, applying:
 		body = m.reviewModal(width, height)
 		targets = nil
-		if bounds := modalBounds(body); !bounds.Empty() {
-			targets = append(targets, mouseTarget{
-				bounds:    bounds,
-				wheelUp:   mouseAction{kind: mouseScrollContent, delta: -1},
-				wheelDown: mouseAction{kind: mouseScrollContent, delta: 1},
-			})
-		}
 		if m.mode == reviewing {
+			if bounds := modalBounds(body); !bounds.Empty() {
+				targets = append(targets, mouseTarget{
+					bounds:    bounds,
+					wheelUp:   mouseAction{kind: mouseScrollContent, delta: -1},
+					wheelDown: mouseAction{kind: mouseScrollContent, delta: 1},
+				})
+			}
 			labels := []string{"[ Apply ]", "[ Discard ]", "[ Return ]"}
 			if m.exitAfter {
 				labels = []string{"[ Apply-and-exit ]", "[ Discard-and-exit ]", "[ Return ]"}
@@ -443,7 +443,10 @@ func (m *Model) View() tea.View {
 	view := tea.NewView(screen.content)
 	view.AltScreen = true
 	view.MouseMode = tea.MouseModeCellMotion
-	view.OnMouse = screen.onMouse
+	// Bubble Tea invokes OnMouse synchronously in its event loop before it
+	// forwards the same event to Update. Apply model changes here so a following
+	// keypress cannot overtake selection; only returned I/O commands are async.
+	view.OnMouse = func(msg tea.MouseMsg) tea.Cmd { return m.handleMouseAction(screen.action(msg)) }
 	return view
 }
 
