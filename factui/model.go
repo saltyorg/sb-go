@@ -76,6 +76,7 @@ type Model struct {
 	drift                 *facts.Drift
 	exitAfter             bool
 	reviewCursor, scroll  int
+	contextMenu           *contextMenuState
 	err                   error
 	notice                string
 	outcome               string

@@ -38,6 +38,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = max(1, msg.Width)
 		m.height = max(1, msg.Height)
+		m.contextMenu = nil
 		m.search.SetWidth(max(1, m.width-6))
 		m.key.SetWidth(max(1, m.width-12))
 		m.value.SetWidth(max(1, m.width-12))
@@ -132,6 +133,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.exitAfter {
 			return m, tea.Quit
 		}
+	case mouseActionMsg:
+		return m, m.handleMouseAction(msg.action)
 	case tea.KeyPressMsg:
 		return m, m.handleKey(msg)
 	default:
@@ -157,6 +160,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
+	if m.contextMenu != nil && key != "ctrl+c" {
+		return m.contextMenuKey(key)
+	}
 	if m.mode == waiting {
 		if key == "esc" || key == "ctrl+c" || key == "q" {
 			m.lockCanceled = true
@@ -407,6 +413,7 @@ func (m *Model) releaseCommand() tea.Cmd {
 }
 
 func (m *Model) openReview(exit bool) tea.Cmd {
+	m.contextMenu = nil
 	// Drift owns a newly acquired lock until reload or cancellation. Resolve it
 	// before changing screens so it cannot silently become a usable baseline.
 	if m.mode == driftReview {
