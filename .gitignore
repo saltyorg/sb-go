@@ -35,3 +35,4 @@ CLAUDE.md
 coverage
 coverage.*
 .cache
+.worktrees/
