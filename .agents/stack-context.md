@@ -3,7 +3,7 @@
 Generated: 2026-09-04
 
 ## Stack
-- **Language**: Go 1.27.0 (module `github.com/saltyorg/sb-go`)
+- **Language**: Go 1.27.1 (module `github.com/saltyorg/sb-go`)
 - **Framework**: Cobra CLI with Fang; Bubble Tea/Bubbles/Lip Gloss terminal UI; no database layer
 - **Build**: GNU Make over the Go toolchain; `make build` is the authoritative local gate
 - **Test**: `make test` using Go `testing`, plus the action download shell test
