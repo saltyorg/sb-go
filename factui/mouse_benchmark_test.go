@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	benchmarkView tea.View
-	benchmarkCmd  tea.Cmd
+	benchmarkView   tea.View
+	benchmarkAction mouseAction
 )
 
 func BenchmarkMouseViewLargeCatalog(b *testing.B) {
@@ -21,10 +21,10 @@ func BenchmarkMouseViewLargeCatalog(b *testing.B) {
 }
 
 func BenchmarkMouseHitTestLargeCatalog(b *testing.B) {
-	view := benchmarkModel(b).View()
+	resolve := benchmarkMouseResolver(benchmarkModel(b))
 	event := tea.MouseClickMsg{X: 10, Y: 10, Button: tea.MouseLeft}
 	for b.Loop() {
-		benchmarkCmd = view.OnMouse(event)
+		benchmarkAction = resolve(event)
 	}
 }
 
