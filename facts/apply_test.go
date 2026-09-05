@@ -299,6 +299,42 @@ func TestApplyRejectsInvalidAndConflictingChanges(t *testing.T) {
 	}
 }
 
+func TestApplyBracketContainingKeys(t *testing.T) {
+	for _, tt := range []struct {
+		name, original, want string
+		kind                 ChangeKind
+	}{
+		{name: "update existing", original: "[default]\nheaders[Authorization] = old\n", want: "[default]\nheaders[Authorization] = new\n", kind: SetFact},
+		{name: "delete existing", original: "[default]\nheaders[Authorization] = old\n", want: "[default]\n", kind: DeleteFact},
+		{name: "add new", original: "[default]\n", want: "[default]\n\nheaders[Authorization] = new\n", kind: SetFact},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			path := fixture(t, root, "role", tt.original)
+			s, err := OpenSession(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = s.Close() }()
+			lockRole(t, s, "role")
+			change := Change{Kind: tt.kind, Role: "role", Instance: "default", Key: "headers[Authorization]"}
+			if tt.kind == SetFact {
+				change.Value = "new"
+			}
+			if _, err := s.Apply(t.Context(), []Change{change}); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != tt.want {
+				t.Fatalf("facts = %q, want %q", data, tt.want)
+			}
+		})
+	}
+}
+
 func TestApplyPreservesPythonLiteralValuesAndUntouchedBytes(t *testing.T) {
 	root := t.TempDir()
 	const original = "# header\n[DEFAULT]\nhidden = `literal`\n[default]\nquoted = \"quoted\"\nbacktick = `literal`\ntriple = \"\"\"literal\"\"\"\nslash = end\\\ncolon:key = literal # ; value\nmultiline = first\n\tsecond\nchange=old\n\n[empty]\n"

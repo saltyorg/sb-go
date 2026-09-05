@@ -265,14 +265,17 @@ func validateChanges(doc *document, changes []Change) error {
 				}
 				break
 			}
-			if err := validateKey(change.Key); err != nil {
-				return err
+			existing := doc.findSection(change.Instance).findKey(change.Key)
+			if change.Kind == SetFact && existing == nil {
+				if err := validateKey(change.Key); err != nil {
+					return err
+				}
 			}
 			if change.Kind == DeleteFact {
 				if change.Value != "" {
 					return fmt.Errorf("fact deletion cannot specify a value")
 				}
-				if doc.findSection(change.Instance).findKey(change.Key) == nil {
+				if existing == nil {
 					return fmt.Errorf("unknown key %q", change.Key)
 				}
 			} else if strings.ContainsAny(change.Value, "\r\x00") {
@@ -297,7 +300,7 @@ func validateChanges(doc *document, changes []Change) error {
 }
 
 func validateKey(key string) error {
-	if key == "" || strings.TrimSpace(key) != key || strings.IndexFunc(key, unicode.IsControl) >= 0 || strings.ContainsAny(key, "=[]") || strings.HasPrefix(key, "#") || strings.HasPrefix(key, ";") {
+	if key == "" || strings.TrimSpace(key) != key || strings.IndexFunc(key, unicode.IsControl) >= 0 || strings.Contains(key, "=") || strings.HasPrefix(key, "[") || strings.HasPrefix(key, "#") || strings.HasPrefix(key, ";") {
 		return fmt.Errorf("key name %q contains unsupported characters", key)
 	}
 	return nil
