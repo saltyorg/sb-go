@@ -1,0 +1,36 @@
+◆ Saltbox Facts TREE EDITOR 2 roles · 3 instances · 4 facts
+╭─────────────────────────────────────────────────────╮╭───────────────────────────────────────────────────────────────╮
+│ FACT TREE ││ INSPECTOR │
+│ ││ │
+│ ▾ arr (1 instances) ││ Role: plex │
+│ ▾ arr (1 facts) ││ Instance: main │
+│ • port ││ Key: token │
+│ ▾ plex (2 instances) ││ Status: unchanged │
+│ ▾ 4k (1 facts) ││ │
+│ • token ││ PLAINTEXT VALUE │
+│ ▾ main (2 facts) ││ plain-secret │
+│ • host ││ │
+│ • token ││ Enter or e to edit │
+│ ││ │
+│ ││ ───────────────────────────────────────────────────────────── │
+│ ││ PENDING CHANGES │
+│ ││ No staged changes │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+│ ││ │
+╰─────────────────────────────────────────────────────╯╰───────────────────────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+↑/↓ navigate → expand ← collapse/parent Enter/e edit a add sibling fact d toggle deletion
+clean Locks: 0
+/ search x expand all c collapse all [/] inspect s review changes q quit

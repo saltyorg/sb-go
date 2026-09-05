@@ -104,14 +104,14 @@ func TestFactEditorPTY(t *testing.T) {
 	t.Run("edit delete save return apply", func(t *testing.T) {
 		p := startFactPTY(t)
 		p.send("xjj", "plaintext-secret")
-		p.send("e", "Edit value")
-		p.send("\x01\x0bupdated-secret\r", "edited", "updated-secret")
+		p.send("e", "EDIT FACT VALUE")
+		p.send("\x01\x0bupdated-secret\r", "staged edit", "updated-secret")
 		p.send("jd", "staged deletion")
-		p.send("s", "Review Changes", "Before: plaintext-secret", "After:  updated-secret", "Delete fact plex / default / token")
+		p.send("s", "REVIEW 2 PENDING CHANGE(S)", "Before: plaintext-secret", "After:  updated-secret", "Delete fact plex / default / token")
 		p.unchanged()
-		p.send("r", "Saltbox facts")
-		p.send("s", "Review Changes")
-		p.send("a", "Saltbox facts")
+		p.send("r", "◆ Saltbox Facts")
+		p.send("s", "REVIEW 2 PENDING CHANGE(S)")
+		p.send("a", "◆ Saltbox Facts")
 		p.send("q")
 		p.finish()
 		data, err := os.ReadFile(p.path)
@@ -122,8 +122,8 @@ func TestFactEditorPTY(t *testing.T) {
 	t.Run("save discard keeps editor open", func(t *testing.T) {
 		p := startFactPTY(t)
 		p.send("d", "staged deletion")
-		p.send("s", "Review Changes", "Delete instance default", "Delete instance second")
-		p.send("d", "Saltbox facts")
+		p.send("s", "REVIEW 1 PENDING CHANGE(S)", "Delete instance default", "Delete instance second")
+		p.send("d", "◆ Saltbox Facts")
 		p.send("\x03")
 		p.finish()
 		p.unchanged()
@@ -131,7 +131,7 @@ func TestFactEditorPTY(t *testing.T) {
 	t.Run("ctrl-c reviews dirty exit and discards", func(t *testing.T) {
 		p := startFactPTY(t)
 		p.send("d", "staged deletion")
-		p.send("\x03", "Review Changes", "Discard-and-exit")
+		p.send("\x03", "REVIEW 1 PENDING CHANGE(S) BEFORE EXITING", "Discard-and-exit")
 		p.unchanged()
 		p.send("d")
 		p.finish()
@@ -140,7 +140,7 @@ func TestFactEditorPTY(t *testing.T) {
 	t.Run("q reviews dirty exit and applies", func(t *testing.T) {
 		p := startFactPTY(t)
 		p.send("d", "staged deletion")
-		p.send("q", "Review Changes", "Apply-and-exit")
+		p.send("q", "REVIEW 1 PENDING CHANGE(S) BEFORE EXITING", "Apply-and-exit")
 		p.unchanged()
 		p.send("a")
 		p.finish()
@@ -238,7 +238,7 @@ func startFactPTY(t *testing.T) *factPTY {
 			}
 		}
 	}()
-	p.wait(0, "Saltbox facts", "\x1b[?1049h")
+	p.wait(0, "◆ Saltbox Facts", "\x1b[?1049h")
 	raw, err := term.GetState(int(p.slave.Fd()))
 	if err != nil || reflect.DeepEqual(raw, p.state) {
 		t.Fatalf("terminal did not enter raw mode: %v", err)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/saltyorg/sb-go/facts"
 )
 
@@ -115,8 +116,16 @@ func editValue(t *testing.T, m *Model, role, instance, key, value string) {
 
 func TestTreeSearchAndInspector(t *testing.T) {
 	m, _ := fixture(t)
-	if got := m.rows(); len(got) != 2 || got[0].role != "arr" {
-		t.Fatalf("sorted collapsed roles: %+v", got)
+	wantInitial := []node{
+		{role: "arr"},
+		{role: "arr", instance: "arr"},
+		{role: "arr", instance: "arr", key: "port"},
+		{role: "plex"},
+		{role: "plex", instance: "4k"},
+		{role: "plex", instance: "main"},
+	}
+	if got := m.rows(); !reflect.DeepEqual(got, wantInitial) {
+		t.Fatalf("prototype-style initial expansion: %+v", got)
 	}
 	press(m, "right")
 	press(m, "down")
@@ -130,8 +139,8 @@ func TestTreeSearchAndInspector(t *testing.T) {
 		t.Fatalf("parent navigation: %+v", n)
 	}
 	selectNode(t, m, "plex", "main", "token")
-	v := m.inspector()
-	for _, want := range []string{"Role:     plex", "Instance: main", "Key:      token", "Status:   unchanged", "plain-secret"} {
+	v := ansi.Strip(m.inspector())
+	for _, want := range []string{"Role:      plex", "Instance:  main", "Key:       token", "Status:    unchanged", "plain-secret"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("inspector missing %q: %s", want, v)
 		}
@@ -537,7 +546,7 @@ func TestInspectorEscapesTerminalControlBytes(t *testing.T) {
 	m, _ := fixture(t)
 	m.catalog.Roles[0].Instances[0].Facts[0].Value = "plain\x1b[2Jsecret"
 	selectNode(t, m, "plex", "main", "token")
-	if value := m.inspector(); strings.Contains(value, "\x1b") || !strings.Contains(value, "plain\\u001b[2Jsecret") {
+	if value := ansi.Strip(m.inspector()); strings.Contains(value, "\x1b") || !strings.Contains(value, "plain\\u001b[2Jsecret") {
 		t.Fatalf("unsafe or masked value: %q", value)
 	}
 }

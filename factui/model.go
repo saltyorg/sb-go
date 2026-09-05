@@ -84,6 +84,18 @@ type Model struct {
 // New creates an editor; session ownership remains with the caller until Run.
 func New(ctx context.Context, session Session) *Model {
 	m := &Model{ctx: ctx, session: session, catalog: session.Catalog(), expanded: make(map[node]bool), edits: make(map[node]string), deleted: make(map[node]bool), locks: make(map[string]bool), width: 100, height: 30}
+	roles := slices.Clone(m.catalog.Roles)
+	slices.SortFunc(roles, func(a, b facts.Role) int { return strings.Compare(a.Name, b.Name) })
+	for _, role := range roles {
+		m.expanded[node{role: role.Name}] = true
+	}
+	if len(roles) > 0 {
+		instances := slices.Clone(roles[0].Instances)
+		slices.SortFunc(instances, func(a, b facts.Instance) int { return strings.Compare(a.Name, b.Name) })
+		for _, instance := range instances[:min(2, len(instances))] {
+			m.expanded[node{role: roles[0].Name, instance: instance.Name}] = true
+		}
+	}
 	m.search = textinput.New()
 	m.search.Prompt = "/ "
 	m.key = textinput.New()

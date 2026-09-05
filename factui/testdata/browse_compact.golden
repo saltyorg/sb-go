@@ -1,0 +1,24 @@
+◆ Saltbox Facts TREE EDITOR 2 roles · 3 instances · 4 facts
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ FACT TREE │
+│ │
+│ ▾ plex (2 instances) │
+│ ▾ 4k (1 facts) │
+│ • token │
+│ ▾ main (2 facts) │
+│ • host │
+│ • token │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ INSPECTOR │
+│ │
+│ Role: plex │
+│ Instance: main │
+│ Key: token │
+│ Status: unchanged │
+│ Value: plain-secret │
+╰──────────────────────────────────────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────────────────────────
+↑/↓ navigate → expand ← collapse/parent Enter/e edit a add sibling fa…
+clean Locks: 0
+/ search x expand c collapse [/] inspect s review changes q quit
