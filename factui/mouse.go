@@ -1,6 +1,12 @@
 package factui
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+)
 
 type mouseActionKind uint8
 
@@ -161,4 +167,34 @@ func (m *Model) runContextItem(index int) tea.Cmd {
 	action := items[index].action
 	m.contextMenu = nil
 	return m.handleMouseAction(action)
+}
+
+func (m *Model) contextMenuContent(maxWidth int) string {
+	if m.contextMenu == nil {
+		return ""
+	}
+	items := m.contextItems(m.contextMenu.node)
+	if len(items) == 0 {
+		return ""
+	}
+	const hint = "↑/↓ choose  Enter run  Esc close"
+	innerWidth := max(ansi.StringWidth("ACTIONS"), ansi.StringWidth(hint))
+	for _, item := range items {
+		innerWidth = max(innerWidth, ansi.StringWidth(item.label)+2)
+	}
+	menuWidth := min(max(4, maxWidth), innerWidth+4)
+	innerWidth = max(1, menuWidth-4)
+	lines := []string{accentStyle.Render("ACTIONS"), ""}
+	for index, item := range items {
+		line := ansi.Truncate("  "+item.label, innerWidth, "…")
+		switch {
+		case index == m.contextMenu.cursor:
+			line = selectedStyle.Width(innerWidth).Render(line)
+		case item.dangerous:
+			line = dangerStyle.Render(line)
+		}
+		lines = append(lines, line)
+	}
+	lines = append(lines, "", mutedStyle.Render(ansi.Truncate(hint, innerWidth, "…")))
+	return lipgloss.NewStyle().Width(menuWidth).Padding(0, 1).Border(border).BorderForeground(accent2).Render(strings.Join(lines, "\n"))
 }

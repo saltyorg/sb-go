@@ -3,9 +3,12 @@ package factui
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/saltyorg/sb-go/facts"
 )
 
@@ -102,6 +105,26 @@ func TestContextMenuDoesNotBlockGlobalInterruptReview(t *testing.T) {
 	press(m, "ctrl+c")
 	if m.mode != reviewing || m.contextMenu != nil || !m.exitAfter {
 		t.Fatalf("Ctrl+C did not replace context menu with exit review: mode=%v menu=%+v exit=%v", m.mode, m.contextMenu, m.exitAfter)
+	}
+}
+
+func TestContextMenuContentUsesApprovedVisualLanguage(t *testing.T) {
+	m, _ := fixture(t)
+	fact := node{role: "plex", instance: "main", key: "token"}
+	m.handleMouseAction(mouseAction{kind: mouseOpenContext, node: fact})
+
+	menu := m.contextMenuContent(78)
+	plain := ansi.Strip(menu)
+	for _, want := range []string{"ACTIONS", "Edit value", "Add sibling fact", "Stage fact deletion", "↑/↓ choose  Enter run  Esc close", "╭", "╰"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("context menu missing %q", want)
+		}
+	}
+	if !strings.Contains(menu, "48;2;125;211;252") {
+		t.Error("selected context action does not use the approved cyan fill")
+	}
+	if width := lipgloss.Width(menu); width > 78 {
+		t.Fatalf("context menu width = %d, want at most 78", width)
 	}
 }
 
