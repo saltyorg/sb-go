@@ -52,6 +52,7 @@ func parseDocument(data []byte) (*document, error) {
 			continue
 		}
 		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+			previous = nil
 			continue
 		}
 		indent := len(raw) - len(strings.TrimLeftFunc(raw, unicode.IsSpace))

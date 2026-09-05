@@ -249,9 +249,12 @@ func TestApplyAdjacentInsertionAndDeletionIsIndependentOfChangeOrder(t *testing.
 	}
 }
 
-func TestEditingMultilineFactPreservesInterveningComment(t *testing.T) {
+func TestEditingMultilineFactPreservesFollowingComment(t *testing.T) {
 	root := t.TempDir()
-	name := fixture(t, root, "role", "[default]\nk = first\n# preserve me\n\tsecond\n")
+	name := fixture(t, root, "role", "[default]\nk = first\n\tsecond\n# preserve me\n")
+	if got := readSaltboxPythonFacts(t, name)["default"]["k"]; got != "first\nsecond" {
+		t.Fatalf("Python multiline value = %q", got)
+	}
 	s, err := OpenSession(root)
 	if err != nil {
 		t.Fatal(err)
@@ -366,10 +369,6 @@ func TestApplyPreservesPythonLiteralValuesAndUntouchedBytes(t *testing.T) {
 }
 
 func TestApplyMatchesSaltboxPythonReader(t *testing.T) {
-	python, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("Python consumer check requires python3")
-	}
 	root := t.TempDir()
 	name := fixture(t, root, "role", "# preserved\n[DEFAULT]\nhidden = `literal`\n[default]\nquoted = \"quoted\"\nbacktick = `literal`\ncolon:key = literal # ; value\nchange = old\n[empty]\n")
 	s, err := OpenSession(root)
@@ -381,6 +380,23 @@ func TestApplyMatchesSaltboxPythonReader(t *testing.T) {
 	changes := []Change{{Kind: SetFact, Role: "role", Instance: "default", Key: "change", Value: "first\nsecond"}, {Kind: SetFact, Role: "role", Instance: "empty", Key: "new", Value: "None"}}
 	if _, err := s.Apply(t.Context(), changes); err != nil {
 		t.Fatal(err)
+	}
+	got := readSaltboxPythonFacts(t, name)
+	for key, want := range map[string]string{"quoted": "\"quoted\"", "backtick": "`literal`", "colon:key": "literal # ; value", "change": "first\nsecond", "hidden": "`literal`"} {
+		if got["default"][key] != want {
+			t.Errorf("Python %s = %q, want %q", key, got["default"][key], want)
+		}
+	}
+	if got["empty"]["new"] != "None" {
+		t.Fatalf("new value = %q", got["empty"]["new"])
+	}
+}
+
+func readSaltboxPythonFacts(t *testing.T, name string) map[string]map[string]string {
+	t.Helper()
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("Python consumer check requires python3")
 	}
 	script := `import configparser, json, sys
 c = configparser.ConfigParser(interpolation=None, comment_prefixes=('#',), inline_comment_prefixes=None, default_section='DEFAULT', delimiters=('=',), empty_lines_in_values=False)
@@ -396,13 +412,54 @@ print(json.dumps({s: dict(c[s]) for s in c.sections()}))
 	if err := json.Unmarshal(output, &got); err != nil {
 		t.Fatal(err)
 	}
-	for key, want := range map[string]string{"quoted": "\"quoted\"", "backtick": "`literal`", "colon:key": "literal # ; value", "change": "first\nsecond", "hidden": "`literal`"} {
-		if got["default"][key] != want {
-			t.Errorf("Python %s = %q, want %q", key, got["default"][key], want)
-		}
-	}
-	if got["empty"]["new"] != "None" {
-		t.Fatalf("new value = %q", got["empty"]["new"])
+	return got
+}
+
+func TestCommentEndsContinuationMatchesPython(t *testing.T) {
+	for _, action := range []string{"catalog", "edit", "delete"} {
+		t.Run(action, func(t *testing.T) {
+			root := t.TempDir()
+			name := fixture(t, root, "role", "[default]\nk = first\n# comment\n    second = independent\n")
+			before := readSaltboxPythonFacts(t, name)["default"]
+			if len(before) != 2 || before["k"] != "first" || before["second"] != "independent" {
+				t.Fatalf("Python fixture facts = %v", before)
+			}
+			s, err := OpenSession(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = s.Close() }()
+			if action == "catalog" {
+				got := s.Catalog().Roles[0].Instances[0].Facts
+				if len(got) != 2 || got[0] != (Fact{Key: "k", Value: before["k"]}) || got[1] != (Fact{Key: "second", Value: before["second"]}) {
+					t.Fatalf("catalog facts = %+v, Python facts = %v", got, before)
+				}
+				return
+			}
+			lockRole(t, s, "role")
+			change := Change{Kind: SetFact, Role: "role", Instance: "default", Key: "k", Value: "new"}
+			if action == "delete" {
+				change.Kind = DeleteFact
+				change.Value = ""
+			}
+			if _, err := s.Apply(t.Context(), []Change{change}); err != nil {
+				t.Fatal(err)
+			}
+			after := readSaltboxPythonFacts(t, name)["default"]
+			if after["second"] != "independent" {
+				t.Fatalf("unrelated second fact lost: Python facts = %v", after)
+			}
+			if value, exists := after["k"]; action == "delete" && exists || action == "edit" && value != "new" {
+				t.Fatalf("%s k: Python facts = %v", action, after)
+			}
+			data, err := os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(data), "# comment\n    second = independent\n") {
+				t.Fatalf("unrelated bytes changed: %q", data)
+			}
+		})
 	}
 }
 
