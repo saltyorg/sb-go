@@ -36,6 +36,37 @@ func TestBrowseViewGoldenLayouts(t *testing.T) {
 	}
 }
 
+func TestContextMenuGoldenLayouts(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		width, height int
+	}{
+		{name: "desktop", width: 120, height: 36},
+		{name: "compact", width: 80, height: 24},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			m, _ := fixture(t)
+			m.Update(tea.WindowSizeMsg{Width: test.width, Height: test.height})
+			press(m, "x")
+			m.handleMouseAction(mouseAction{
+				kind: mouseOpenContext,
+				node: node{role: "plex", instance: "main", key: "token"},
+				x:    12,
+				y:    8,
+			})
+			got := normalizeView(m.View().Content)
+			golden, err := os.ReadFile(filepath.Join("testdata", "context_"+test.name+".golden"))
+			if err != nil {
+				t.Fatalf("%v\n--- got\n%s", err, got)
+			}
+			want := strings.TrimSpace(string(golden))
+			if got != want {
+				t.Fatalf("context layout mismatch\n--- want\n%s\n--- got\n%s", want, got)
+			}
+		})
+	}
+}
+
 func normalizeView(view string) string {
 	lines := strings.Split(ansi.Strip(view), "\n")
 	for index := range lines {

@@ -52,4 +52,9 @@ func TestFactEditorHelp(t *testing.T) {
 			t.Errorf("help contains legacy syntax %q", legacy)
 		}
 	}
+	for _, mouseHelp := range []string{"right-click", "wheel", "Shift"} {
+		if !strings.Contains(output.String(), mouseHelp) {
+			t.Errorf("help does not explain mouse behavior %q", mouseHelp)
+		}
+	}
 }

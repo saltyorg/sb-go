@@ -2,6 +2,7 @@ package factui
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"slices"
 	"strings"
@@ -48,25 +49,21 @@ func display(s string) string {
 }
 
 func (m *Model) treeView(width, height int) string {
-	rows := m.rows()
-	if len(rows) == 0 {
+	window := m.treeWindow(width, height)
+	if len(window.rows) == 0 {
 		return mutedStyle.Render("No facts match this search.")
 	}
-	m.selected()
-	reserved := 0
 	var prefix string
-	if m.mode == searching || m.filter != "" {
+	if window.prefixHeight > 0 {
 		search := m.search.View()
 		if m.mode != searching {
 			search = mutedStyle.Render("Search  " + display(m.filter))
 		}
-		prefix = search + "\n" + mutedStyle.Render(fmt.Sprintf("%d visible nodes", len(rows))) + "\n\n"
-		reserved = 3
+		prefix = search + "\n" + mutedStyle.Render(fmt.Sprintf("%d visible nodes", len(window.rows))) + "\n\n"
 	}
-	start, end := visibleWindow(m.cursor, len(rows), height-reserved)
-	lines := make([]string, 0, end-start)
-	for index := start; index < end; index++ {
-		n := rows[index]
+	lines := make([]string, 0, window.end-window.start)
+	for index := window.start; index < window.end; index++ {
+		n := window.rows[index]
 		line := ansi.Truncate(m.treeEntryLabel(n), max(1, width), "…")
 		if index == m.cursor {
 			line = selectedStyle.Width(max(1, width)).Render(line)
@@ -390,43 +387,80 @@ func window(content string, width, height, offset int) string {
 func (m *Model) View() tea.View {
 	width, height := max(1, m.width), max(1, m.height)
 	body := m.mainView(width, height)
+	geometry := calculateMainGeometry(width, height)
+	targets := m.mainMouseTargets(geometry)
 	switch m.mode {
 	case adding, editing:
 		body = m.formModal(width, height)
+		targets = nil
 	case waiting:
 		body = m.messageModal(width, height, "WAITING FOR ROLE LOCK", "", fmt.Sprintf("Waiting for %s.ini.lock…\nLock acquisition times out after 30 seconds.", display(m.target.role)), "Esc cancels the attempted change", accent)
+		targets = nil
 	case driftReview:
 		content := ""
 		if m.drift != nil {
 			content = driftText(m.drift)
 		}
 		body = m.messageModal(width, height, "ROLE CHANGED ON DISK", m.locksText(), content, "r reload and retry manually   Esc cancel   ↑/↓ scroll", warning)
+		targets = []mouseTarget{{
+			bounds:    modalBounds(body),
+			wheelUp:   mouseAction{kind: mouseScrollContent, delta: -1},
+			wheelDown: mouseAction{kind: mouseScrollContent, delta: 1},
+		}}
 	case reviewing, applying:
 		body = m.reviewModal(width, height)
+		targets = nil
+		if bounds := modalBounds(body); !bounds.Empty() {
+			targets = append(targets, mouseTarget{
+				bounds:    bounds,
+				wheelUp:   mouseAction{kind: mouseScrollContent, delta: -1},
+				wheelDown: mouseAction{kind: mouseScrollContent, delta: 1},
+			})
+		}
+		if m.mode == reviewing {
+			labels := []string{"[ Apply ]", "[ Discard ]", "[ Return ]"}
+			if m.exitAfter {
+				labels = []string{"[ Apply-and-exit ]", "[ Discard-and-exit ]", "[ Return ]"}
+			}
+			for index, label := range labels {
+				if bounds, found := textBounds(body, label); found {
+					targets = append(targets, mouseTarget{bounds: bounds, left: mouseAction{kind: mouseReviewChoice, choice: index}})
+				}
+			}
+		}
 	case reloading:
 		body = m.messageModal(width, height, "UPDATING ROLE LOCK", "", "Refreshing the protected role state…", "Please wait", accent)
+		targets = nil
 	}
-	view := tea.NewView(window(body, width, height, 0))
+	body = window(body, width, height, 0)
+	menuBounds := image.Rectangle{}
+	if m.mode == browsing && m.contextMenu != nil {
+		var menuTargets []mouseTarget
+		body, menuTargets, menuBounds = m.contextMenuOverlay(body, width, height)
+		targets = append(targets, menuTargets...)
+	}
+	screen := mouseScreen{content: body, targets: targets, menuBounds: menuBounds}
+	view := tea.NewView(screen.content)
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
+	view.OnMouse = screen.onMouse
 	return view
 }
 
 func (m *Model) mainView(width, height int) string {
 	header := m.header(width)
 	footer := m.footer(width)
-	bodyHeight := max(1, height-lipgloss.Height(header)-lipgloss.Height(footer))
+	geometry := calculateMainGeometry(width, height)
 
 	var body string
 	if width >= 96 {
-		treeWidth := min(56, max(40, width/2-5))
-		inspectorWidth := width - treeWidth
+		treeWidth, inspectorWidth := geometry.tree.Dx(), geometry.inspector.Dx()
+		bodyHeight := geometry.tree.Dy()
 		tree := pane("FACT TREE", m.treeView(max(1, treeWidth-4), max(1, bodyHeight-4)), treeWidth, bodyHeight, accent, 0)
 		inspector := pane("INSPECTOR", m.inspectorView(max(1, inspectorWidth-4), max(1, bodyHeight-4), false), inspectorWidth, bodyHeight, accent2, m.scroll)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, tree, inspector)
 	} else {
-		treeHeight := max(8, (bodyHeight+1)/2)
-		treeHeight = min(treeHeight, bodyHeight)
-		inspectorHeight := max(0, bodyHeight-treeHeight)
+		treeHeight, inspectorHeight := geometry.tree.Dy(), geometry.inspector.Dy()
 		tree := pane("FACT TREE", m.treeView(max(1, width-4), max(1, treeHeight-4)), width, treeHeight, accent, 0)
 		if inspectorHeight >= 4 {
 			inspector := pane("INSPECTOR", m.inspectorView(max(1, width-4), max(1, inspectorHeight-4), true), width, inspectorHeight, accent2, m.scroll)
@@ -478,7 +512,9 @@ func (m *Model) footer(width int) string {
 		message = dangerStyle.Render("Error: " + display(m.err.Error()))
 	}
 	status := state + "  " + mutedStyle.Render(m.locksText())
-	if message != "" {
+	if message == "" {
+		status += "  " + mutedStyle.Render("Mouse: click select  ·  wheel navigate  ·  right-click actions")
+	} else {
 		status += "  " + message
 	}
 	innerWidth := max(1, width-2)

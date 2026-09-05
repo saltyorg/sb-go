@@ -6,15 +6,15 @@
 │ ▾ arr (1 facts) ││ Instance: main │
 │ • port ││ Key: token │
 │ ▾ plex (2 instances) ││ Status: unchanged │
-│ ▾ 4k (1 facts) ││ │
-│ • token ││ PLAINTEXT VALUE │
-│ ▾ main (2 facts) ││ plain-secret │
-│ • host ││ │
-│ • token ││ Enter or e to edit │
-│ ││ │
-│ ││ ───────────────────────────────────────────────────────────── │
-│ ││ PENDING CHANGES │
-│ ││ No staged changes │
+│ ▾ 4k (1 ╭──────────────────────────────────╮ ││ │
+│ • tok│ ACTIONS │ ││ PLAINTEXT VALUE │
+│ ▾ main (│ │ ││ plain-secret │
+│ • hos│ Edit value │ ││ │
+│ • tok│ Add sibling fact │ ││ Enter or e to edit │
+│ │ Stage fact deletion │ ││ │
+│ │ │ ││ ───────────────────────────────────────────────────────────── │
+│ │ ↑/↓ choose Enter run Esc close │ ││ PENDING CHANGES │
+│ ╰──────────────────────────────────╯ ││ No staged changes │
 │ ││ │
 │ ││ │
 │ ││ │

@@ -157,6 +157,16 @@ func TestFactEditorPTY(t *testing.T) {
 		p.finish()
 		p.unchanged()
 	})
+	t.Run("mouse context deletion can be discarded", func(t *testing.T) {
+		p := startFactPTY(t)
+		p.send("\x1b[<2;11;8M", "ACTIONS", "Stage fact deletion")
+		p.send("\x1b[<0;16;13M", "staged deletion")
+		p.send("s", "REVIEW 1 PENDING CHANGE(S)", "Delete fact plex / default / token")
+		p.send("d", "◆ Saltbox Facts")
+		p.send("q")
+		p.finish()
+		p.unchanged()
+	})
 }
 
 func TestFactEditorPTYHelper(t *testing.T) {
@@ -238,7 +248,7 @@ func startFactPTY(t *testing.T) *factPTY {
 			}
 		}
 	}()
-	p.wait(0, "◆ Saltbox Facts", "\x1b[?1049h")
+	p.wait(0, "◆ Saltbox Facts", "\x1b[?1049h", "\x1b[?1002h", "\x1b[?1006h")
 	raw, err := term.GetState(int(p.slave.Fd()))
 	if err != nil || reflect.DeepEqual(raw, p.state) {
 		t.Fatalf("terminal did not enter raw mode: %v", err)
@@ -283,7 +293,7 @@ func (p *factPTY) wait(start int, want ...string) {
 
 func (p *factPTY) finish() {
 	p.t.Helper()
-	p.wait(0, "\x1b[?1049l", "\x1b[?25h")
+	p.wait(0, "\x1b[?1049l", "\x1b[?25h", "\x1b[?1002l", "\x1b[?1006l")
 	select {
 	case err := <-p.done:
 		if err != nil {

@@ -25,8 +25,10 @@ func newFactEditorCommand(
 	return &cobra.Command{
 		Use:   "fact",
 		Short: "Manage Saltbox configuration facts",
-		Long:  "Interactively browse and edit existing Saltbox configuration facts.\nChanges are staged for review before applying. Requires an interactive terminal.",
-		Args:  cobra.NoArgs,
+		Long: "Interactively browse and edit existing Saltbox configuration facts.\n" +
+			"Changes are staged for review before applying. Requires an interactive terminal.\n" +
+			"Mouse: click to select, use the wheel to navigate, and right-click for actions. Hold Shift while dragging for native terminal text selection.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			input, output := cmd.InOrStdin(), cmd.OutOrStdout()
 			if !factTerminal(input) || !factTerminal(output) {
