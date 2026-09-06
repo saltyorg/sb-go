@@ -14,7 +14,7 @@ require (
 	github.com/autobrr/go-qbittorrent v1.18.0
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.8
-	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260902165432-6f6ad8b37b0a
+	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260906004030-3986e9119cf9
 	github.com/cloudflare/cloudflare-go/v7 v7.10.0
 	github.com/creack/pty v1.1.24
 	github.com/mattn/go-isatty v0.0.24
