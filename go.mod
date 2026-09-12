@@ -32,7 +32,6 @@ require (
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	golift.io/starr v1.3.1
-	gopkg.in/ini.v1 v1.67.3
 )
 
 require (
