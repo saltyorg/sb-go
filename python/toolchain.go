@@ -3,6 +3,7 @@ package python
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,7 +20,11 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	return LoadFiles(layout.SaltboxPythonVersionPath, layout.SaltboxUVVersionPath)
+	return loadFromRoot(layout.SaltboxRepoPath)
+}
+
+func loadFromRoot(root string) (Config, error) {
+	return LoadFiles(filepath.Join(root, ".python-version"), filepath.Join(root, ".uv-version"))
 }
 
 func LoadFiles(pythonPath, uvPath string) (Config, error) {

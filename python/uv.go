@@ -41,12 +41,16 @@ func EnsureVersion(ctx context.Context, version, destPath string, verbose bool) 
 }
 
 func ensureVersionWithProxy(ctx context.Context, version, uvPath, uvxPath string, verbose bool, proxyBaseURL, metadataURL string, client *http.Client) error {
+	return ensureVersionWithProxyAndRuntime(ctx, defaultManagedRuntime(), version, uvPath, uvxPath, verbose, proxyBaseURL, metadataURL, client)
+}
+
+func ensureVersionWithProxyAndRuntime(ctx context.Context, runtime *managedRuntime, version, uvPath, uvxPath string, verbose bool, proxyBaseURL, metadataURL string, client *http.Client) error {
 	if !exactUVVersionPattern.MatchString(version) {
 		return fmt.Errorf("uv version must be an exact release, got %q", version)
 	}
 
-	installedUV, uvErr := binaryVersion(ctx, uvPath, "uv")
-	installedUVX, uvxErr := binaryVersion(ctx, uvxPath, "uvx")
+	installedUV, uvErr := binaryVersionWithRuntime(ctx, runtime, uvPath, "uv")
+	installedUVX, uvxErr := binaryVersionWithRuntime(ctx, runtime, uvxPath, "uvx")
 	if uvErr == nil && uvxErr == nil && installedUV == version && installedUVX == version {
 		if verbose {
 			fmt.Printf("uv and uvx %s are already installed at %s and %s\n", version, uvPath, uvxPath)
@@ -71,6 +75,11 @@ func ensureVersionWithProxy(ctx context.Context, version, uvPath, uvxPath string
 			fmt.Printf("Replacing unusable %s at %s: %v\n", check.name, check.path, check.err)
 		}
 	}
+	scratchDir, err := runtime.newScratch()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(scratchDir) }()
 
 	asset, err := fetchUVAssetWithFallback(ctx, client, proxyBaseURL, metadataURL)
 	if err != nil {
@@ -79,7 +88,7 @@ func ensureVersionWithProxy(ctx context.Context, version, uvPath, uvxPath string
 	if verbose {
 		fmt.Println("Downloading uv from", asset.URL)
 	}
-	tarballPath, err := assetrelease.DownloadVerified(ctx, client, asset, 128<<20, os.TempDir(), "uv-*.tar.gz")
+	tarballPath, err := assetrelease.DownloadVerified(ctx, client, asset, 128<<20, scratchDir, "uv-*.tar.gz")
 	if err != nil {
 		return fmt.Errorf("error downloading uv: %w", err)
 	}
@@ -115,7 +124,7 @@ func ensureVersionWithProxy(ctx context.Context, version, uvPath, uvxPath string
 		if err := os.Chmod(executables[index].staged, 0755); err != nil {
 			return fmt.Errorf("error setting %s permissions: %w", executables[index].name, err)
 		}
-		stagedVersion, err := binaryVersion(ctx, executables[index].staged, executables[index].name)
+		stagedVersion, err := binaryVersionWithRuntime(ctx, runtime, executables[index].staged, executables[index].name)
 		if err != nil {
 			return fmt.Errorf("error verifying staged %s: %w", executables[index].name, err)
 		}
@@ -206,10 +215,11 @@ func fetchUVAssetWithFallback(ctx context.Context, client *http.Client, proxyBas
 }
 
 func binaryVersion(ctx context.Context, path, name string) (string, error) {
-	if _, err := os.Stat(path); err != nil {
-		return "", err
-	}
-	result, err := executor.Run(ctx, path, executor.WithArgs("--version"))
+	return binaryVersionWithRuntime(ctx, defaultManagedRuntime(), path, name)
+}
+
+func binaryVersionWithRuntime(ctx context.Context, runtime *managedRuntime, path, name string) (string, error) {
+	result, err := runtime.run(ctx, managedCommand{path: path, args: []string{"--version"}, kind: managedUV})
 	if err != nil {
 		return "", err
 	}
@@ -279,8 +289,14 @@ func extractUVBinary(tarballPath, destPath, name string, verbose bool) error {
 }
 
 func InstallPythonAt(ctx context.Context, version, installDir string, reinstall, noCache, verbose bool) error {
+	return installPythonAtWithRuntime(ctx, defaultManagedRuntime(), version, installDir, reinstall, noCache, verbose)
+}
+
+func installPythonAtWithRuntime(ctx context.Context, runtime *managedRuntime, version, installDir string, reinstall, noCache, verbose bool) error {
 	args := installPythonArgs(version, installDir, reinstall, noCache)
-	if err := executor.RunVerbose(ctx, UVBinaryPath, args, verbose); err != nil {
+	if err := runtime.runVerbose(ctx, managedCommand{
+		path: runtime.uvPath, args: args, kind: managedUV, pathArgs: []int{5},
+	}, verbose); err != nil {
 		return fmt.Errorf("error installing Python %s: %w", version, err)
 	}
 	return nil
@@ -298,22 +314,41 @@ func installPythonArgs(version, installDir string, reinstall, noCache bool) []st
 }
 
 func FindPythonAt(ctx context.Context, version, installDir string) (string, error) {
-	result, err := executor.Run(ctx, UVBinaryPath,
-		executor.WithArgs("python", "find", "--managed-python", "--no-project", "--no-python-downloads", version),
-		executor.WithInheritEnv("UV_PYTHON_INSTALL_DIR="+installDir),
-	)
+	return findPythonAtWithRuntime(ctx, defaultManagedRuntime(), version, installDir)
+}
+
+func findPythonAtWithRuntime(ctx context.Context, runtime *managedRuntime, version, installDir string) (string, error) {
+	result, err := runtime.run(ctx, managedCommand{
+		path:    runtime.uvPath,
+		args:    []string{"python", "find", "--managed-python", "--no-project", "--no-python-downloads", version},
+		kind:    managedUV,
+		pathEnv: map[string]string{"UV_PYTHON_INSTALL_DIR": installDir},
+	})
 	if err != nil {
 		return "", fmt.Errorf("error finding Python %s: %w", version, err)
 	}
-	return strings.TrimSpace(string(result.Combined)), nil
+	pythonPath := strings.TrimSpace(string(result.Combined))
+	if !filepath.IsAbs(pythonPath) {
+		return "", fmt.Errorf("uv returned non-absolute path %q for Python %s", pythonPath, version)
+	}
+	return filepath.Clean(pythonPath), nil
 }
 
 func CreateVenvWithPython(ctx context.Context, venvPath, pythonPath string, verbose bool) error {
+	return createVenvWithPythonRuntime(ctx, defaultManagedRuntime(), venvPath, pythonPath, verbose)
+}
+
+func createVenvWithPythonRuntime(ctx context.Context, runtime *managedRuntime, venvPath, pythonPath string, verbose bool) error {
+	if venvPath == "" {
+		return fmt.Errorf("venv path is empty")
+	}
 	if err := os.MkdirAll(filepath.Dir(venvPath), 0755); err != nil {
 		return fmt.Errorf("error creating venv parent: %w", err)
 	}
 	args := []string{"venv", "--python", pythonPath, "--no-project", "--no-python-downloads", venvPath}
-	if err := executor.RunVerbose(ctx, UVBinaryPath, args, verbose); err != nil {
+	if err := runtime.runVerbose(ctx, managedCommand{
+		path: runtime.uvPath, args: args, kind: managedUV, pathArgs: []int{2, 5},
+	}, verbose); err != nil {
 		return fmt.Errorf("error creating venv: %w", err)
 	}
 	return nil
@@ -327,19 +362,27 @@ type SyncRequirementsOptions struct {
 }
 
 func SyncRequirements(ctx context.Context, pythonPath, requirementsPath string, settings SyncRequirementsOptions) error {
-	executorOptions := syncRequirementsOptions(pythonPath, requirementsPath, settings)
-	if _, err := executor.Run(ctx, UVBinaryPath, executorOptions...); err != nil {
+	return syncRequirementsWithRuntime(ctx, defaultManagedRuntime(), pythonPath, requirementsPath, settings)
+}
+
+func syncRequirementsWithRuntime(ctx context.Context, runtime *managedRuntime, pythonPath, requirementsPath string, settings SyncRequirementsOptions) error {
+	args := syncRequirementsArgs(pythonPath, requirementsPath, settings.NoCache)
+	command := managedCommand{
+		path: runtime.uvPath, args: args, kind: managedUV, pathArgs: []int{4, len(args) - 1},
+		stdout: settings.Stdout, stderr: settings.Stderr,
+	}
+	if settings.Stdout != nil || (settings.Verbose && settings.Stdout == nil) {
+		command.outputMode = executor.OutputModeStream
+		command.outputModeSet = true
+	}
+	if _, err := runtime.run(ctx, command); err != nil {
 		return fmt.Errorf("error syncing requirements: %w", err)
 	}
 	return nil
 }
 
 func syncRequirementsOptions(pythonPath, requirementsPath string, settings SyncRequirementsOptions) []executor.Option {
-	args := []string{"pip", "sync", "--no-progress", "--python", pythonPath, "--require-hashes"}
-	if settings.NoCache {
-		args = append(args, "--no-cache")
-	}
-	args = append(args, requirementsPath)
+	args := syncRequirementsArgs(pythonPath, requirementsPath, settings.NoCache)
 	executorOptions := []executor.Option{
 		executor.WithArgs(args...),
 	}
@@ -355,8 +398,22 @@ func syncRequirementsOptions(pythonPath, requirementsPath string, settings SyncR
 	return executorOptions
 }
 
+func syncRequirementsArgs(pythonPath, requirementsPath string, noCache bool) []string {
+	args := []string{"pip", "sync", "--no-progress", "--python", pythonPath, "--require-hashes"}
+	if noCache {
+		args = append(args, "--no-cache")
+	}
+	return append(args, requirementsPath)
+}
+
 func CheckPackages(ctx context.Context, pythonPath string) error {
-	_, err := executor.Run(ctx, UVBinaryPath, executor.WithArgs("pip", "check", "--python", pythonPath))
+	return checkPackagesWithRuntime(ctx, defaultManagedRuntime(), pythonPath)
+}
+
+func checkPackagesWithRuntime(ctx context.Context, runtime *managedRuntime, pythonPath string) error {
+	_, err := runtime.run(ctx, managedCommand{
+		path: runtime.uvPath, args: []string{"pip", "check", "--python", pythonPath}, kind: managedUV, pathArgs: []int{3},
+	})
 	if err != nil {
 		return fmt.Errorf("installed Python packages are incompatible: %w", err)
 	}
@@ -381,9 +438,16 @@ func CreateVenv(ctx context.Context, venvPath, pythonVersion string, verbose boo
 }
 
 func ListInstalledPythons(ctx context.Context) ([]string, error) {
-	result, err := executor.Run(ctx, UVBinaryPath,
-		executor.WithArgs("python", "list", "--only-installed", "--install-dir", layout.PythonInstallDir),
-	)
+	return listInstalledPythonsWithRuntime(ctx, defaultManagedRuntime(), layout.PythonInstallDir)
+}
+
+func listInstalledPythonsWithRuntime(ctx context.Context, runtime *managedRuntime, installDir string) ([]string, error) {
+	result, err := runtime.run(ctx, managedCommand{
+		path:    runtime.uvPath,
+		args:    []string{"python", "list", "--only-installed"},
+		kind:    managedUV,
+		pathEnv: map[string]string{"UV_PYTHON_INSTALL_DIR": installDir},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error listing installed Pythons: %w", err)
 	}
@@ -392,6 +456,13 @@ func ListInstalledPythons(ctx context.Context) ([]string, error) {
 }
 
 func UninstallPython(ctx context.Context, version string, verbose bool) error {
-	return executor.RunVerbose(ctx, UVBinaryPath,
-		[]string{"python", "uninstall", "--install-dir", layout.PythonInstallDir, version}, verbose)
+	return uninstallPythonWithRuntime(ctx, defaultManagedRuntime(), version, layout.PythonInstallDir, verbose)
+}
+
+func uninstallPythonWithRuntime(ctx context.Context, runtime *managedRuntime, version, installDir string, verbose bool) error {
+	return runtime.runVerbose(ctx, managedCommand{
+		path: runtime.uvPath,
+		args: []string{"python", "uninstall", "--install-dir", installDir, version},
+		kind: managedUV, pathArgs: []int{3},
+	}, verbose)
 }

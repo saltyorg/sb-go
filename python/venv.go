@@ -317,17 +317,21 @@ func inspectActive(ctx context.Context, pythonVersion, lockDigest string) (activ
 }
 
 func validatePython(ctx context.Context, path, version string) error {
+	return validatePythonWithRuntime(ctx, defaultManagedRuntime(), path, version)
+}
+
+func validatePythonWithRuntime(ctx context.Context, runtime *managedRuntime, path, version string) error {
 	if path == "" {
 		return fmt.Errorf("python path is empty")
 	}
-	result, err := executor.Run(ctx, path, executor.WithArgs("--version"))
+	result, err := runtime.run(ctx, managedCommand{path: path, args: []string{"--version"}, kind: managedPython})
 	if err != nil {
 		return fmt.Errorf("run Python at %s: %w", path, err)
 	}
 	if got := strings.TrimSpace(string(result.Combined)); got != "Python "+version {
 		return fmt.Errorf("python at %s reports %q, expected %q", path, got, "Python "+version)
 	}
-	_, err = executor.Run(ctx, path, executor.WithArgs("-c", "import encodings, sys; sys.exit(0)"))
+	_, err = runtime.run(ctx, managedCommand{path: path, args: []string{"-c", "import encodings, sys; sys.exit(0)"}, kind: managedPython})
 	if err != nil {
 		return fmt.Errorf("python at %s cannot import its standard library: %w", path, err)
 	}
@@ -335,37 +339,41 @@ func validatePython(ctx context.Context, path, version string) error {
 }
 
 func validateEnvironment(ctx context.Context, venvPath, version string) error {
+	return validateEnvironmentWithRuntime(ctx, defaultManagedRuntime(), venvPath, version)
+}
+
+func validateEnvironmentWithRuntime(ctx context.Context, runtime *managedRuntime, venvPath, version string) error {
 	pythonPath := filepath.Join(venvPath, "bin", "python3")
-	if err := validatePython(ctx, pythonPath, version); err != nil {
+	if err := validatePythonWithRuntime(ctx, runtime, pythonPath, version); err != nil {
 		return err
 	}
-	if err := CheckPackages(ctx, pythonPath); err != nil {
+	if err := checkPackagesWithRuntime(ctx, runtime, pythonPath); err != nil {
 		return err
 	}
-	if _, err := executor.Run(ctx, pythonPath, executor.WithArgs("-c", "import ansible, apprise, certbot")); err != nil {
+	if _, err := runtime.run(ctx, managedCommand{
+		path: pythonPath, args: []string{"-c", "import ansible, apprise, certbot"}, kind: managedPython,
+	}); err != nil {
 		return fmt.Errorf("import Saltbox Python packages: %w", err)
 	}
-	return validateEntrypoints(ctx, venvPath)
+	return validateEntrypointsWithRuntime(ctx, runtime, venvPath)
 }
 
 func validateEntrypoints(ctx context.Context, venvPath string) error {
+	return validateEntrypointsWithRuntime(ctx, defaultManagedRuntime(), venvPath)
+}
+
+func validateEntrypointsWithRuntime(ctx context.Context, runtime *managedRuntime, venvPath string) error {
 	checks := [][]string{
 		{filepath.Join(venvPath, "bin", "ansible"), "--version"},
 		{filepath.Join(venvPath, "bin", "certbot"), "--version"},
 		{filepath.Join(venvPath, "bin", "apprise"), "--version"},
 	}
 	commandPath := filepath.Join(venvPath, "bin")
-	if currentPath := os.Getenv("PATH"); currentPath != "" {
-		commandPath += string(os.PathListSeparator) + currentPath
-	}
 	for _, check := range checks {
-		if _, err := executor.Run(
-			ctx,
-			check[0],
-			executor.WithArgs(check[1:]...),
-			executor.WithInheritEnv("PATH="+commandPath),
-			executor.WithWorkingDir(venvPath),
-		); err != nil {
+		if _, err := runtime.run(ctx, managedCommand{
+			path: check[0], args: check[1:], kind: managedEntrypoint,
+			workingDir: venvPath, venvBin: commandPath, ansibleHealth: filepath.Base(check[0]) == "ansible",
+		}); err != nil {
 			return fmt.Errorf("run %s health check: %w", filepath.Base(check[0]), err)
 		}
 	}

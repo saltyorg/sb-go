@@ -110,9 +110,17 @@ func TestEnsureVersionInstallsUVPair(t *testing.T) {
 	dir := t.TempDir()
 	uvPath := filepath.Join(dir, "uv")
 	uvxPath := filepath.Join(dir, "uvx")
+	scratchParent := t.TempDir()
+	runtime := newManagedRuntime(runtimeSettings{
+		cacheDir:      filepath.Join(t.TempDir(), "cache"),
+		scratchParent: scratchParent,
+	})
 
-	if err := ensureVersionWithProxy(context.Background(), version, uvPath, uvxPath, false, server.URL+"/version", server.URL+"/metadata", server.Client()); err != nil {
+	if err := ensureVersionWithProxyAndRuntime(context.Background(), runtime, version, uvPath, uvxPath, false, server.URL+"/version", server.URL+"/metadata", server.Client()); err != nil {
 		t.Fatal(err)
+	}
+	if entries, err := os.ReadDir(scratchParent); err != nil || len(entries) != 0 {
+		t.Fatalf("download scratch parent contains %v after success: %v", entries, err)
 	}
 	if got, err := binaryVersion(context.Background(), uvPath, "uv"); err != nil || got != version {
 		t.Fatalf("uv version = %q, %v", got, err)
