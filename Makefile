@@ -31,7 +31,7 @@ NC := \033[0m # No Color
 .DEFAULT_GOAL := build
 
 # Phony targets (don't produce files with these names)
-.PHONY: all build test test-action-download test-deadsnakes-container test-install-policy clean fmt vet lint run help version deps tidy update update-patch check modernize
+.PHONY: all build test test-action-download test-action-isolation test-deadsnakes-container test-install-policy clean fmt vet lint run help version deps tidy update update-patch check modernize
 
 ##@ General
 
@@ -61,12 +61,15 @@ build-release: ## Build optimized release binary (use VERSION= to override)
 
 ##@ Testing
 
-test: test-action-download ## Run all tests with verbose output
+test: test-action-download test-action-isolation ## Run all tests with verbose output
 	@echo "$(GREEN)Running tests...$(NC)"
 	CGO_ENABLED=$(CGO_ENABLED) go test $(GO_TEST_FLAGS) -v ./...
 
 test-action-download: ## Test the pinned uv action download retry policy
 	bash .github/actions/update-saltbox-python/download_test.sh
+
+test-action-isolation: ## Test managed Python isolation in the lock-update action
+	python3 .github/actions/update-saltbox-python/isolation_test.py
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(GREEN)Running tests with coverage...$(NC)"

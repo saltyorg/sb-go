@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-uv_version=$UV_VERSION
+uv_version=${UV_VERSION:?UV_VERSION is required}
 if [[ ! "$uv_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Invalid embedded sb-go uv version: $uv_version" >&2
     exit 1
@@ -12,7 +12,9 @@ if [[ ! "$PYTHON_MINOR" =~ ^[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-workdir=$(mktemp -d)
+# shellcheck disable=SC1091 # GitHub supplies GITHUB_ACTION_PATH.
+source "$GITHUB_ACTION_PATH/managed-python.sh"
+workdir=$(managed_python_workspace)
 trap 'rm -rf "$workdir"' EXIT
 
 archive="$workdir/uv.tar.gz"
@@ -28,13 +30,13 @@ if [[ -z "$uv_bin" ]]; then
     exit 1
 fi
 chmod 0755 "$uv_bin"
-if [[ "$($uv_bin --version)" != "uv $uv_version"* ]]; then
+if [[ "$(managed_python_command "$workdir" uv "$workdir" "$uv_bin" --version)" != "uv $uv_version"* ]]; then
     echo "Downloaded uv does not report version $uv_version" >&2
     exit 1
 fi
 
 catalog="$workdir/python-catalog.json"
-"$uv_bin" python list "cpython@$PYTHON_MINOR" \
+managed_python_command "$workdir" uv "$workdir" "$uv_bin" python list "cpython@$PYTHON_MINOR" \
     --all-versions \
     --managed-python \
     --output-format json > "$catalog"
@@ -58,31 +60,30 @@ if [[ -z "$candidate" ]]; then
     exit 1
 fi
 
-"$uv_bin" python install \
+managed_python_command "$workdir" uv "$workdir" "$uv_bin" python install \
     --managed-python \
     --no-bin \
     --install-dir "$workdir/python" \
     "$candidate"
-python_bin=$(UV_PYTHON_INSTALL_DIR="$workdir/python" "$uv_bin" python find \
+python_bin=$(managed_python_command "$workdir" uv "$workdir" "$uv_bin" python find \
     --managed-python \
     --no-project \
     --no-python-downloads \
     "$candidate")
-if [[ "$($python_bin --version)" != "Python $candidate" ]]; then
+if [[ "$(managed_python_command "$workdir" python "$workdir" "$python_bin" --version)" != "Python $candidate" ]]; then
     echo "Installed Python does not report version $candidate" >&2
     exit 1
 fi
 
 saltbox_clone_url=${SALTBOX_CLONE_URL:-"https://github.com/$SALTBOX_REPOSITORY.git"}
 git clone --depth=1 "$saltbox_clone_url" "$workdir/saltbox"
-cd "$workdir/saltbox"
-base_commit=$(git rev-parse HEAD)
-current=$(tr -d '[:space:]' < .python-version)
+base_commit=$(git -C "$workdir/saltbox" rev-parse HEAD)
+current=$(tr -d '[:space:]' < "$workdir/saltbox/.python-version")
 if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Saltbox .python-version is invalid: $current" >&2
     exit 1
 fi
-current_uv=$(tr -d '[:space:]' < .uv-version)
+current_uv=$(tr -d '[:space:]' < "$workdir/saltbox/.uv-version")
 if [[ ! "$current_uv" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "Saltbox .uv-version is invalid: $current_uv" >&2
     exit 1
@@ -96,29 +97,29 @@ if [[ "$(printf '%s\n%s\n' "$current_uv" "$uv_version" | sort -V | tail -n 1)" !
     exit 1
 fi
 candidate_lock="$workdir/requirements-saltbox.txt"
-"$uv_bin" pip compile \
+managed_python_command "$workdir" uv "$workdir/saltbox" "$uv_bin" pip compile \
     --python-version "$candidate" \
     --generate-hashes \
     --output-file "$candidate_lock" \
     requirements/requirements-saltbox.in
-"$uv_bin" venv \
+managed_python_command "$workdir" uv "$workdir" "$uv_bin" venv \
     --python "$python_bin" \
     --no-project \
     --no-python-downloads \
     "$workdir/preflight-venv"
-"$uv_bin" pip sync \
+managed_python_command "$workdir" uv "$workdir" "$uv_bin" pip sync \
     --python "$workdir/preflight-venv/bin/python" \
     --require-hashes \
     "$candidate_lock"
-"$uv_bin" pip check --python "$workdir/preflight-venv/bin/python"
-"$workdir/preflight-venv/bin/ansible" --version
-"$workdir/preflight-venv/bin/certbot" --version
-"$workdir/preflight-venv/bin/apprise" --version
+managed_python_command "$workdir" uv "$workdir" "$uv_bin" pip check --python "$workdir/preflight-venv/bin/python"
+managed_python_command "$workdir" entrypoint "$workdir/preflight-venv" "$workdir/preflight-venv/bin/ansible" --version
+managed_python_command "$workdir" entrypoint "$workdir/preflight-venv" "$workdir/preflight-venv/bin/certbot" --version
+managed_python_command "$workdir" entrypoint "$workdir/preflight-venv" "$workdir/preflight-venv/bin/apprise" --version
 
 update_toolchain_files() {
-    printf '%s\n' "$candidate" > .python-version
-    printf '%s\n' "$uv_version" > .uv-version
-    python3 - "$uv_version" <<'PY'
+    printf '%s\n' "$candidate" > "$workdir/saltbox/.python-version"
+    printf '%s\n' "$uv_version" > "$workdir/saltbox/.uv-version"
+    managed_python_command "$workdir" python "$workdir/saltbox" "$python_bin" - "$uv_version" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -135,7 +136,7 @@ if count != 1:
     raise SystemExit("Unable to update constraints.uv in Saltbox Renovate configuration")
 path.write_text(updated, encoding="utf-8")
 PY
-    "$uv_bin" pip compile \
+    managed_python_command "$workdir" uv "$workdir/saltbox" "$uv_bin" pip compile \
         --python-version "$candidate" \
         --generate-hashes \
         --output-file requirements/requirements-saltbox.txt \
@@ -144,24 +145,24 @@ PY
 
 if [[ "$DRY_RUN" == "true" ]]; then
     update_toolchain_files
-    git diff -- .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt
+    git -C "$workdir/saltbox" diff -- .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt
     exit 0
 fi
 
 update_toolchain_files
 
-if git diff --quiet -- .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt; then
+if git -C "$workdir/saltbox" diff --quiet -- .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt; then
     echo "Saltbox already contains the requested Python toolchain state"
     exit 0
 fi
 
-git config user.name "github-actions[bot]"
-git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-git add .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt
-git commit -m "chore(deps): update python toolchain"
+git -C "$workdir/saltbox" config user.name "github-actions[bot]"
+git -C "$workdir/saltbox" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+git -C "$workdir/saltbox" add .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt
+git -C "$workdir/saltbox" commit -m "chore(deps): update python toolchain"
 
-git fetch origin master
-remote_commit=$(git rev-parse origin/master)
+git -C "$workdir/saltbox" fetch origin master
+remote_commit=$(git -C "$workdir/saltbox" rev-parse origin/master)
 if [[ "$remote_commit" != "$base_commit" ]]; then
     echo "Saltbox master changed from $base_commit to $remote_commit during toolchain generation; refusing to push stale output" >&2
     exit 1
@@ -171,6 +172,6 @@ auth_header=$(printf 'x-access-token:%s' "$SALTBOX_TOKEN" | base64 --wrap=0)
 GIT_CONFIG_COUNT=1 \
 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
 GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
-    git push origin HEAD:refs/heads/master
+    git -C "$workdir/saltbox" push origin HEAD:refs/heads/master
 unset auth_header
 echo "Updated Saltbox master for sb-go $SB_GO_RELEASE with Python $candidate and uv $uv_version"
