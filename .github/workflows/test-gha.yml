@@ -10,7 +10,7 @@ on:
 jobs:
   test-gha:
     name: Test sb gha command
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout sb-go repository
         uses: actions/checkout@v7
