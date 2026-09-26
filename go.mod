@@ -4,34 +4,34 @@ go 1.27.1
 
 require (
 	charm.land/bubbles/v2 v2.2.1
-	charm.land/bubbletea/v2 v2.0.9
+	charm.land/bubbletea/v2 v2.0.10
 	charm.land/fang/v2 v2.0.1
 	charm.land/glamour/v2 v2.0.1
 	charm.land/lipgloss/v2 v2.0.5 // v2.0.6 blocked by github.com/charmbracelet/ultraviolet/issues/155
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/agnivade/levenshtein v1.2.1
 	github.com/aquasecurity/table v1.11.0
-	github.com/autobrr/go-qbittorrent v1.18.0
+	github.com/autobrr/go-qbittorrent v1.19.0
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.8
-	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260902165432-6f6ad8b37b0a
-	github.com/cloudflare/cloudflare-go/v7 v7.10.0
+	github.com/charmbracelet/x/exp/charmtone v0.1.0
+	github.com/cloudflare/cloudflare-go/v7 v7.11.0
 	github.com/creack/pty v1.1.24
 	github.com/mattn/go-isatty v0.0.24
-	github.com/mattn/go-runewidth v0.0.29
+	github.com/mattn/go-runewidth v0.0.30
 	github.com/moby/moby/api v1.56.0
 	github.com/moby/moby/client v0.6.0
 	github.com/saltydk/go-rtorrent v1.0.1
-	github.com/sj14/jellyfin-go v0.4.4
+	github.com/sj14/jellyfin-go v0.5.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/crypto v0.56.0
-	golang.org/x/net v0.58.0
-	golang.org/x/sync v0.22.0
-	golang.org/x/sys v0.47.0
-	golang.org/x/term v0.45.0
-	golift.io/starr v1.3.1
+	golang.org/x/crypto v0.57.0
+	golang.org/x/net v0.59.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
+	golang.org/x/term v0.46.0
+	golift.io/starr v1.4.1
 )
 
 require (
@@ -87,6 +87,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/otel/trace v1.45.0 // indirect
 	golang.org/x/exp v0.0.0-20260820142414-ca536658362e // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/validator.v2 v2.0.1 // indirect
 )
