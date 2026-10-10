@@ -4,6 +4,7 @@ package factui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -120,7 +121,30 @@ func New(ctx context.Context, session Session) *Model {
 func Run(ctx context.Context, session Session, input io.Reader, output io.Writer) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() { cancel(); err = errors.Join(err, session.Close()) }()
-	_, err = tea.NewProgram(New(ctx, session), tea.WithContext(ctx), tea.WithInput(input), tea.WithOutput(output), tea.WithoutSignalHandler()).Run()
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w: %w", tea.ErrProgramKilled, ctx.Err())
+	}
+
+	// Cancelling Bubble Tea's context forces shutdown without waiting for its
+	// input reader. Request a graceful quit so the reader exits before closing.
+	program := tea.NewProgram(New(ctx, session), tea.WithInput(input), tea.WithOutput(output), tea.WithoutSignalHandler())
+	runDone := make(chan struct{})
+	watcherDone := make(chan struct{})
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-ctx.Done():
+			program.Quit()
+		case <-runDone:
+		}
+	}()
+
+	_, err = program.Run()
+	close(runDone)
+	<-watcherDone
+	if ctx.Err() != nil {
+		err = errors.Join(err, fmt.Errorf("%w: %w", tea.ErrProgramKilled, ctx.Err()))
+	}
 	return err
 }
 

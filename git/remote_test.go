@@ -207,8 +207,19 @@ case "$SB_GIT_TEST_BEHAVIOR" in
   success)
     exit 0
     ;;
-  retry-succeeds)
+  retry-succeeds|retry-after-progress)
     if [ "${1:-}" = "-c" ] && [ "${2:-}" = "http.version=HTTP/1.1" ]; then
+      if [ "$SB_GIT_TEST_BEHAVIOR" = "retry-after-progress" ]; then
+        retry_waits=0
+        while [ ! -e "$SB_GIT_TEST_RELEASE_FILE" ]; do
+          if [ "$retry_waits" -ge 500 ]; then
+            printf '%s\n' 'timed out waiting for visible Git retry release' >&2
+            exit 2
+          fi
+          retry_waits=$((retry_waits + 1))
+          sleep 0.01
+        done
+      fi
       exit 0
     fi
     ;;

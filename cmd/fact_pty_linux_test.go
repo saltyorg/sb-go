@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/creack/pty"
 	"github.com/saltyorg/sb-go/facts"
@@ -183,7 +184,12 @@ func TestFactEditorPTYHelper(t *testing.T) {
 	command.SetOut(os.Stdout)
 	command.SetErr(os.Stderr)
 	command.SetArgs(nil)
-	if err := command.ExecuteContext(ctx); err != nil && ctx.Err() == nil {
+	err := command.ExecuteContext(ctx)
+	if ctx.Err() != nil {
+		if !errors.Is(err, tea.ErrProgramKilled) || !errors.Is(err, ctx.Err()) {
+			t.Fatalf("cancelled editor returned %v, want program killed and %v", err, ctx.Err())
+		}
+	} else if err != nil {
 		t.Fatal(err)
 	}
 }

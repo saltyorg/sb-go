@@ -9,13 +9,14 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"golang.org/x/term"
 )
 
 const liveTaskOutputLines = 8
 const terminalCapabilitySettleDelay = 250 * time.Millisecond
 
-// synchronizedOutputWriter asks compatible terminals to apply each renderer
-// update atomically.
+// synchronizedOutputWriter applies renderer updates atomically and keeps
+// erased progress frames out of terminal history.
 type synchronizedOutputWriter struct {
 	writer io.Writer
 	mu     sync.Mutex
@@ -43,14 +44,19 @@ func (w *synchronizedOutputWriter) Write(output []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if bytes.Contains(output, []byte(ansi.SetModeSynchronizedOutput)) {
-		return w.writer.Write(output)
+	payload := output
+	if bytes.Contains(output, []byte(ansi.EraseScreenBelow)) {
+		width, height, _ := term.GetSize(int(w.Fd()))
+		payload = bytes.ReplaceAll(output, []byte(ansi.EraseScreenBelow), []byte(progressEraseBelow(width, height)))
 	}
 
-	frame := make([]byte, 0, len(ansi.SetModeSynchronizedOutput)+len(output)+len(ansi.ResetModeSynchronizedOutput))
-	frame = append(frame, ansi.SetModeSynchronizedOutput...)
-	frame = append(frame, output...)
-	frame = append(frame, ansi.ResetModeSynchronizedOutput...)
+	frame := payload
+	if !bytes.Contains(payload, []byte(ansi.SetModeSynchronizedOutput)) {
+		frame = make([]byte, 0, len(ansi.SetModeSynchronizedOutput)+len(payload)+len(ansi.ResetModeSynchronizedOutput))
+		frame = append(frame, ansi.SetModeSynchronizedOutput...)
+		frame = append(frame, payload...)
+		frame = append(frame, ansi.ResetModeSynchronizedOutput...)
+	}
 	written, err := w.writer.Write(frame)
 	if err != nil {
 		return 0, err
@@ -59,6 +65,21 @@ func (w *synchronizedOutputWriter) Write(output []byte) (int, error) {
 		return 0, io.ErrShortWrite
 	}
 	return len(output), nil
+}
+
+func progressEraseBelow(width, height int) string {
+	// tmux's scroll-on-clear archives an entire screen erased at (0, 0).
+	// Clear the current line first, then erase the remaining rows from a
+	// different cursor position. Saving the cursor handles clamped moves at
+	// the right or bottom margin without changing the renderer's position.
+	move := ansi.CursorForward(1)
+	if width == 1 {
+		if height == 1 {
+			return ansi.EraseLineRight
+		}
+		move = ansi.CursorDown(1)
+	}
+	return ansi.EraseLineRight + ansi.SaveCursor + move + ansi.EraseScreenBelow + ansi.RestoreCursor
 }
 
 type taskOutputBuffer struct {

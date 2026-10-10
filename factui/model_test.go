@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -22,6 +24,7 @@ type fakeSession struct {
 	apply    func(context.Context, []facts.Change) (facts.ApplyResult, error)
 	released []string
 	closed   bool
+	closeErr error
 }
 
 func (f *fakeSession) Catalog() facts.Catalog { return f.catalog }
@@ -44,7 +47,7 @@ func (f *fakeSession) ReleaseRole(role string) error {
 func (f *fakeSession) Apply(ctx context.Context, c []facts.Change) (facts.ApplyResult, error) {
 	return f.apply(ctx, c)
 }
-func (f *fakeSession) Close() error { f.closed = true; return nil }
+func (f *fakeSession) Close() error { f.closed = true; return f.closeErr }
 
 func fixture(t *testing.T) (*Model, *fakeSession) {
 	t.Helper()
@@ -473,13 +476,50 @@ func TestQuitDuringLockWaitCancelsThenReviewsPending(t *testing.T) {
 }
 
 func TestRunCancellationClosesSession(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		t.Run(map[bool]string{false: "cancelled", true: "deadline exceeded"}[deadline], func(t *testing.T) {
+			_, f := fixture(t)
+			f.closeErr = errors.New("close failed")
+			ctx, cancel := context.WithCancel(t.Context())
+			if deadline {
+				cancel()
+				ctx, cancel = context.WithDeadline(t.Context(), time.Now().Add(-time.Hour))
+			}
+			cancel()
+			var output bytes.Buffer
+			err := Run(ctx, f, strings.NewReader(""), &output)
+			for _, want := range []error{tea.ErrProgramKilled, ctx.Err(), f.closeErr} {
+				if !errors.Is(err, want) {
+					t.Fatalf("cancelled Run returned %v, want %v", err, want)
+				}
+			}
+			if !f.closed || output.Len() != 0 {
+				t.Fatalf("cancelled Run started terminal or left session open: output=%q, closed=%v", output.String(), f.closed)
+			}
+		})
+	}
+}
+
+func TestRunNormalQuitClosesSession(t *testing.T) {
 	_, f := fixture(t)
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	var output bytes.Buffer
-	err := Run(ctx, f, strings.NewReader(""), &output)
-	if err == nil || !f.closed {
-		t.Fatalf("cancelled Run returned %v, closed=%v", err, f.closed)
+	err := Run(t.Context(), f, strings.NewReader("q"), io.Discard)
+	if err != nil || !f.closed {
+		t.Fatalf("normal quit returned %v, closed=%v", err, f.closed)
+	}
+}
+
+func TestRunStartupFailureClosesSession(t *testing.T) {
+	_, f := fixture(t)
+	input, err := os.CreateTemp(t.TempDir(), "input")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := input.Close(); err != nil {
+		t.Fatal(err)
+	}
+	err = Run(t.Context(), f, input, io.Discard)
+	if err == nil || errors.Is(err, context.Canceled) || !f.closed {
+		t.Fatalf("startup failure returned %v, closed=%v", err, f.closed)
 	}
 }
 

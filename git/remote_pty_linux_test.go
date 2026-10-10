@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,9 +31,11 @@ func TestRunRemoteCommandShowsHTTP11FallbackChildInTerminal(t *testing.T) {
 
 	session := fmt.Sprintf("sb-go-git-fallback-%d-%d", os.Getpid(), time.Now().UnixNano())
 	defer exec.Command("tmux", "kill-session", "-t", session).Run() //nolint:errcheck,gosec
+	retryRelease := filepath.Join(t.TempDir(), "release-retry")
 	helperCommand := fmt.Sprintf(
-		"env %s=1 TERM=xterm-256color %s -test.run=^TestRunRemoteCommandShowsHTTP11FallbackChildInTerminal$; sleep 2",
+		"env %s=1 SB_GIT_TEST_RELEASE_FILE=%s TERM=xterm-256color %s -test.run=^TestRunRemoteCommandShowsHTTP11FallbackChildInTerminal$; sleep 2",
 		remoteFallbackTmuxHelperEnv,
+		strconv.Quote(retryRelease),
 		strconv.Quote(os.Args[0]),
 	)
 	if output, err := exec.Command(
@@ -40,6 +43,10 @@ func TestRunRemoteCommandShowsHTTP11FallbackChildInTerminal(t *testing.T) {
 		"-x", "100", "-y", "16", helperCommand,
 	).CombinedOutput(); err != nil {
 		t.Fatalf("start tmux Git fallback session: %v: %s", err, output)
+	}
+	waitForRemoteFallbackTmuxText(t, session, "Retrying Saltbox Git fetch over HTTP/1.1")
+	if err := os.WriteFile(retryRelease, nil, 0600); err != nil {
+		t.Fatalf("release visible Git retry: %v", err)
 	}
 
 	rendered := waitForRemoteFallbackTmuxText(t, session, remoteFallbackTmuxComplete)
@@ -58,7 +65,7 @@ func runRemoteFallbackTmuxHelper(t *testing.T) {
 	if !terminal.IsInteractive() {
 		t.Fatal("tmux helper is not attached to an interactive terminal")
 	}
-	installFakeGit(t, "retry-succeeds")
+	installFakeGit(t, "retry-after-progress")
 	runner := terminal.NewRunner(terminal.RunnerOptions{})
 	err := runner.Run(context.Background(), terminal.TaskSpec{Running: "Updating Saltbox repository"}, func(ctx context.Context, task *terminal.Task) error {
 		return task.RunStreaming(ctx, terminal.TaskSpec{Running: "Fetching repository changes"}, func(taskCtx context.Context, fetchTask *terminal.Task) error {

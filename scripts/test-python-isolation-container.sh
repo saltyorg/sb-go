@@ -26,7 +26,7 @@ trap cleanup EXIT
 
 (cd "$repo_root" && CGO_ENABLED=0 go build -o "$workdir/reconcile" ./scripts/testdata/python-isolation)
 container=$(docker run --detach --label com.saltyorg.sb-go.test=python-isolation \
-    ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254 sleep infinity)
+    ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 sleep infinity)
 docker exec "$container" sh -c 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates git libpq-dev gcc' > "$workdir/packages.log" 2>&1
 docker cp "$workdir/reconcile" "$container:/usr/local/bin/reconcile" >/dev/null
 docker exec "$container" mkdir -p /srv/git/saltbox/requirements /ambient/nested/.venv
