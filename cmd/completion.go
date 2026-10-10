@@ -1,700 +1,221 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
-	"github.com/saltyorg/sb-go/ansible"
+	"github.com/saltyorg/sb-go/completion"
+	"github.com/saltyorg/sb-go/terminal"
 
-	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 )
 
 func addCompletionCommand(rootCmd *cobra.Command) {
-	completionCmd := &cobra.Command{
+	addCompletionCommandWithManager(rootCmd, completion.NewManager())
+}
+
+func addCompletionCommandWithManager(rootCmd *cobra.Command, manager *completion.Manager) {
+	command := &cobra.Command{
 		Use:    "completion",
 		Hidden: true,
 		Short:  "Install shell completion for sb",
-		Args:   cobra.NoArgs,
-		Long: `Install shell completion scripts for sb.
-
-This command installs completion scripts system-wide on Ubuntu.
-Supported shells: bash, zsh
-
-After installation, restart your shell or source the completion file.`,
+		Long: "Install system-wide completion for installed Bash, Zsh, and Fish shells.\n\n" +
+			"Bash requires the bash-completion package. Scripts use each shell's shared\n" +
+			"loading directory. Generated legacy files are migrated after successful installation.\n\n" +
+			"Restart an existing shell, or source its installed file.\n" +
+			"Use \"completion generate <shell>\" to write a script to standard output.",
+		Args: cobra.NoArgs,
 	}
-	bashCompletionCmd := &cobra.Command{
-		Use:   "bash",
-		Short: "Install bash completion",
-		Args:  cobra.NoArgs,
-		Long: `Installs bash completion script for all binary names (including symlinks).
-
-After installation, restart your shell or source the completion file.`,
+	install := func(cmd *cobra.Command, shells []completion.Shell, explicit bool) error {
+		names, err := getAllBinaryNames()
+		if err != nil {
+			return err
+		}
+		results, installErr := manager.Install(cmd.Context(), shells, names, func(shell completion.Shell, name string) ([]byte, error) {
+			return generateCompletion(rootCmd, shell, name)
+		})
+		if err := writeCompletionResults(cmd.OutOrStdout(), results); err != nil {
+			return errors.Join(installErr, err)
+		}
+		if explicit {
+			for _, result := range results {
+				if result.Status == completion.Skipped && result.Name == "" {
+					installErr = errors.Join(installErr, fmt.Errorf("%s completion unavailable: %s", result.Shell, result.Reason))
+				}
+			}
+		}
+		return installErr
+	}
+	command.RunE = func(cmd *cobra.Command, _ []string) error {
+		return install(cmd, completion.SupportedShells(), false)
+	}
+	for _, shell := range completion.SupportedShells() {
+		command.AddCommand(&cobra.Command{
+			Use:   string(shell),
+			Short: fmt.Sprintf("Install %s completion", shell),
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return install(cmd, []completion.Shell{shell}, true)
+			},
+		})
+	}
+	command.AddCommand(&cobra.Command{
+		Use:       "install [bash|zsh|fish]",
+		Short:     "Install completion for installed shells",
+		ValidArgs: []string{"bash", "zsh", "fish"},
+		Args:      cobra.MatchAll(cobra.MaximumNArgs(1), cobra.OnlyValidArgs),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return installCompletionsForAllNames(rootCmd, "bash")
+			if len(args) == 0 {
+				return install(cmd, completion.SupportedShells(), false)
+			}
+			return install(cmd, []completion.Shell{completion.Shell(args[0])}, true)
 		},
-	}
-	zshCompletionCmd := &cobra.Command{
-		Use:   "zsh",
-		Short: "Install zsh completion",
-		Args:  cobra.NoArgs,
-		Long: `Installs zsh completion script for all binary names (including symlinks).
-
-After installation, restart your shell or run:
-  autoload -U compinit && compinit`,
+	})
+	command.AddCommand(&cobra.Command{
+		Use:       "generate <bash|zsh|fish>",
+		Short:     "Write a completion script to standard output",
+		ValidArgs: []string{"bash", "zsh", "fish"},
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return installCompletionsForAllNames(rootCmd, "zsh")
+			script, err := generateCompletion(rootCmd, completion.Shell(args[0]), rootCmd.Name())
+			if err != nil {
+				return err
+			}
+			if _, err := cmd.OutOrStdout().Write(script); err != nil {
+				return fmt.Errorf("write completion script: %w", err)
+			}
+			return nil
 		},
-	}
-
-	completionCmd.AddCommand(bashCompletionCmd)
-	completionCmd.AddCommand(zshCompletionCmd)
-	rootCmd.AddCommand(completionCmd)
+	})
+	rootCmd.AddCommand(command)
 }
 
-// getAllBinaryNames returns the binary name plus all symlinks pointing to it
-func getAllBinaryNames() []string {
-	exe, err := os.Executable()
-	if err != nil {
-		// Fallback to os.Args[0]
-		return []string{filepath.Base(os.Args[0])}
+func generateCompletion(rootCmd *cobra.Command, shell completion.Shell, name string) ([]byte, error) {
+	originalUse := rootCmd.Use
+	rootCmd.Use = name
+	defer func() { rootCmd.Use = originalUse }()
+
+	var script bytes.Buffer
+	var err error
+	switch shell {
+	case completion.Bash:
+		err = rootCmd.GenBashCompletionV2(&script, true)
+	case completion.Zsh:
+		err = rootCmd.GenZshCompletion(&script)
+	case completion.Fish:
+		err = rootCmd.GenFishCompletion(&script, true)
+	default:
+		return nil, fmt.Errorf("unsupported completion shell %q", shell)
 	}
+	if err != nil {
+		return nil, fmt.Errorf("generate %s completion for %s: %w", shell, name, err)
+	}
+	return script.Bytes(), nil
+}
 
-	// Start with the actual binary name
-	baseName := filepath.Base(exe)
-	names := []string{baseName}
-
-	// Add any symlinks pointing to us
-	symlinks := findSymlinksToExecutable()
-	for _, s := range symlinks {
-		if s != baseName {
-			names = append(names, s)
+func writeCompletionResults(output io.Writer, results []completion.Result) error {
+	for _, result := range results {
+		var message string
+		switch result.Status {
+		case completion.Installed:
+			message = fmt.Sprintf("Installed %s completion: %s", result.Shell, result.Path)
+		case completion.Cleaned:
+			message = fmt.Sprintf("Removed obsolete %s completion: %s", result.Shell, result.Path)
+		case completion.Skipped:
+			if result.Name != "" {
+				message = fmt.Sprintf("Preserved %s completion: %s; %s", result.Shell, result.Path, result.Reason)
+			} else {
+				message = fmt.Sprintf("Skipped %s completion: %s", result.Shell, result.Reason)
+			}
+		case completion.Failed:
+			message = fmt.Sprintf("Failed %s completion: %s", result.Shell, result.Reason)
+		}
+		if _, err := fmt.Fprintln(output, message); err != nil {
+			return fmt.Errorf("write completion result: %w", err)
+		}
+		for _, removed := range result.Removed {
+			if result.Status == completion.Cleaned && removed == result.Path {
+				continue
+			}
+			if _, err := fmt.Fprintf(output, "Removed old completion: %s\n", removed); err != nil {
+				return fmt.Errorf("write completion cleanup result: %w", err)
+			}
 		}
 	}
-
-	return names
+	return nil
 }
 
-// findSymlinksToExecutable searches common bin directories for symlinks pointing to our executable
-func findSymlinksToExecutable() []string {
-	exe, err := os.Executable()
+func regenerateInstalledCompletions(ctx context.Context, rootCmd *cobra.Command, runner *terminal.Runner) {
+	names, err := getAllBinaryNames()
 	if err != nil {
-		return nil
+		runner.Warning(fmt.Sprintf("Shell completion refresh failed: %v", err))
+		return
 	}
-
-	realExe, err := filepath.EvalSymlinks(exe)
+	results, err := completion.NewManager().Install(ctx, completion.SupportedShells(), names, func(shell completion.Shell, name string) ([]byte, error) {
+		return generateCompletion(rootCmd, shell, name)
+	})
+	for _, result := range results {
+		if result.Status != completion.Failed {
+			var message bytes.Buffer
+			if writeErr := writeCompletionResults(&message, []completion.Result{result}); writeErr != nil {
+				runner.Warning(writeErr.Error())
+				continue
+			}
+			runner.Info(strings.TrimSpace(message.String()))
+		}
+	}
 	if err != nil {
-		realExe = exe
+		runner.Warning(fmt.Sprintf("Shell completion refresh failed: %v", err))
 	}
+}
 
-	var symlinks []string
-	searchDirs := []string{"/usr/local/bin", "/usr/bin", "/bin"}
+func getAllBinaryNames() ([]string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("get completion executable: %w", err)
+	}
+	return binaryNamesForExecutable(executable, []string{"/usr/local/bin", "/usr/bin", "/bin"})
+}
 
-	for _, dir := range searchDirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
+func binaryNamesForExecutable(executable string, directories []string) ([]string, error) {
+	realExecutable, err := filepath.EvalSymlinks(executable)
+	if err != nil {
+		return nil, fmt.Errorf("resolve completion executable: %w", err)
+	}
+	names := map[string]bool{filepath.Base(realExecutable): true}
+	seenDirectories := make(map[string]bool)
+	directories = append(slices.Clone(directories), filepath.Dir(executable), filepath.Dir(realExecutable))
+	for _, directory := range directories {
+		realDirectory, err := filepath.EvalSymlinks(directory)
+		if err != nil || seenDirectories[realDirectory] {
 			continue
 		}
-
+		seenDirectories[realDirectory] = true
+		entries, err := os.ReadDir(realDirectory)
+		if err != nil {
+			return nil, fmt.Errorf("read completion executable directory %s: %w", realDirectory, err)
+		}
 		for _, entry := range entries {
 			if entry.Type()&os.ModeSymlink == 0 {
 				continue
 			}
-
-			linkPath := filepath.Join(dir, entry.Name())
-			target, err := filepath.EvalSymlinks(linkPath)
-			if err != nil {
-				continue
-			}
-
-			if target == realExe {
-				symlinks = append(symlinks, entry.Name())
+			target, err := filepath.EvalSymlinks(filepath.Join(realDirectory, entry.Name()))
+			if err == nil && target == realExecutable {
+				names[entry.Name()] = true
 			}
 		}
 	}
-
-	return symlinks
-}
-
-// installCompletionsForAllNames installs completion for all binary names (main binary + symlinks)
-func installCompletionsForAllNames(rootCmd *cobra.Command, shellName string) error {
-	names := getAllBinaryNames()
-	var installedPaths []string
-
-	for _, cmdName := range names {
-		var targetPath string
-		var generateFunc func(string) error
-
-		switch shellName {
-		case "bash":
-			targetPath = fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
-			generateFunc = func(path string) error {
-				return generateStaticBashCompletion(rootCmd, path, cmdName)
-			}
-		case "zsh":
-			targetPath = fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
-			generateFunc = func(path string) error {
-				return generateStaticZshCompletion(rootCmd, path, cmdName)
-			}
-		}
-
-		// Ensure the target directory exists
-		targetDir := filepath.Dir(targetPath)
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
-		}
-
-		// Generate the completion file
-		if err := generateFunc(targetPath); err != nil {
-			return fmt.Errorf("failed to generate %s completion for %s: %w", shellName, cmdName, err)
-		}
-
-		installedPaths = append(installedPaths, targetPath)
+	result := make([]string, 0, len(names))
+	for name := range names {
+		result = append(result, name)
 	}
-
-	// Print summary
-	fmt.Printf("✓ %s completion installed to:\n", shellName)
-	for _, p := range installedPaths {
-		fmt.Printf("  - %s\n", p)
-	}
-
-	// Provide shell-specific reload instructions
-	fmt.Println("\nTo enable completions in your current shell:")
-	switch shellName {
-	case "bash":
-		fmt.Printf("  source %s\n", installedPaths[0])
-	case "zsh":
-		fmt.Println("  autoload -U compinit && compinit")
-	}
-	fmt.Println("\nOr restart your shell.")
-
-	return nil
-}
-
-// generateStaticBashCompletion creates a hybrid bash completion script:
-// - Uses Cobra's native completion for all commands and subcommands
-// - Adds custom tag completion logic for the 'install' command
-func generateStaticBashCompletion(rootCmd *cobra.Command, path, cmdName string) error {
-	// Load cache and get tags for install command
-	cacheInstance, err := ansible.NewCache()
-	if err != nil {
-		return fmt.Errorf("failed to load cache: %w", err)
-	}
-
-	tags := getCompletionTags(cacheInstance)
-	if len(tags) == 0 {
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("no tags found in cache - run '%s list' first to populate the cache", cmdName)))
-	}
-
-	// Temporarily set the root command's Use field to match the binary name
-	// so Cobra generates completion with the correct command name
-	originalUse := rootCmd.Use
-	rootCmd.Use = cmdName
-	defer func() { rootCmd.Use = originalUse }()
-
-	// Create a temporary file to get Cobra's native completion
-	tmpFile, err := os.CreateTemp("", "cobra-completion-*.bash")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	// Generate Cobra's native completion (without descriptions for cleaner output)
-	if err := rootCmd.GenBashCompletionV2(tmpFile, false); err != nil {
-		_ = tmpFile.Close()
-		return fmt.Errorf("failed to generate bash completion: %w", err)
-	}
-	_ = tmpFile.Close()
-
-	// Read the generated completion
-	cobraCompletion, err := os.ReadFile(tmpPath)
-	if err != nil {
-		return fmt.Errorf("failed to read cobra completion: %w", err)
-	}
-
-	// Create the hybrid completion file
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("failed to create completion file: %w", err)
-	}
-	defer func() { _ = file.Close() }()
-
-	// Write Cobra's native completion first
-	if _, err := file.Write(cobraCompletion); err != nil {
-		return fmt.Errorf("failed to write cobra completion: %w", err)
-	}
-
-	// Append our custom install tag completion wrapper
-	customInstallCompletion := fmt.Sprintf(`
-# Custom tag completion for 'install' command with comma-separated support
-_%s_custom_install_tags() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-    local prev="${COMP_WORDS[COMP_CWORD-1]}"
-
-    # Static list of available tags
-    local tags=(
-%s
-    )
-
-    # Check if current word has commas without spaces - if so, reformat it
-    if [[ "$cur" == *,* ]] && [[ "$cur" != *, ]]; then
-        local reformatted=""
-        IFS=',' read -ra parts <<< "$cur"
-        local last_part=""
-        local i
-
-        for ((i=0; i<${#parts[@]}; i++)); do
-            local part="${parts[i]}"
-            part="${part# }"
-            part="${part%% }"
-
-            if [[ $i -eq $((${#parts[@]}-1)) ]]; then
-                last_part="$part"
-            else
-                if [[ -n "$reformatted" ]]; then
-                    reformatted="${reformatted}, ${part}"
-                else
-                    reformatted="${part}"
-                fi
-            fi
-        done
-
-        if [[ -n "$reformatted" ]]; then
-            local prefix="${reformatted}, "
-            cur="$last_part"
-
-            local already_specified=()
-            IFS=',' read -ra specified_tags <<< "$reformatted"
-            for tag in "${specified_tags[@]}"; do
-                tag="${tag# }"
-                tag="${tag%% }"
-                if [[ -n "$tag" ]]; then
-                    already_specified+=("$tag")
-                fi
-            done
-
-            local available_tags=()
-            for tag in "${tags[@]}"; do
-                local found=0
-                for specified in "${already_specified[@]}"; do
-                    if [[ "$tag" == "$specified" ]]; then
-                        found=1
-                        break
-                    fi
-                done
-                if [[ $found -eq 0 ]]; then
-                    available_tags+=("$tag")
-                fi
-            done
-
-            local matches=()
-            for tag in "${available_tags[@]}"; do
-                if [[ "$tag" == "$cur"* ]]; then
-                    matches+=("${prefix}${tag}")
-                fi
-            done
-
-            COMPREPLY=("${matches[@]}")
-            compopt -o nospace 2>/dev/null
-            return
-        fi
-    fi
-
-    # Get all already specified tags
-    local already_specified=()
-    local i
-    for ((i=2; i<=$COMP_CWORD; i++)); do
-        local word="${COMP_WORDS[i]}"
-        word="${word%%,}"
-        word="${word# }"
-        word="${word%% }"
-
-        if [[ -n "$word" ]] && [[ "$word" != "install" ]] && [[ $i -ne $COMP_CWORD ]]; then
-            already_specified+=("$word")
-        fi
-    done
-
-    if [[ "$cur" == *,* ]]; then
-        local cur_prefix="${cur%%,*}"
-        IFS=',' read -ra cur_tags <<< "$cur_prefix"
-        for tag in "${cur_tags[@]}"; do
-            tag="${tag# }"
-            tag="${tag%% }"
-            if [[ -n "$tag" ]]; then
-                already_specified+=("$tag")
-            fi
-        done
-    fi
-
-    # Filter out already specified tags
-    local available_tags=()
-    for tag in "${tags[@]}"; do
-        local found=0
-        for specified in "${already_specified[@]}"; do
-            if [[ "$tag" == "$specified" ]]; then
-                found=1
-                break
-            fi
-        done
-        if [[ $found -eq 0 ]]; then
-            available_tags+=("$tag")
-        fi
-    done
-
-    # Handle comma-separated tags
-    if [[ "$cur" == *,* ]]; then
-        local prefix="${cur%%,*},"
-        local partial="${cur##*,}"
-
-        if [[ "$partial" == " "* ]]; then
-            partial="${partial# }"
-            prefix="${prefix} "
-        fi
-
-        local matches=()
-        for tag in "${available_tags[@]}"; do
-            if [[ "$tag" == "$partial"* ]]; then
-                matches+=("${prefix}${tag}, ")
-            fi
-        done
-
-        COMPREPLY=("${matches[@]}")
-        compopt -o nospace 2>/dev/null
-    elif [[ "$prev" == "," ]]; then
-        COMPREPLY=($(compgen -W "${available_tags[*]}" -- "$cur"))
-
-        local i
-        for i in "${!COMPREPLY[@]}"; do
-            COMPREPLY[$i]="${COMPREPLY[$i]}, "
-        done
-
-        compopt -o nospace 2>/dev/null
-    else
-        COMPREPLY=($(compgen -W "${available_tags[*]}" -- "$cur"))
-
-        if [[ ${#COMPREPLY[@]} -eq 1 ]]; then
-            compopt -o nospace 2>/dev/null
-        fi
-    fi
-}
-
-# Wrapper to override completion for 'install' command
-_%s_custom() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-
-    # Check if 'install' command is in the command line
-    local has_install=0
-    local i
-    for ((i=1; i<COMP_CWORD; i++)); do
-        if [[ "${COMP_WORDS[i]}" == "install" ]]; then
-            has_install=1
-            break
-        fi
-    done
-
-    # If install command and we're past it, use custom tag completion
-    if [[ $has_install -eq 1 ]] && [[ $COMP_CWORD -gt 1 ]]; then
-        _%s_custom_install_tags
-        return
-    fi
-
-    # Otherwise use Cobra's native completion
-    __start_%s
-}
-
-# Replace the default completion function with our custom wrapper
-complete -o default -F _%s_custom %s
-`, cmdName, formatTagsForBash(tags), cmdName, cmdName, cmdName, cmdName, cmdName)
-
-	if _, err := file.WriteString(customInstallCompletion); err != nil {
-		return fmt.Errorf("failed to write custom completion: %w", err)
-	}
-
-	return nil
-}
-
-// formatTagsForBash formats tags array for bash script
-func formatTagsForBash(tags []string) string {
-	var lines []string
-	for _, tag := range tags {
-		lines = append(lines, fmt.Sprintf("        %q", tag))
-	}
-	return strings.Join(lines, "\n")
-}
-
-// generateStaticZshCompletion creates a hybrid zsh completion script:
-// - Uses Cobra's native completion for all commands and subcommands
-// - Adds custom tag completion logic for the 'install' command
-func generateStaticZshCompletion(rootCmd *cobra.Command, path, cmdName string) error {
-	// Load cache and get tags for install command
-	cacheInstance, err := ansible.NewCache()
-	if err != nil {
-		return fmt.Errorf("failed to load cache: %w", err)
-	}
-
-	tags := getCompletionTags(cacheInstance)
-	if len(tags) == 0 {
-		normalStyle := lipgloss.NewStyle()
-		return fmt.Errorf("%s", normalStyle.Render(fmt.Sprintf("no tags found in cache - run '%s list' first to populate the cache", cmdName)))
-	}
-
-	// Temporarily set the root command's Use field to match the binary name
-	// so Cobra generates completion with the correct command name
-	originalUse := rootCmd.Use
-	rootCmd.Use = cmdName
-	defer func() { rootCmd.Use = originalUse }()
-
-	// Create a temporary file to get Cobra's native completion
-	tmpFile, err := os.CreateTemp("", "cobra-completion-*.zsh")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer func() { _ = os.Remove(tmpPath) }()
-
-	// Generate Cobra's native completion
-	if err := rootCmd.GenZshCompletion(tmpFile); err != nil {
-		_ = tmpFile.Close()
-		return fmt.Errorf("failed to generate zsh completion: %w", err)
-	}
-	_ = tmpFile.Close()
-
-	// Read the generated completion
-	cobraCompletion, err := os.ReadFile(tmpPath)
-	if err != nil {
-		return fmt.Errorf("failed to read cobra completion: %w", err)
-	}
-
-	// Create the hybrid completion file
-	file, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("failed to create completion file: %w", err)
-	}
-	defer func() { _ = file.Close() }()
-
-	// Write Cobra's native completion first
-	if _, err := file.Write(cobraCompletion); err != nil {
-		return fmt.Errorf("failed to write cobra completion: %w", err)
-	}
-
-	// Append our custom install tag completion wrapper
-	customInstallCompletion := fmt.Sprintf(`
-# Custom tag completion for 'install' command with comma-separated support
-_%s_custom_install_tags() {
-    local cur_word="${words[CURRENT]}"
-    local -a already_specified available_tags
-
-    # Static list of available tags
-    local -a tags
-    tags=(
-%s
-    )
-
-    # Function to extract all already specified tags
-    _extract_specified_tags() {
-        local word part
-        already_specified=()
-
-        for ((i=3; i<CURRENT; i++)); do
-            word="${words[i]}"
-            if [[ "$word" == *,* ]]; then
-                for part in ${(s:,:)word}; do
-                    part="${part## }"
-                    part="${part%%%% }"
-                    [[ -n "$part" ]] && already_specified+=("$part")
-                done
-            else
-                word="${word%%,}"
-                word="${word## }"
-                word="${word%%%% }"
-                [[ -n "$word" ]] && already_specified+=("$word")
-            fi
-        done
-
-        if [[ "$cur_word" == *,* ]]; then
-            local prefix="${cur_word%%,*}"
-            for part in ${(s:,:)prefix}; do
-                part="${part## }"
-                part="${part%%%% }"
-                [[ -n "$part" ]] && already_specified+=("$part")
-            done
-        fi
-    }
-
-    _extract_specified_tags
-
-    # Filter available tags
-    available_tags=()
-    for tag in $tags; do
-        local found=0
-        for specified in $already_specified; do
-            if [[ "$tag" == "$specified" ]]; then
-                found=1
-                break
-            fi
-        done
-        [[ $found -eq 0 ]] && available_tags+=("$tag")
-    done
-
-    # Handle comma-separated input
-    if [[ "$cur_word" == *,* ]]; then
-        local needs_reformat=0
-        local test_word="$cur_word"
-
-        if [[ "$test_word" =~ ',[^ ]' ]] && [[ "$test_word" != *, ]]; then
-            needs_reformat=1
-        fi
-
-        if [[ $needs_reformat -eq 1 ]]; then
-            local reformatted=""
-            local parts=(${(s:,:)cur_word})
-            local last_part=""
-
-            for ((i=1; i<=$#parts; i++)); do
-                local part="${parts[i]}"
-                part="${part## }"
-                part="${part%%%% }"
-
-                if [[ $i -eq $#parts ]]; then
-                    last_part="$part"
-                else
-                    if [[ -n "$reformatted" ]]; then
-                        reformatted="${reformatted}, ${part}"
-                    else
-                        reformatted="${part}"
-                    fi
-                fi
-            done
-
-            if [[ -n "$reformatted" ]]; then
-                local prefix="${reformatted}, "
-                local -a matches
-
-                for tag in $available_tags; do
-                    if [[ "$tag" == ${last_part}* ]]; then
-                        matches+=("${prefix}${tag}")
-                    fi
-                done
-
-                if [[ ${#matches} -gt 0 ]]; then
-                    compadd -U -Q -S ', ' -- $matches
-                    return
-                fi
-            fi
-        else
-            local prefix="${cur_word%%,*},"
-            local partial="${cur_word##*,}"
-
-            if [[ "$partial" == " "* ]]; then
-                partial="${partial# }"
-                prefix="${prefix} "
-            else
-                prefix="${prefix} "
-            fi
-
-            local -a matches
-            for tag in $available_tags; do
-                if [[ "$tag" == ${partial}* ]]; then
-                    matches+=("${prefix}${tag}")
-                fi
-            done
-
-            if [[ ${#matches} -gt 0 ]]; then
-                compadd -U -Q -S ', ' -- $matches
-                return
-            fi
-        fi
-    else
-        if [[ ${#available_tags} -gt 0 ]]; then
-            local -a matching_tags
-            for tag in $available_tags; do
-                if [[ "$tag" == ${cur_word}* ]]; then
-                    matching_tags+=("$tag")
-                fi
-            done
-
-            if [[ ${#matching_tags} -gt 0 ]]; then
-                compadd -Q -S ', ' -- $matching_tags
-            fi
-        fi
-    fi
-}
-
-# Wrapper function to override install command completion
-_%s_custom() {
-    local line state
-
-    _arguments -C \
-        "1: :->cmds" \
-        "*::arg:->args"
-
-    case "$state" in
-        cmds)
-            _%s
-            ;;
-        args)
-            case ${line[1]} in
-                install)
-                    _%s_custom_install_tags
-                    ;;
-                *)
-                    # Restore the full command line for _%s
-                    # _arguments with *::arg:->args shifts words, losing the command name
-                    # We need to prepend it back so _%s sees "sb2 docker" not just "docker"
-                    words=("%s" "${words[@]}")
-                    (( CURRENT++ ))
-                    _%s
-                    ;;
-            esac
-            ;;
-    esac
-}
-
-# Replace default completion with custom wrapper
-compdef _%s_custom %s
-`, cmdName, formatTagsForZsh(tags), cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName, cmdName)
-
-	if _, err := file.WriteString(customInstallCompletion); err != nil {
-		return fmt.Errorf("failed to write custom completion: %w", err)
-	}
-
-	return nil
-}
-
-// formatTagsForZsh formats tags array for zsh script
-func formatTagsForZsh(tags []string) string {
-	var lines []string
-	for _, tag := range tags {
-		lines = append(lines, fmt.Sprintf("    %q", tag))
-	}
-	return strings.Join(lines, "\n")
-}
-
-// isZshInstalled checks if zsh is installed by checking if the vendor-completions directory exists
-func isZshInstalled() bool {
-	_, err := os.Stat("/usr/share/zsh/vendor-completions/")
-	return err == nil
-}
-
-// InstallOrRegenerateCompletion installs or regenerates a completion file
-// This is used by the update command to auto-install or update completions
-func InstallOrRegenerateCompletion(targetPath string, generateFunc func(string) error) error {
-	// Check if we have write permissions
-	targetDir := filepath.Dir(targetPath)
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		// Can't write, skip silently
-		return nil
-	}
-
-	// Generate the completion file
-	if err := generateFunc(targetPath); err != nil {
-		// Generation failed, skip silently
-		return nil
-	}
-
-	return nil
+	slices.Sort(result)
+	return result, nil
 }

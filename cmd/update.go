@@ -150,8 +150,7 @@ func handleUpdate(ctx context.Context, rootCmd *cobra.Command, verbose bool, bra
 		return fmt.Errorf("error validating Saltbox configuration: %w", err)
 	}
 
-	// Regenerate shell completions if they're installed
-	regenerateInstalledCompletions(rootCmd)
+	regenerateInstalledCompletions(ctx, rootCmd, runner)
 
 	return nil
 }
@@ -398,25 +397,4 @@ func requireDirectory(path string) error {
 		return fmt.Errorf("%s exists but is not a directory", path)
 	}
 	return nil
-}
-
-// regenerateInstalledCompletions auto-installs or regenerates shell completion files
-func regenerateInstalledCompletions(rootCmd *cobra.Command) {
-	// Install/regenerate completion for all names (binary + symlinks)
-	for _, cmdName := range getAllBinaryNames() {
-		bashPath := fmt.Sprintf("/etc/bash_completion.d/%s", cmdName)
-		_ = InstallOrRegenerateCompletion(bashPath, func(path string) error {
-			return generateStaticBashCompletion(rootCmd, path, cmdName)
-		})
-
-		// Only install or regenerate zsh completion if zsh is installed
-		if isZshInstalled() {
-			zshPath := fmt.Sprintf("/usr/share/zsh/vendor-completions/_%s", cmdName)
-			_ = InstallOrRegenerateCompletion(zshPath, func(path string) error {
-				return generateStaticZshCompletion(rootCmd, path, cmdName)
-			})
-		}
-	}
-
-	// Silent execution - errors are ignored
 }

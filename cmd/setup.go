@@ -46,13 +46,17 @@ func newSetupCommand() *cobra.Command {
 				return fmt.Errorf("inspect existing Saltbox Git repository: %w", err)
 			}
 
-			return runner.Run(ctx, terminal.TaskSpec{
+			if err := runner.Run(ctx, terminal.TaskSpec{
 				Running: "Installing Saltbox",
 				Success: "Saltbox installation completed",
 				Failure: "Saltbox installation",
 			}, func(ctx context.Context, task *terminal.Task) error {
 				return runSetup(ctx, task, opts.verbose, selectedBranch)
-			})
+			}); err != nil {
+				return err
+			}
+			regenerateInstalledCompletions(ctx, cmd.Root(), runner)
+			return nil
 		},
 	}
 	setupCmd.PersistentFlags().BoolVarP(&opts.verbose, "verbose", "v", false, "Enable verbose output")

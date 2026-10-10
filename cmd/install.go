@@ -49,6 +49,10 @@ type installOptions struct {
 
 // installCmd represents the install command
 func newInstallCommand() *cobra.Command {
+	return newInstallCommandWithTagLoader(loadCompletionTags)
+}
+
+func newInstallCommandWithTagLoader(loadTags func() ([]string, error)) *cobra.Command {
 	var opts installOptions
 	installCmd := &cobra.Command{
 		Use:   "install [tags]",
@@ -87,35 +91,12 @@ func newInstallCommand() *cobra.Command {
 
 			return handleInstall(cmd, tags, opts.extraVars, opts.skipTags, extraArgs, opts.ansibleVerbosity, opts.noCache, opts.forceDiskFull)
 		},
-		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			// Initialize cache
-			cacheInstance, err := ansible.NewCache()
+		ValidArgsFunction: func(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			tags, err := loadTags()
 			if err != nil {
-				return nil, cobra.ShellCompDirectiveError
+				return nil, cobra.ShellCompDirectiveNoFileComp
 			}
-
-			// Check if cache is populated
-			if !isCachePopulated(cacheInstance) {
-				// Try to auto-generate cache - at least one must succeed for completion to work
-				ctx := cmd.Context()
-
-				// Try Saltbox first
-				_, saltboxErr := ansible.RunAndCacheAnsibleTags(ctx, layout.SaltboxRepoPath, layout.SaltboxPlaybookPath(), "", cacheInstance, 0)
-				saltboxSuccess := saltboxErr == nil
-
-				// Try Sandbox
-				_, sandboxErr := ansible.RunAndCacheAnsibleTags(ctx, layout.Current().SandboxRepoPath, layout.SandboxPlaybookPath(), "", cacheInstance, 0)
-				sandboxSuccess := sandboxErr == nil
-
-				// If both failed, abort completion
-				if !saltboxSuccess && !sandboxSuccess {
-					return nil, cobra.ShellCompDirectiveError
-				}
-			}
-
-			// Retrieve and return all tags
-			allTags := getCompletionTags(cacheInstance)
-			return allTags, cobra.ShellCompDirectiveNoFileComp
+			return completeInstallTags(tags, args, toComplete)
 		},
 	}
 	installCmd.Flags().StringArrayVarP(&opts.extraVars, "extra-vars", "e", []string{}, "Extra variables to pass to Ansible")
@@ -588,57 +569,4 @@ func cacheExistsAndIsValid(repoPath string, cacheInstance *ansible.Cache, verbos
 
 	terminal.Debug(verbosity, "cacheExistsAndIsValid: 'tags' is not a []interface{} for %s (type: %T)", repoPath, cachedTagsInterface)
 	return false
-}
-
-// isCachePopulated checks if the cache has valid tags for at least one repository
-func isCachePopulated(cacheInstance *ansible.Cache) bool {
-	// Check Saltbox cache using existing validation function
-	if cacheExistsAndIsValid(layout.SaltboxRepoPath, cacheInstance, 0) {
-		return true
-	}
-
-	// Check Sandbox cache using existing validation function
-	if cacheExistsAndIsValid(layout.Current().SandboxRepoPath, cacheInstance, 0) {
-		return true
-	}
-
-	return false
-}
-
-// getCompletionTags retrieves and formats all tags from cache for shell completion
-func getCompletionTags(cacheInstance *ansible.Cache) []string {
-	var allTags []string
-
-	// Get Saltbox tags (returned as-is)
-	saltboxCache, ok := cacheInstance.GetRepoCache(layout.SaltboxRepoPath)
-	if ok {
-		allTags = append(allTags, cachedTagStrings(saltboxCache["tags"])...)
-	}
-
-	// Get Sandbox tags (prefixed with "sandbox-")
-	sandboxCache, ok := cacheInstance.GetRepoCache(layout.Current().SandboxRepoPath)
-	if ok {
-		for _, tag := range cachedTagStrings(sandboxCache["tags"]) {
-			allTags = append(allTags, "sandbox-"+tag)
-		}
-	}
-
-	return allTags
-}
-
-func cachedTagStrings(value any) []string {
-	switch tags := value.(type) {
-	case []string:
-		return slices.Clone(tags)
-	case []any:
-		result := make([]string, 0, len(tags))
-		for _, tag := range tags {
-			if stringTag, ok := tag.(string); ok {
-				result = append(result, stringTag)
-			}
-		}
-		return result
-	default:
-		return nil
-	}
 }
