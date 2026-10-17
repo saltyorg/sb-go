@@ -232,8 +232,28 @@ func addEditCommand(rootCmd *cobra.Command) {
 	editCmd := &cobra.Command{
 		Use:   "edit",
 		Short: "Edit Saltbox configuration files",
-		Long:  `Edit Saltbox configuration files using your default editor.`,
-		Args:  cobra.NoArgs,
+		Long: `Edit existing Saltbox configuration files using your preferred editor.
+
+Set VISUAL or EDITOR to an executable editor, with optional quoted arguments.
+VISUAL takes precedence over EDITOR. If neither is set, sb tries sensible-editor,
+editor, nano, then vi, using the first executable it finds.
+
+Export your preference, for example:
+  export EDITOR="/usr/bin/vim.basic"
+
+Editors run as root. Sudo may change HOME and PATH. Use an absolute executable
+path for editors installed outside sudo's PATH. If you invoke sudo yourself, pass the
+preference explicitly:
+  sudo EDITOR=/usr/bin/vim.basic sb edit settings
+
+Quotes and backslash escapes are supported. Shell aliases, functions, variable
+expansion, substitutions, and ~ expansion are not supported. Editor wrappers
+should exec the foreground editor so cancellation can stop it. GUI clients may
+need a wait option and a working root GUI session.
+
+Configuration targets must already exist and be regular files. Symlinks to
+regular files are supported.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runBubbleTeaList(cmd)
 		},

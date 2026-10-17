@@ -12,7 +12,7 @@ import (
 )
 
 func TestCommandTreeContract(t *testing.T) {
-	const want = "f7603040cf05d10774c1bee597e53948be3208cb29b014da19c252d9ed0ecbfa"
+	const want = "2c858246292d5ce9ac903a345e6242b3d42af7f83a0c23d68b694315ae614ada"
 	contract := commandTreeContract(NewRootCommand(Dependencies{}))
 	got := fmt.Sprintf("%x", sha256.Sum256([]byte(contract)))
 	if got != want {
