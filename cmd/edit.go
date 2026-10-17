@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/saltyorg/sb-go/layout"
 	"github.com/saltyorg/sb-go/signals"
@@ -14,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/kballard/go-shellquote"
 	"github.com/spf13/cobra"
 )
 
@@ -110,9 +110,12 @@ func editorCommand(ctx context.Context, path string) (*exec.Cmd, error) {
 		editor = "nano" // Default to nano if EDITOR is not set
 	}
 
-	// Validate and sanitize editor command
-	editorParts := strings.Fields(editor)
-	if len(editorParts) == 0 {
+	// Parse quoting and escapes without expanding or executing shell syntax.
+	editorParts, err := shellquote.Split(editor)
+	if err != nil {
+		return nil, fmt.Errorf("invalid EDITOR environment variable: %w", err)
+	}
+	if len(editorParts) == 0 || editorParts[0] == "" {
 		return nil, fmt.Errorf("invalid EDITOR environment variable")
 	}
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,61 @@ import (
 
 	"github.com/saltyorg/sb-go/host"
 )
+
+func TestEditorCommandQuotedArguments(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.yml")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	editor := filepath.Join(dir, "editor with spaces")
+	if err := os.WriteFile(editor, []byte("#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name string
+		args string
+		want []string
+	}{
+		{"double quotes", `-c "set number"`, []string{"-c", "set number"}},
+		{"single quotes", `-c 'set number'`, []string{"-c", "set number"}},
+		{"backslash", `escaped\ argument`, []string{"escaped argument"}},
+		{"empty arguments", `"" ''`, []string{"", ""}},
+		{"literal shell syntax", `$HOME $(command) ; * ~`, []string{"$HOME", "$(command)", ";", "*", "~"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("EDITOR", "'"+editor+"' "+tt.args)
+			command, err := editorCommand(t.Context(), path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := append(append([]string{editor}, tt.want...), path)
+			if !slices.Equal(command.Args, want) {
+				t.Fatalf("editor args = %q, want %q", command.Args, want)
+			}
+			output, err := command.Output()
+			wantOutput := "<" + strings.Join(want[1:], ">\n<") + ">\n"
+			if err != nil || string(output) != wantOutput {
+				t.Fatalf("editor output = %q, %v, want %q", output, err, wantOutput)
+			}
+		})
+	}
+}
+
+func TestEditorCommandRejectsInvalidQuoting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.yml")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{`vim "unterminated`, `vim 'unterminated`, `vim trailing\`, `"" -R`, "   "} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("EDITOR", value)
+			if _, err := editorCommand(t.Context(), path); err == nil || !strings.Contains(err.Error(), "invalid EDITOR") {
+				t.Fatalf("invalid editor %q returned %v", value, err)
+			}
+		})
+	}
+}
 
 func TestConfigSelectorReturnsEditorErrors(t *testing.T) {
 	for _, kind := range []string{"editor exit", "missing editor", "missing configuration"} {

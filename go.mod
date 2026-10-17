@@ -17,6 +17,7 @@ require (
 	github.com/charmbracelet/x/exp/charmtone v0.1.0
 	github.com/cloudflare/cloudflare-go/v7 v7.12.0
 	github.com/creack/pty v1.1.24
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/mattn/go-isatty v0.0.24
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/moby/moby/api v1.56.1
