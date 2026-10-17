@@ -109,9 +109,9 @@ lint: ## Run golangci-lint (always uses latest version)
 
 check: modernize fmt vet lint ## Run all code quality checks (modernize, fmt, vet, lint)
 
-modernize: ## Run Go modernization tool to update code to latest patterns
+modernize: ## Apply Go modernization fixes using the project toolchain
 	@echo "$(GREEN)Running Go modernization tool...$(NC)"
-	go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
+	go fix ./...
 	@echo "$(GREEN)Modernization complete$(NC)"
 
 ##@ Dependencies
