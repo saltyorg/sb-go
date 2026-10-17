@@ -107,18 +107,9 @@ func editorCommand(ctx context.Context, path string) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("inspect configuration file %s: %w", path, err)
 	}
 
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "nano" // Default to nano if EDITOR is not set
-	}
-
-	// Parse quoting and escapes without expanding or executing shell syntax.
-	editorParts, err := shellquote.Split(editor)
+	editorParts, err := preferredEditor()
 	if err != nil {
-		return nil, fmt.Errorf("invalid EDITOR environment variable: %w", err)
-	}
-	if len(editorParts) == 0 || editorParts[0] == "" {
-		return nil, fmt.Errorf("invalid EDITOR environment variable")
+		return nil, err
 	}
 
 	// Get the absolute path of the editor executable
@@ -136,6 +127,30 @@ func editorCommand(ctx context.Context, path string) (*exec.Cmd, error) {
 	}
 
 	return exec.CommandContext(ctx, editorPath, args...), nil
+}
+
+func preferredEditor() ([]string, error) {
+	for _, variable := range []string{"VISUAL", "EDITOR"} {
+		value := os.Getenv(variable)
+		if value == "" {
+			continue
+		}
+		// Parse quoting and escapes without expanding or executing shell syntax.
+		parts, err := shellquote.Split(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s environment variable: %w", variable, err)
+		}
+		if len(parts) == 0 || parts[0] == "" {
+			return nil, fmt.Errorf("invalid %s environment variable", variable)
+		}
+		return parts, nil
+	}
+	for _, candidate := range []string{"sensible-editor", "editor", "nano", "vi"} {
+		if path, err := exec.LookPath(candidate); err == nil {
+			return []string{path}, nil
+		}
+	}
+	return nil, fmt.Errorf("no editor found; set VISUAL or EDITOR to an executable editor")
 }
 
 func openEditor(cmd *cobra.Command, path string) error {

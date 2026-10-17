@@ -33,7 +33,7 @@ func TestEditFileCommandUsesCobraStreams(t *testing.T) {
 	if err := os.WriteFile(editor, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("EDITOR", editor)
+	setTestEditor(t, editor)
 	var output, stderr bytes.Buffer
 	root := &cobra.Command{Use: "sb"}
 	root.SetIn(strings.NewReader("typed input\n"))
@@ -63,7 +63,7 @@ func TestConfigSelectorEditorUsesTerminalStreams(t *testing.T) {
 	if err := os.WriteFile(editor, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("EDITOR", editor)
+	setTestEditor(t, editor)
 	master, slave, err := pty.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ func TestEditorCommandValidatesExecutable(t *testing.T) {
 	}
 	for _, editor := range []string{filepath.Join(dir, "missing"), nonExecutable, dir, "sb-test-missing-editor"} {
 		t.Run(editor, func(t *testing.T) {
-			t.Setenv("EDITOR", editor)
+			setTestEditor(t, editor)
 			if _, err := editorCommand(t.Context(), path); err == nil {
 				t.Fatalf("invalid executable %q was accepted", editor)
 			}
@@ -183,7 +183,7 @@ func TestEditorCommandQuotedArguments(t *testing.T) {
 		{"literal shell syntax", `$HOME $(command) ; * ~`, []string{"$HOME", "$(command)", ";", "*", "~"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("EDITOR", "'"+editor+"' "+tt.args)
+			setTestEditor(t, "'"+editor+"' "+tt.args)
 			command, err := editorCommand(t.Context(), path)
 			if err != nil {
 				t.Fatal(err)
@@ -208,7 +208,7 @@ func TestEditorCommandRejectsInvalidQuoting(t *testing.T) {
 	}
 	for _, value := range []string{`vim "unterminated`, `vim 'unterminated`, `vim trailing\`, `"" -R`, "   "} {
 		t.Run(value, func(t *testing.T) {
-			t.Setenv("EDITOR", value)
+			setTestEditor(t, value)
 			if _, err := editorCommand(t.Context(), path); err == nil || !strings.Contains(err.Error(), "invalid EDITOR") {
 				t.Fatalf("invalid editor %q returned %v", value, err)
 			}
@@ -234,7 +234,7 @@ func TestConfigSelectorReturnsEditorErrors(t *testing.T) {
 			} else {
 				editor = "sb-test-missing-editor"
 			}
-			t.Setenv("EDITOR", editor)
+			setTestEditor(t, editor)
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			err := runConfigSelector(selectorTestModel(ctx, path), tea.WithInput(strings.NewReader("\r")),
@@ -266,7 +266,7 @@ func TestEditorCommandUsesEditor(t *testing.T) {
 	if err := os.WriteFile(editor, []byte("#!/bin/sh\nprintf '%s' \"$1\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("EDITOR", editor)
+	setTestEditor(t, editor)
 	c, err := editorCommand(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
@@ -287,10 +287,10 @@ func TestEditorSurvivesRootRelaunch(t *testing.T) {
 	dir := t.TempDir()
 	// Model sudo's environment filtering without changing users or sudo policy.
 	sudo := `#!/bin/sh
-if [ "$1" = "--preserve-env=EDITOR" ]; then
+if [ "$1" = "--preserve-env=VISUAL,EDITOR" ]; then
     shift
 else
-    unset EDITOR
+    unset VISUAL EDITOR
 fi
 exec "$@"
 `
@@ -308,21 +308,81 @@ exec "$@"
 	if err := os.WriteFile(editor, []byte("#!/bin/sh\nprintf '%s' \"$1\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("EDITOR", editor)
+	setTestEditor(t, editor)
 	t.Setenv("SB_TEST_EDITOR_RELAUNCH", dir)
 	originalArgs := os.Args
 	os.Args = []string{os.Args[0], "-test.run=^TestEditorRelaunchHelper$"}
 	t.Cleanup(func() { os.Args = originalArgs })
-	if code, err := host.RelaunchAsRoot(); err != nil || code != 0 {
-		t.Fatalf("relaunch = %d, %v", code, err)
+	for _, variable := range []string{"EDITOR", "VISUAL"} {
+		t.Run(variable, func(t *testing.T) {
+			setTestEditor(t, "")
+			t.Setenv(variable, editor)
+			if code, err := host.RelaunchAsRoot(); err != nil || code != 0 {
+				t.Fatalf("relaunch = %d, %v", code, err)
+			}
+			selected, err := os.ReadFile(filepath.Join(dir, "selected-editor"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := editor + "\n" + filepath.Join(dir, "settings.yml")
+			if string(selected) != want {
+				t.Fatalf("editor after sudo = %q, want %q", selected, want)
+			}
+		})
 	}
-	selected, err := os.ReadFile(filepath.Join(dir, "selected-editor"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := editor + "\n" + filepath.Join(dir, "settings.yml")
-	if string(selected) != want {
-		t.Fatalf("editor after sudo = %q, want %q", selected, want)
+}
+
+func TestEditorCommandPreferences(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		visual    string
+		editor    string
+		installed []string
+		want      string
+	}{
+		{"visual first", "custom-visual", "custom-editor", []string{"custom-visual", "custom-editor"}, "custom-visual"},
+		{"editor next", "", "custom-editor", []string{"custom-editor", "nano"}, "custom-editor"},
+		{"system helper", "", "", []string{"sensible-editor", "editor", "nano", "vi"}, "sensible-editor"},
+		{"system alternative", "", "", []string{"editor", "nano", "vi"}, "editor"},
+		{"nano fallback", "", "", []string{"nano", "vi"}, "nano"},
+		{"vi fallback", "", "", []string{"vi"}, "vi"},
+		{"no editor", "", "", nil, ""},
+		{"invalid explicit editor", "", "missing", []string{"nano"}, ""},
+		{"invalid explicit visual", "missing", "custom-editor", []string{"custom-editor"}, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "settings.yml")
+			if err := os.WriteFile(path, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range tt.installed {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\nprintf '%s' \"$0\"\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			t.Setenv("PATH", dir)
+			t.Setenv("VISUAL", tt.visual)
+			t.Setenv("EDITOR", tt.editor)
+			command, err := editorCommand(t.Context(), path)
+			if tt.want == "" {
+				if err == nil {
+					t.Fatal("expected an editor selection error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := filepath.Join(dir, tt.want)
+			if command.Path != want {
+				t.Fatalf("editor = %q, want %q", command.Path, want)
+			}
+			output, err := command.Output()
+			if err != nil || string(output) != want {
+				t.Fatalf("editor execution = %q, %v, want %q", output, err, want)
+			}
+		})
 	}
 }
 
@@ -359,7 +419,7 @@ func TestEditorCancellation(t *testing.T) {
 			}
 			defer listener.Close()
 			t.Setenv("SB_TEST_EDITOR_CANCEL_SOCKET", socket)
-			t.Setenv("EDITOR", os.Args[0]+" -test.run=^TestEditorCancellationHelper$")
+			setTestEditor(t, os.Args[0]+" -test.run=^TestEditorCancellationHelper$")
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			done := make(chan error, 1)
@@ -394,6 +454,12 @@ func TestEditorCancellation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func setTestEditor(t *testing.T, value string) {
+	t.Helper()
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", value)
 }
 
 func TestEditorCancellationHelper(t *testing.T) {
