@@ -64,7 +64,7 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "enter" {
 			selectedItem, ok := m.list.SelectedItem().(ConfigItem)
 			if ok {
-				c, err := editorCommand(selectedItem.path)
+				c, err := editorCommand(m.ctx, selectedItem.path)
 				if err != nil {
 					m.err = err
 					return m, tea.Quit
@@ -96,7 +96,7 @@ func (m ConfigSelectorModel) View() tea.View {
 }
 
 // editorCommand builds an *exec.Cmd for the user's preferred editor.
-func editorCommand(path string) (*exec.Cmd, error) {
+func editorCommand(ctx context.Context, path string) (*exec.Cmd, error) {
 	// Check if file exists
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
@@ -134,15 +134,14 @@ func editorCommand(path string) (*exec.Cmd, error) {
 		args = []string{path}
 	}
 
-	return exec.Command(editorPath, args...), nil
+	return exec.CommandContext(ctx, editorPath, args...), nil
 }
 
 func openEditor(ctx context.Context, path string) error {
-	c, err := editorCommand(path)
+	c, err := editorCommand(ctx, path)
 	if err != nil {
 		return err
 	}
-	c = exec.CommandContext(ctx, c.Path, c.Args[1:]...)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr

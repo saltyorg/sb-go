@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -68,7 +69,7 @@ func TestEditorCommandUsesEditor(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("EDITOR", editor)
-	c, err := editorCommand(path)
+	c, err := editorCommand(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +133,7 @@ func TestEditorRelaunchHelper(t *testing.T) {
 	if dir == "" {
 		return
 	}
-	c, err := editorCommand(filepath.Join(dir, "settings.yml"))
+	c, err := editorCommand(t.Context(), filepath.Join(dir, "settings.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,4 +144,67 @@ func TestEditorRelaunchHelper(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "selected-editor"), []byte(strings.Join([]string{c.Path, string(output)}, "\n")), 0600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestEditorCancellation(t *testing.T) {
+	for _, mode := range []string{"direct", "selector"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "settings.yml")
+			if err := os.WriteFile(path, nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			socket := filepath.Join(dir, "ready.sock")
+			listener, err := net.Listen("unix", socket)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer listener.Close()
+			t.Setenv("SB_TEST_EDITOR_CANCEL_SOCKET", socket)
+			t.Setenv("EDITOR", os.Args[0]+" -test.run=^TestEditorCancellationHelper$")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				if mode == "direct" {
+					done <- openEditor(ctx, path)
+					return
+				}
+				done <- runConfigSelector(selectorTestModel(ctx, path), tea.WithInput(strings.NewReader("\r")),
+					tea.WithOutput(io.Discard), tea.WithoutRenderer(), tea.WithoutSignalHandler())
+			}()
+			if err := listener.(*net.UnixListener).SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			connection, err := listener.Accept()
+			if err != nil {
+				t.Fatalf("editor did not start: %v", err)
+			}
+			defer connection.Close()
+			cancel()
+			select {
+			case err := <-done:
+				if err == nil {
+					t.Error("cancelled editing returned success")
+				}
+			case <-time.After(5 * time.Second):
+				_ = connection.Close() // Release the helper if cancellation failed.
+				<-done
+				t.Fatal("cancellation did not stop the editor")
+			}
+		})
+	}
+}
+
+func TestEditorCancellationHelper(t *testing.T) {
+	socket := os.Getenv("SB_TEST_EDITOR_CANCEL_SOCKET")
+	if socket == "" {
+		t.Skip("editor subprocess helper")
+	}
+	connection, err := net.Dial("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	_, _ = io.Copy(io.Discard, connection)
 }
