@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 
@@ -37,9 +38,10 @@ var docStyle = lipgloss.NewStyle().Margin(1, 2)
 
 // ConfigSelectorModel represents the bubbletea model for selecting configuration files
 type ConfigSelectorModel struct {
-	ctx  context.Context
-	list list.Model
-	err  error
+	ctx    context.Context
+	list   list.Model
+	stderr io.Writer
+	err    error
 }
 
 func (m ConfigSelectorModel) Init() tea.Cmd {
@@ -68,6 +70,7 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.err = err
 					return m, tea.Quit
 				}
+				c.Stderr = m.stderr
 				return m, tea.ExecProcess(c, func(err error) tea.Msg {
 					return editorFinishedMsg{err}
 				})
@@ -135,21 +138,21 @@ func editorCommand(ctx context.Context, path string) (*exec.Cmd, error) {
 	return exec.CommandContext(ctx, editorPath, args...), nil
 }
 
-func openEditor(ctx context.Context, path string) error {
-	c, err := editorCommand(ctx, path)
+func openEditor(cmd *cobra.Command, path string) error {
+	c, err := editorCommand(cmd.Context(), path)
 	if err != nil {
 		return err
 	}
-	c.Stdin = os.Stdin
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
+	c.Stdin = cmd.InOrStdin()
+	c.Stdout = cmd.OutOrStdout()
+	c.Stderr = cmd.ErrOrStderr()
 	if err := c.Run(); err != nil {
 		return fmt.Errorf("error opening editor: %w", err)
 	}
 	return nil
 }
 
-func runBubbleTeaList(ctx context.Context) error {
+func runBubbleTeaList(cmd *cobra.Command) error {
 	configItems := []list.Item{
 		ConfigItem{
 			title:       "Accounts",
@@ -185,7 +188,7 @@ func runBubbleTeaList(ctx context.Context) error {
 
 	// Initialize a list with proper dimensions
 	delegate := list.NewDefaultDelegate()
-	m := ConfigSelectorModel{ctx: ctx, list: list.New(configItems, delegate, 30, 10)} // Set width and height
+	m := ConfigSelectorModel{ctx: cmd.Context(), list: list.New(configItems, delegate, 30, 10), stderr: cmd.ErrOrStderr()} // Set width and height
 	m.list.SetShowTitle(false)
 	m.list.SetShowStatusBar(false)
 	m.list.SetFilteringEnabled(false)
@@ -194,7 +197,7 @@ func runBubbleTeaList(ctx context.Context) error {
 	m.list.SetShowPagination(false)
 
 	// Get terminal dimensions
-	return runConfigSelector(m)
+	return runConfigSelector(m, tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout()))
 }
 
 func runConfigSelector(m ConfigSelectorModel, options ...tea.ProgramOption) error {
@@ -214,64 +217,30 @@ func addEditCommand(rootCmd *cobra.Command) {
 		Long:  `Edit Saltbox configuration files using your default editor.`,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runBubbleTeaList(cmd.Context())
+			return runBubbleTeaList(cmd)
 		},
 	}
 
 	// Subcommands for each configuration file
-	editCmd.AddCommand(&cobra.Command{
-		Use:   "accounts",
-		Short: "Accounts",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), layout.SaltboxAccountsConfigPath)
-		},
-	})
-
-	editCmd.AddCommand(&cobra.Command{
-		Use:   "adv_settings",
-		Short: "Advanced Settings",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), layout.SaltboxAdvancedSettingsConfigPath)
-		},
-	})
-
-	editCmd.AddCommand(&cobra.Command{
-		Use:   "backup_config",
-		Short: "Backup Settings",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), layout.SaltboxBackupConfigPath)
-		},
-	})
-
-	editCmd.AddCommand(&cobra.Command{
-		Use:   "hetzner_vlan",
-		Short: "Hetzner VLAN Settings",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), layout.SaltboxHetznerVLANConfigPath)
-		},
-	})
-
-	editCmd.AddCommand(&cobra.Command{
-		Use:   "settings",
-		Short: "Settings",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), layout.SaltboxSettingsConfigPath)
-		},
-	})
-
-	editCmd.AddCommand(&cobra.Command{
-		Use:   "inventory",
-		Short: "Inventory Settings",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return openEditor(cmd.Context(), layout.SaltboxInventoryConfigPath)
-		},
-	})
+	editCmd.AddCommand(
+		newEditFileCommand("accounts", "Accounts", layout.SaltboxAccountsConfigPath),
+		newEditFileCommand("adv_settings", "Advanced Settings", layout.SaltboxAdvancedSettingsConfigPath),
+		newEditFileCommand("backup_config", "Backup Settings", layout.SaltboxBackupConfigPath),
+		newEditFileCommand("hetzner_vlan", "Hetzner VLAN Settings", layout.SaltboxHetznerVLANConfigPath),
+		newEditFileCommand("settings", "Settings", layout.SaltboxSettingsConfigPath),
+		newEditFileCommand("inventory", "Inventory Settings", layout.SaltboxInventoryConfigPath),
+	)
 
 	rootCmd.AddCommand(editCmd)
+}
+
+func newEditFileCommand(use, short, path string) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return openEditor(cmd, path)
+		},
+	}
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -15,9 +16,130 @@ import (
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"github.com/creack/pty"
+	"github.com/spf13/cobra"
 
 	"github.com/saltyorg/sb-go/host"
 )
+
+func TestEditFileCommandUsesCobraStreams(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.yml")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	editor := filepath.Join(dir, "editor")
+	script := "#!/bin/sh\nIFS= read -r line\nprintf 'out:%s:%s' \"$line\" \"$1\"\nprintf 'err:%s' \"$line\" >&2\n"
+	if err := os.WriteFile(editor, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EDITOR", editor)
+	var output, stderr bytes.Buffer
+	root := &cobra.Command{Use: "sb"}
+	root.SetIn(strings.NewReader("typed input\n"))
+	root.SetOut(&output)
+	root.SetErr(&stderr)
+	root.AddCommand(newEditFileCommand("fixture", "Fixture", path))
+	root.SetArgs([]string{"fixture"})
+	if err := root.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if want := "out:typed input:" + path; output.String() != want {
+		t.Errorf("editor output = %q, want %q", output.String(), want)
+	}
+	if stderr.String() != "err:typed input" {
+		t.Errorf("editor stderr = %q", stderr.String())
+	}
+}
+
+func TestConfigSelectorEditorUsesTerminalStreams(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.yml")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	editor := filepath.Join(dir, "editor")
+	script := "#!/bin/sh\nprintf '\\nEDITOR_READY\\n'\nIFS= read -r line\nprintf 'OUT:%s\\n' \"$line\"\nprintf 'ERR:%s' \"$line\" >&2\n"
+	if err := os.WriteFile(editor, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EDITOR", editor)
+	master, slave, err := pty.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer master.Close()
+	defer slave.Close()
+	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 100}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var stderr bytes.Buffer
+	model := selectorTestModel(ctx, path)
+	model.stderr = &stderr
+	done := make(chan error, 1)
+	go func() {
+		done <- runConfigSelector(model, tea.WithInput(slave), tea.WithOutput(slave), tea.WithoutSignalHandler())
+	}()
+	selectorReady, ready, output := make(chan struct{}), make(chan struct{}), make(chan string, 1)
+	go func() {
+		var transcript strings.Builder
+		data := make([]byte, 4096)
+		selectorSeen, editorSeen := false, false
+		for {
+			n, err := master.Read(data)
+			if err != nil {
+				output <- "read error: " + err.Error()
+				return
+			}
+			transcript.Write(data[:n])
+			text := transcript.String()
+			if !selectorSeen && strings.Contains(text, "Select a Saltbox configuration file to edit:") {
+				selectorSeen = true
+				close(selectorReady)
+			}
+			if !editorSeen && strings.Contains(text, "EDITOR_READY") {
+				editorSeen = true
+				close(ready)
+			}
+			if strings.Contains(text, "OUT:typed input") {
+				output <- text
+				return
+			}
+		}
+	}()
+	select {
+	case <-selectorReady:
+	case <-ctx.Done():
+		t.Fatal("selector did not render on its output terminal")
+	}
+	if _, err := master.Write([]byte("\r")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-ctx.Done():
+		t.Fatal("selector did not start editor on its output terminal")
+	}
+	if _, err := master.Write([]byte("typed input\n")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case got := <-output:
+		if !strings.Contains(got, "OUT:typed input") {
+			t.Errorf("editor output = %q", got)
+		}
+	case <-ctx.Done():
+		t.Fatal("editor did not read from selector input")
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if stderr.String() != "ERR:typed input" {
+		t.Errorf("editor stderr = %q", stderr.String())
+	}
+}
 
 func TestEditorCommandValidatesExecutable(t *testing.T) {
 	dir := t.TempDir()
@@ -243,7 +365,9 @@ func TestEditorCancellation(t *testing.T) {
 			done := make(chan error, 1)
 			go func() {
 				if mode == "direct" {
-					done <- openEditor(ctx, path)
+					command := &cobra.Command{}
+					command.SetContext(ctx)
+					done <- openEditor(command, path)
 					return
 				}
 				done <- runConfigSelector(selectorTestModel(ctx, path), tea.WithInput(strings.NewReader("\r")),
