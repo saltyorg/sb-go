@@ -112,8 +112,8 @@ func TestConfigSelectorEditorUsesTerminalStreams(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer master.Close()
-	defer slave.Close()
+	defer closeEditFixture(t, master)
+	defer closeEditFixture(t, slave)
 	if err := pty.Setsize(master, &pty.Winsize{Rows: 24, Cols: 100}); err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +461,7 @@ func TestEditorCancellation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer listener.Close()
+			defer closeEditFixture(t, listener)
 			t.Setenv("SB_TEST_EDITOR_CANCEL_SOCKET", socket)
 			setTestEditor(t, os.Args[0]+" -test.run=^TestEditorCancellationHelper$")
 			ctx, cancel := context.WithCancel(t.Context())
@@ -484,7 +484,7 @@ func TestEditorCancellation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("editor did not start: %v", err)
 			}
-			defer connection.Close()
+			defer closeEditFixture(t, connection)
 			cancel()
 			select {
 			case err := <-done:
@@ -493,8 +493,8 @@ func TestEditorCancellation(t *testing.T) {
 				}
 			case <-time.After(5 * time.Second):
 				_ = connection.Close() // Release the helper if cancellation failed.
-				<-done
-				t.Fatal("cancellation did not stop the editor")
+				err := <-done
+				t.Fatalf("cancellation did not stop the editor; forced completion: %v", err)
 			}
 		})
 	}
@@ -515,6 +515,14 @@ func TestEditorCancellationHelper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer connection.Close()
+	defer closeEditFixture(t, connection)
 	_, _ = io.Copy(io.Discard, connection)
+}
+
+func closeEditFixture(t *testing.T, fixture io.Closer) {
+	t.Helper()
+	// Failure recovery may close a fixture before deferred cleanup runs.
+	if err := fixture.Close(); err != nil && !errors.Is(err, net.ErrClosed) && !errors.Is(err, os.ErrClosed) {
+		t.Errorf("close editor fixture: %v", err)
+	}
 }
