@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -21,6 +22,49 @@ import (
 
 	"github.com/saltyorg/sb-go/host"
 )
+
+func TestEditorCommandValidatesConfigurationFile(t *testing.T) {
+	dir := t.TempDir()
+	regular := filepath.Join(dir, "settings.yml")
+	if err := os.WriteFile(regular, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	fifo := filepath.Join(dir, "fifo")
+	if err := syscall.Mkfifo(fifo, 0600); err != nil {
+		t.Fatal(err)
+	}
+	fileLink, directoryLink := filepath.Join(dir, "file-link"), filepath.Join(dir, "directory-link")
+	if err := os.Symlink(regular, fileLink); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(dir, directoryLink); err != nil {
+		t.Fatal(err)
+	}
+	editor := filepath.Join(dir, "editor")
+	if err := os.WriteFile(editor, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	setTestEditor(t, editor)
+	for _, tt := range []struct {
+		name  string
+		path  string
+		valid bool
+	}{
+		{"regular", regular, true},
+		{"regular symlink", fileLink, true},
+		{"directory", dir, false},
+		{"directory symlink", directoryLink, false},
+		{"fifo", fifo, false},
+		{"missing", filepath.Join(dir, "missing"), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := editorCommand(t.Context(), tt.path)
+			if (err == nil) != tt.valid {
+				t.Fatalf("configuration %q error = %v, want valid=%v", tt.path, err, tt.valid)
+			}
+		})
+	}
+}
 
 func TestEditFileCommandUsesCobraStreams(t *testing.T) {
 	dir := t.TempDir()

@@ -99,12 +99,15 @@ func (m ConfigSelectorModel) View() tea.View {
 
 // editorCommand builds an *exec.Cmd for the user's preferred editor.
 func editorCommand(ctx context.Context, path string) (*exec.Cmd, error) {
-	// Check if file exists
-	if _, err := os.Stat(path); err != nil {
+	info, err := os.Stat(path)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("configuration file does not yet exist: %s", path)
 		}
 		return nil, fmt.Errorf("inspect configuration file %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("configuration path is not a regular file: %s", path)
 	}
 
 	editorParts, err := preferredEditor()
