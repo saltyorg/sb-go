@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/saltyorg/sb-go/buildinfo"
+	"github.com/saltyorg/sb-go/completion"
 	"github.com/saltyorg/sb-go/layout"
 	"github.com/saltyorg/sb-go/selfupdate"
 	"github.com/saltyorg/sb-go/terminal"
@@ -110,20 +110,14 @@ func refreshCompletionsAfterSelfUpdate(ctx context.Context, runner *terminal.Run
 	// The replaced process still has the old command tree and generator in memory.
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, executablePath, "completion", "install")
-	command.WaitDelay = time.Second
-	var output bytes.Buffer
-	command.Stdout = &output
-	command.Stderr = &output
-	if err := command.Run(); err != nil {
+	err := runShellCompletionTasks(ctx, runner, func(ctx context.Context, shell completion.Shell, stdout, stderr io.Writer) error {
+		command := exec.CommandContext(ctx, executablePath, "completion", "install", string(shell), "--allow-unavailable")
+		command.WaitDelay = time.Second
+		command.Stdout, command.Stderr = stdout, stderr
+		return command.Run()
+	})
+	if err != nil {
 		runner.Warning(fmt.Sprintf("CLI updated, but shell completion refresh failed: %v", err))
-		if text := strings.TrimSpace(output.String()); text != "" {
-			runner.Warning(text)
-		}
-		return
-	}
-	if text := strings.TrimSpace(output.String()); text != "" {
-		runner.Info(text)
 	}
 }
 

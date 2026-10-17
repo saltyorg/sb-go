@@ -66,7 +66,8 @@ func addCompletionCommandWithManager(rootCmd *cobra.Command, manager *completion
 			},
 		})
 	}
-	command.AddCommand(&cobra.Command{
+	var allowUnavailable bool
+	installCommand := &cobra.Command{
 		Use:       "install [bash|zsh|fish]",
 		Short:     "Install completion for installed shells",
 		ValidArgs: []string{"bash", "zsh", "fish"},
@@ -75,9 +76,12 @@ func addCompletionCommandWithManager(rootCmd *cobra.Command, manager *completion
 			if len(args) == 0 {
 				return install(cmd, completion.SupportedShells(), false)
 			}
-			return install(cmd, []completion.Shell{completion.Shell(args[0])}, true)
+			return install(cmd, []completion.Shell{completion.Shell(args[0])}, !allowUnavailable)
 		},
-	})
+	}
+	installCommand.Flags().BoolVar(&allowUnavailable, "allow-unavailable", false, "Allow an unavailable shell during automatic completion refresh")
+	_ = installCommand.Flags().MarkHidden("allow-unavailable")
+	command.AddCommand(installCommand)
 	command.AddCommand(&cobra.Command{
 		Use:       "generate <bash|zsh|fish>",
 		Short:     "Write a completion script to standard output",
@@ -158,22 +162,46 @@ func regenerateInstalledCompletions(ctx context.Context, rootCmd *cobra.Command,
 		runner.Warning(fmt.Sprintf("Shell completion refresh failed: %v", err))
 		return
 	}
-	results, err := completion.NewManager().Install(ctx, completion.SupportedShells(), names, func(shell completion.Shell, name string) ([]byte, error) {
-		return generateCompletion(rootCmd, shell, name)
+	regenerateInstalledCompletionsWith(ctx, rootCmd, runner, completion.NewManager(), names)
+}
+
+func regenerateInstalledCompletionsWith(ctx context.Context, rootCmd *cobra.Command, runner *terminal.Runner, manager *completion.Manager, names []string) {
+	err := runShellCompletionTasks(ctx, runner, func(ctx context.Context, shell completion.Shell, stdout, _ io.Writer) error {
+		results, installErr := manager.Install(ctx, []completion.Shell{shell}, names, func(shell completion.Shell, name string) ([]byte, error) {
+			return generateCompletion(rootCmd, shell, name)
+		})
+		return errors.Join(installErr, writeCompletionResults(stdout, results))
 	})
-	for _, result := range results {
-		if result.Status != completion.Failed {
-			var message bytes.Buffer
-			if writeErr := writeCompletionResults(&message, []completion.Result{result}); writeErr != nil {
-				runner.Warning(writeErr.Error())
-				continue
-			}
-			runner.Info(strings.TrimSpace(message.String()))
-		}
-	}
 	if err != nil {
 		runner.Warning(fmt.Sprintf("Shell completion refresh failed: %v", err))
 	}
+}
+
+func runShellCompletionTasks(ctx context.Context, runner *terminal.Runner, refresh func(context.Context, completion.Shell, io.Writer, io.Writer) error) error {
+	return runner.Run(ctx, terminal.TaskSpec{
+		Running: "Refreshing shell completions",
+		Success: "Shell completions refreshed",
+		Failure: "Shell completion refresh",
+	}, func(ctx context.Context, parent *terminal.Task) error {
+		var failures []error
+		for _, shell := range completion.SupportedShells() {
+			if err := ctx.Err(); err != nil {
+				return errors.Join(append(failures, err)...)
+			}
+			name := string(shell)
+			name = strings.ToUpper(name[:1]) + name[1:]
+			if err := parent.RunOutput(ctx, terminal.TaskSpec{
+				Running: "Refreshing " + name + " completion",
+				Success: name + " completion checked",
+				Failure: name + " completion refresh",
+			}, func(ctx context.Context, stdout, stderr io.Writer) error {
+				return refresh(ctx, shell, stdout, stderr)
+			}); err != nil {
+				failures = append(failures, err)
+			}
+		}
+		return errors.Join(failures...)
+	})
 }
 
 func getAllBinaryNames() ([]string, error) {
