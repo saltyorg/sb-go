@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/saltyorg/sb-go/layout"
 	"github.com/saltyorg/sb-go/signals"
@@ -122,11 +121,7 @@ func editorCommand(ctx context.Context, path string) (*exec.Cmd, error) {
 	// Get the absolute path of the editor executable
 	editorPath, err := exec.LookPath(editorParts[0])
 	if err != nil {
-		if filepath.IsAbs(editorParts[0]) {
-			editorPath = editorParts[0]
-		} else {
-			return nil, fmt.Errorf("editor '%s' not found in PATH", editorParts[0])
-		}
+		return nil, fmt.Errorf("find editor %q: %w", editorParts[0], err)
 	}
 
 	// Construct command with validated editor and additional args if any

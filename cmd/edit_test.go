@@ -19,6 +19,26 @@ import (
 	"github.com/saltyorg/sb-go/host"
 )
 
+func TestEditorCommandValidatesExecutable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.yml")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	nonExecutable := filepath.Join(dir, "not-executable")
+	if err := os.WriteFile(nonExecutable, []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, editor := range []string{filepath.Join(dir, "missing"), nonExecutable, dir, "sb-test-missing-editor"} {
+		t.Run(editor, func(t *testing.T) {
+			t.Setenv("EDITOR", editor)
+			if _, err := editorCommand(t.Context(), path); err == nil {
+				t.Fatalf("invalid executable %q was accepted", editor)
+			}
+		})
+	}
+}
+
 func TestEditorCommandQuotedArguments(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.yml")
