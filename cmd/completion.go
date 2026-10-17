@@ -66,6 +66,7 @@ func addCompletionCommandWithManager(rootCmd *cobra.Command, manager *completion
 			},
 		})
 	}
+	// Released 0.1.1 updaters pass this flag to the newly installed binary.
 	var allowUnavailable bool
 	installCommand := &cobra.Command{
 		Use:       "install [bash|zsh|fish]",

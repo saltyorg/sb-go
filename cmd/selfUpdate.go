@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/saltyorg/sb-go/buildinfo"
-	"github.com/saltyorg/sb-go/completion"
 	"github.com/saltyorg/sb-go/layout"
 	"github.com/saltyorg/sb-go/selfupdate"
 	"github.com/saltyorg/sb-go/terminal"
@@ -87,38 +84,13 @@ func runSelfUpdate(
 	if err != nil {
 		return false, fmt.Errorf("create release source: %w", err)
 	}
-	var executablePath string
-	updated, err := selfupdate.Run(ctx, source, runner, selfupdate.Options{
+	return selfupdate.Run(ctx, source, runner, selfupdate.Options{
 		BuildInfo:       info,
 		AutoAccept:      autoUpdate,
 		OptionalMessage: optionalMessage,
 		Force:           force,
 		Confirm:         confirm,
-		Executable: func() (string, error) {
-			path, err := os.Executable()
-			executablePath = path
-			return path, err
-		},
 	})
-	if updated && err == nil {
-		refreshCompletionsAfterSelfUpdate(ctx, runner, executablePath)
-	}
-	return updated, err
-}
-
-func refreshCompletionsAfterSelfUpdate(ctx context.Context, runner *terminal.Runner, executablePath string) {
-	// The replaced process still has the old command tree and generator in memory.
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	err := runShellCompletionTasks(ctx, runner, func(ctx context.Context, shell completion.Shell, stdout, stderr io.Writer) error {
-		command := exec.CommandContext(ctx, executablePath, "completion", "install", string(shell), "--allow-unavailable")
-		command.WaitDelay = time.Second
-		command.Stdout, command.Stderr = stdout, stderr
-		return command.Run()
-	})
-	if err != nil {
-		runner.Warning(fmt.Sprintf("CLI updated, but shell completion refresh failed: %v", err))
-	}
 }
 
 func doSelfUpdate(ctx context.Context, runner *terminal.Runner, info buildinfo.Info, autoUpdate bool, verbose bool, optionalMessage string, force bool) (bool, error) {
