@@ -1,13 +1,61 @@
 package cmd
 
 import (
+	"context"
+	"errors"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/saltyorg/sb-go/host"
 )
+
+func TestConfigSelectorReturnsEditorErrors(t *testing.T) {
+	for _, kind := range []string{"editor exit", "missing editor", "missing configuration"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "settings.yml")
+			if kind != "missing configuration" {
+				if err := os.WriteFile(path, nil, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			editor := filepath.Join(dir, "editor")
+			if kind != "missing editor" {
+				if err := os.WriteFile(editor, []byte("#!/bin/sh\nexit 7\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				editor = "sb-test-missing-editor"
+			}
+			t.Setenv("EDITOR", editor)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			err := runConfigSelector(selectorTestModel(ctx, path), tea.WithInput(strings.NewReader("\r")),
+				tea.WithOutput(io.Discard), tea.WithoutRenderer(), tea.WithoutSignalHandler())
+			if err == nil || ctx.Err() != nil {
+				t.Fatalf("selector error = %v, context = %v", err, ctx.Err())
+			}
+			if kind == "editor exit" {
+				var exitErr *exec.ExitError
+				if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 {
+					t.Fatalf("selector lost editor exit error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func selectorTestModel(ctx context.Context, path string) ConfigSelectorModel {
+	return ConfigSelectorModel{ctx: ctx, list: list.New([]list.Item{ConfigItem{title: "fixture", path: path}}, list.NewDefaultDelegate(), 80, 24)}
+}
 
 func TestEditorCommandUsesEditor(t *testing.T) {
 	dir := t.TempDir()

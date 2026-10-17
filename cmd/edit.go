@@ -40,6 +40,7 @@ var docStyle = lipgloss.NewStyle().Margin(1, 2)
 type ConfigSelectorModel struct {
 	ctx  context.Context
 	list list.Model
+	err  error
 }
 
 func (m ConfigSelectorModel) Init() tea.Cmd {
@@ -65,7 +66,7 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if ok {
 				c, err := editorCommand(selectedItem.path)
 				if err != nil {
-					fmt.Printf("Error: %v\n", err)
+					m.err = err
 					return m, tea.Quit
 				}
 				return m, tea.ExecProcess(c, func(err error) tea.Msg {
@@ -75,7 +76,7 @@ func (m ConfigSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case editorFinishedMsg:
 		if msg.err != nil {
-			fmt.Printf("Error: %v\n", msg.err)
+			m.err = fmt.Errorf("error opening editor: %w", msg.err)
 		}
 		return m, tea.Quit
 	case tea.WindowSizeMsg:
@@ -196,11 +197,17 @@ func runBubbleTeaList(ctx context.Context) error {
 	m.list.SetShowPagination(false)
 
 	// Get terminal dimensions
-	p := tea.NewProgram(m, tea.WithContext(ctx))
-	if _, err := p.Run(); err != nil {
+	return runConfigSelector(m)
+}
+
+func runConfigSelector(m ConfigSelectorModel, options ...tea.ProgramOption) error {
+	options = append([]tea.ProgramOption{tea.WithContext(m.ctx)}, options...)
+	p := tea.NewProgram(m, options...)
+	final, err := p.Run()
+	if err != nil {
 		return fmt.Errorf("error running bubbletea program: %w", err)
 	}
-	return nil
+	return final.(ConfigSelectorModel).err
 }
 
 func addEditCommand(rootCmd *cobra.Command) {
