@@ -44,7 +44,8 @@ func RelaunchAsRoot() (int, error) {
 	}
 
 	args := os.Args[1:] // Exclude the program name itself
-	cmd := exec.Command("sudo", append([]string{executable}, args...)...)
+	// Keep the user's editor preference when sudo filters the environment.
+	cmd := exec.Command("sudo", append([]string{"--preserve-env=EDITOR", executable}, args...)...)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
