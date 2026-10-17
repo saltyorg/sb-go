@@ -8,7 +8,7 @@ Generated: 2026-09-04
 - **Build**: GNU Make over the Go toolchain; `make build` is the authoritative local gate
 - **Test**: `make test` using Go `testing`, plus the action download shell test
 - **Lint**: golangci-lint v2 via `go run ...@latest` (CI gate: yes, through `make build`)
-- **Format**: `go fmt ./...` (CI runs it, but does not enforce a clean diff)
+- **Format**: agents run `make fmt` explicitly; `make fmt-check` checks formatting during builds without changing files
 
 ## Secondary Languages
 - Shell (installer, container/policy tests, embedded benchmark, composite action)
@@ -23,7 +23,7 @@ Generated: 2026-09-04
 - Tests: colocated `*_test.go`, standard `testing`, table/subtests and manual fakes; Linux PTY and integration/security tests where needed
 
 ## CI Gates
-- `test-gha` (push/PR): `make tidy`, `make test GO_TEST_FLAGS='-exec sudo'`, and `make build` (modernize, format, vet, lint, compile), then live `sb gha`, venv, fact, ownership, and Ansible syntax checks
+- `test-gha` (push/PR): `make tidy`, `make test GO_TEST_FLAGS='-exec sudo'`, and `make build` (formatting check, vet, lint, compile), then live `sb gha`, venv, fact, ownership, and Ansible syntax checks
 - `test-install` (installer-path push/PR): policy test plus curl/wget install, runtime verification, and binary repair
 - `build_and_release` (main push/tag): Linux amd64 build, embedded-toolchain validation, and development self-update-policy check
 - Branch-protection requirements are not declared in the repository, so workflow presence does not prove which jobs are required checks

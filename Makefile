@@ -31,7 +31,7 @@ NC := \033[0m # No Color
 .DEFAULT_GOAL := build
 
 # Phony targets (don't produce files with these names)
-.PHONY: all build test test-action-download test-action-isolation test-deadsnakes-container test-install-policy clean fmt vet lint run help version deps tidy update update-patch check modernize
+.PHONY: all build test test-action-download test-action-isolation test-deadsnakes-container test-install-policy clean fmt fmt-check vet lint run help version deps tidy update update-patch check modernize
 
 ##@ General
 
@@ -99,6 +99,17 @@ fmt: ## Format Go code
 	@echo "$(GREEN)Formatting code...$(NC)"
 	go fmt ./...
 
+fmt-check: ## Check Go formatting without changing source files
+	@echo "$(GREEN)Checking Go formatting...$(NC)"
+	@package_dirs=$$(go list -f '{{.Dir}}' ./...) || exit $$?; \
+	unformatted=$$(printf '%s\n' "$$package_dirs" | while IFS= read -r package_dir; do \
+		gofmt -l "$$package_dir"/*.go || exit $$?; \
+	done) || exit $$?; \
+	if [ -n "$$unformatted" ]; then \
+		printf 'Run make fmt to format these files:\n%s\n' "$$unformatted"; \
+		exit 1; \
+	fi
+
 vet: ## Run go vet
 	@echo "$(GREEN)Running go vet...$(NC)"
 	go vet ./...
@@ -107,7 +118,7 @@ lint: ## Run golangci-lint (always uses latest version)
 	@echo "$(GREEN)Running golangci-lint (latest version)...$(NC)"
 	@go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...
 
-check: modernize fmt vet lint ## Run all code quality checks (modernize, fmt, vet, lint)
+check: fmt-check vet lint ## Check formatting, vet, and lint without changing source files
 
 modernize: ## Apply Go modernization fixes using the project toolchain
 	@echo "$(GREEN)Running Go modernization tool...$(NC)"
