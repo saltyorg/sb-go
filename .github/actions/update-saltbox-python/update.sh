@@ -136,9 +136,12 @@ if count != 1:
     raise SystemExit("Unable to update constraints.uv in Saltbox Renovate configuration")
 path.write_text(updated, encoding="utf-8")
 PY
+    # Saltbox CI regenerates this public command; keep launch isolation out of
+    # the persisted header so its byte-for-byte lockfile check stays stable.
     managed_python_command "$workdir" uv "$workdir/saltbox" "$uv_bin" pip compile \
         --python-version "$candidate" \
         --generate-hashes \
+        --custom-compile-command "uv pip compile --python-version $candidate --generate-hashes --output-file requirements/requirements-saltbox.txt requirements/requirements-saltbox.in" \
         --output-file requirements/requirements-saltbox.txt \
         requirements/requirements-saltbox.in
 }
