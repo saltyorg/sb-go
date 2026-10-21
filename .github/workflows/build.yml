@@ -187,10 +187,21 @@ jobs:
               -d @discord_payload.json
           fi
 
-      - name: Propose supported Python update for Saltbox
+      - name: Create Saltbox toolchain update token
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        id: saltbox-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          app-id: ${{ vars.SALTBOX_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.SALTBOX_AUTOMATION_PRIVATE_KEY }}
+          owner: saltyorg
+          repositories: Saltbox
+          permission-contents: write
+
+      - name: Update supported Python toolchain for Saltbox
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         uses: ./.github/actions/update-saltbox-python
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ steps.saltbox-token.outputs.token }}
           sb-go-release: ${{ steps.determine_version.outputs.version }}
           uv-version: ${{ steps.toolchain.outputs.uv_version }}

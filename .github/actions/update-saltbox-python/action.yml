@@ -1,5 +1,5 @@
 name: Update Saltbox Python
-description: Commit Saltbox Python updates using versions supported by the released uv
+description: Commit signed Saltbox Python updates using versions supported by the released uv
 
 inputs:
   token:
@@ -20,7 +20,7 @@ inputs:
     description: Exact uv release embedded in the published sb-go binary
     required: true
   dry-run:
-    description: Discover and preflight without creating a pull request
+    description: Discover and preflight without committing to Saltbox
     required: false
     default: 'false'
 

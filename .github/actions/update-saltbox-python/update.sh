@@ -159,22 +159,8 @@ if git -C "$workdir/saltbox" diff --quiet -- .python-version .uv-version .github
     exit 0
 fi
 
-git -C "$workdir/saltbox" config user.name "github-actions[bot]"
-git -C "$workdir/saltbox" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-git -C "$workdir/saltbox" add .python-version .uv-version .github/renovate.json requirements/requirements-saltbox.txt
-git -C "$workdir/saltbox" commit -m "chore(deps): update python toolchain"
-
-git -C "$workdir/saltbox" fetch origin master
-remote_commit=$(git -C "$workdir/saltbox" rev-parse origin/master)
-if [[ "$remote_commit" != "$base_commit" ]]; then
-    echo "Saltbox master changed from $base_commit to $remote_commit during toolchain generation; refusing to push stale output" >&2
-    exit 1
-fi
-
-auth_header=$(printf 'x-access-token:%s' "$SALTBOX_TOKEN" | base64 --wrap=0)
-GIT_CONFIG_COUNT=1 \
-GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
-GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth_header" \
-    git -C "$workdir/saltbox" push origin HEAD:refs/heads/master
-unset auth_header
+# expectedHeadOid checks the original master atomically with commit creation.
+# shellcheck disable=SC1091 # GitHub supplies GITHUB_ACTION_PATH.
+source "$GITHUB_ACTION_PATH/commit.sh"
+commit_toolchain_update "$workdir/saltbox" "$base_commit" "$SALTBOX_REPOSITORY" "$SALTBOX_TOKEN" "$workdir"
 echo "Updated Saltbox master for sb-go $SB_GO_RELEASE with Python $candidate and uv $uv_version"
