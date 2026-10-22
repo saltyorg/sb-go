@@ -15,24 +15,35 @@ printf '# baseline\n' > "$checkout/requirements/requirements-saltbox.txt"
 git -C "$checkout" init --initial-branch=master --quiet
 git -C "$checkout" add .
 git -C "$checkout" -c user.name=fixture -c user.email=fixture@example.invalid \
-    -c commit.gpgsign=false commit --quiet -m fixture
+    -c commit.gpgsign=false commit --quiet -m 'test: initialize toolchain fixture'
 base=$(git -C "$checkout" rev-parse HEAD)
 printf '3.12.14\n' > "$checkout/.python-version"
 printf '0.12.10\n' > "$checkout/.uv-version"
 fixture_sha=cccccccccccccccccccccccccccccccccccccccc
 scenario=success
+branch_fields=${GITHUB_COMMITTABLE_BRANCH_FIELDS:-'["id","repositoryNameWithOwner","branchName"]'}
 
 # shellcheck disable=SC2317 # The sourced helper calls this API fixture.
 gh() {
     if [[ $2 == graphql ]]; then
         printf 'mutation\n' >> "$test_dir/calls"
         cp "$4" "$test_dir/request.json"
+        jq -e --argjson fields "$branch_fields" '
+            .variables.input.branch | keys | all(. as $name | $fields | index($name) != null)
+        ' "$test_dir/request.json" > /dev/null || return 1
+        touch "$test_dir/created"
         if [[ $scenario == lost || $scenario == stale ]]; then
             return 1
         fi
         jq -n --arg sha "$fixture_sha" '{data:{createCommitOnBranch:{commit:{oid:$sha}}}}'
     elif [[ $2 == */git/ref/heads/master ]]; then
-        printf '%s\n' "$fixture_sha"
+        if [[ -f "$test_dir/created" ]]; then
+            printf '%s\n' "$fixture_sha"
+        else
+            printf '%s\n' "$base"
+        fi
+    elif [[ $2 == */commits/"$base" ]]; then
+        printf '{"parents":[]}\n'
     elif [[ $2 == */commits/"$fixture_sha" ]]; then
         local parent=$base verified=true
         [[ $scenario != stale ]] || parent=dddddddddddddddddddddddddddddddddddddddd
@@ -50,11 +61,12 @@ gh() {
 
 for scenario in success lost; do
     : > "$test_dir/calls"
+    rm -f "$test_dir/created"
     commit_toolchain_update "$checkout" "$base" saltyorg/Saltbox fixture-token "$test_dir"
     [[ $(wc -l < "$test_dir/calls") -eq 1 ]]
     jq -e --arg base "$base" '
         .variables.input.expectedHeadOid == $base and
-        .variables.input.branch == {repositoryNameWithOwner:"saltyorg/Saltbox",refName:"master"} and
+        .variables.input.branch == {repositoryNameWithOwner:"saltyorg/Saltbox",branchName:"master"} and
         (.variables.input.fileChanges.additions | length) == 4 and
         (.variables.input.fileChanges.additions[0].contents | @base64d) == "3.12.14\n"
     ' "$test_dir/request.json" > /dev/null

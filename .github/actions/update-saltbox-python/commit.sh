@@ -17,7 +17,7 @@ commit_toolchain_update() {
         {
           query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
           variables: {input: {
-            branch: {repositoryNameWithOwner: $repository, refName: "master"},
+            branch: {repositoryNameWithOwner: $repository, branchName: "master"},
             expectedHeadOid: $base,
             message: {headline: "chore(deps): update python toolchain"},
             fileChanges: {additions: [

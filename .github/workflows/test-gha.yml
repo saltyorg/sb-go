@@ -47,7 +47,13 @@ jobs:
 
       - name: Run tests
         working-directory: sb-go
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          GITHUB_COMMITTABLE_BRANCH_FIELDS=$(gh api graphql \
+            -f query='query { __type(name: "CommittableBranch") { inputFields { name } } }' \
+            --jq '[.data.__type.inputFields[].name]')
+          export GITHUB_COMMITTABLE_BRANCH_FIELDS
           command -v tmux
           make test GO_TEST_FLAGS='-exec sudo'
 
