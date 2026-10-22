@@ -8,6 +8,50 @@ on:
   workflow_dispatch:
 
 jobs:
+  verify-toolchain-update:
+    name: Verify released toolchain updater
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read the published toolchain
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release=$(gh api repos/saltyorg/sb-go/releases/latest --jq '.tag_name')
+          gh release download "$release" --repo saltyorg/sb-go \
+            --pattern sb_linux_amd64 --dir "$RUNNER_TEMP/published-sb"
+          chmod 0755 "$RUNNER_TEMP/published-sb/sb_linux_amd64"
+          version_json=$("$RUNNER_TEMP/published-sb/sb_linux_amd64" version --json)
+          test "$(jq -r '.version' <<< "$version_json")" = "$release"
+          uv_version=$(jq -er '.uv_version | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' <<< "$version_json")
+          {
+            echo "release=$release"
+            echo "uv-version=$uv_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create scoped updater token
+        id: saltbox-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ vars.SALTBOX_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.SALTBOX_AUTOMATION_PRIVATE_KEY }}
+          owner: saltyorg
+          repositories: Saltbox
+          permission-contents: write
+
+      - name: Preflight the updater without publishing
+        uses: ./.github/actions/update-saltbox-python
+        with:
+          token: ${{ steps.saltbox-token.outputs.token }}
+          sb-go-release: ${{ steps.published.outputs.release }}
+          uv-version: ${{ steps.published.outputs.uv-version }}
+          dry-run: 'true'
+
   test-gha:
     name: Test sb gha command
     runs-on: ubuntu-24.04
@@ -39,7 +83,7 @@ jobs:
         run: sudo chown -R runner:runner /srv/git
 
       - name: Symlink Saltbox repository
-        run: ln -s $GITHUB_WORKSPACE/saltbox /srv/git/saltbox
+        run: ln -s "$GITHUB_WORKSPACE/saltbox" /srv/git/saltbox
 
       - name: Run tidy
         working-directory: sb-go
