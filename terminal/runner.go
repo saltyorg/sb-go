@@ -117,7 +117,13 @@ func (r *Runner) Run(
 		result <- err
 		return err
 	}, cancel)
-	program := tea.NewProgram(model, tea.WithOutput(&synchronizedOutputWriter{writer: r.output}))
+	options := []tea.ProgramOption{tea.WithOutput(&synchronizedOutputWriter{writer: r.output})}
+	if !CanReadTerminalInput() {
+		// Render without keyboard input rather than stopping on SIGTTOU in a
+		// background process group. Ctrl+C still arrives as SIGINT.
+		options = append(options, tea.WithInput(nil))
+	}
+	program := tea.NewProgram(model, options...)
 	run.program = program
 
 	renderDone := make(chan struct{})

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ import (
 )
 
 const ptySpinnerHelperEnv = "SB_GO_PTY_SPINNER_HELPER"
+const ptyBackgroundLauncherEnv = "SB_GO_PTY_BACKGROUND_LAUNCHER"
 const tmuxSpinnerScenarioEnv = "SB_GO_TMUX_SPINNER_SCENARIO"
 const tmuxScenarioCompletePrefix = "SB-GO-TMUX-SCENARIO-COMPLETE"
 
@@ -437,6 +439,113 @@ func TestFastSpinnerConsumesDelayedTerminalCapabilityResponses(t *testing.T) {
 	}
 	if pending != 0 {
 		t.Fatalf("%d terminal response bytes leaked past spinner shutdown", pending)
+	}
+}
+
+// TestSpinnerCompletesInBackgroundProcessGroup reproduces `curl ... | sudo bash`
+// under sudo-rs, which leaves a piped command in a background process group on
+// its pseudo-terminal and never resumes it after a SIGTTOU stop.
+func TestSpinnerCompletesInBackgroundProcessGroup(t *testing.T) {
+	master, slave, err := pty.Open()
+	if err != nil {
+		t.Fatalf("open pty: %v", err)
+	}
+	defer func() {
+		if err := master.Close(); err != nil {
+			t.Errorf("close pty master: %v", err)
+		}
+	}()
+	defer func() {
+		if err := slave.Close(); err != nil {
+			t.Errorf("close pty slave: %v", err)
+		}
+	}()
+	var outputMu sync.Mutex
+	var output bytes.Buffer
+	go func() {
+		buffer := make([]byte, 4096)
+		for {
+			n, err := master.Read(buffer)
+			outputMu.Lock()
+			output.Write(buffer[:n])
+			outputMu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	capturedOutput := func() string {
+		outputMu.Lock()
+		defer outputMu.Unlock()
+		return output.String()
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestBackgroundProcessGroupLauncher$")
+	cmd.Env = append(os.Environ(), ptyBackgroundLauncherEnv+"=1", "TERM=xterm-256color")
+	cmd.Stdin = slave
+	cmd.Stdout = slave
+	cmd.Stderr = slave
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start background launcher: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("spinner in background process group failed: %v\n%s", err, capturedOutput())
+		}
+	case <-time.After(30 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatalf("background launcher timed out: %v\n%s", <-done, capturedOutput())
+	}
+}
+
+// TestBackgroundProcessGroupLauncher holds the pty foreground and runs the
+// spinner helper in its own background process group with piped stdin.
+func TestBackgroundProcessGroupLauncher(t *testing.T) {
+	if os.Getenv(ptyBackgroundLauncherEnv) != "1" {
+		t.Skip("PTY background process group launcher")
+	}
+	stdin, stdinWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("create stdin pipe: %v", err)
+	}
+	defer func() { _ = stdinWriter.Close() }()
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestFastSpinnerPTYHelper$")
+	cmd.Env = append(os.Environ(), ptySpinnerHelperEnv+"=1")
+	cmd.Stdin = stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start spinner helper: %v", err)
+	}
+	_ = stdin.Close()
+
+	foreground, err := unix.IoctlGetInt(int(os.Stdin.Fd()), unix.TIOCGPGRP)
+	if err != nil {
+		t.Fatalf("read pty foreground process group: %v", err)
+	}
+	if foreground == cmd.Process.Pid {
+		t.Fatal("spinner helper unexpectedly owns the pty foreground")
+	}
+
+	var status syscall.WaitStatus
+	if _, err := syscall.Wait4(cmd.Process.Pid, &status, syscall.WUNTRACED, nil); err != nil {
+		t.Fatalf("wait for spinner helper: %v", err)
+	}
+	if status.Stopped() {
+		stopSignal := status.StopSignal()
+		_ = cmd.Process.Kill()
+		_, _ = syscall.Wait4(cmd.Process.Pid, &status, 0, nil)
+		t.Fatalf("spinner helper was stopped by %v in a background process group", stopSignal)
+	}
+	if !status.Exited() || status.ExitStatus() != 0 {
+		t.Fatalf("spinner helper did not exit cleanly: %v", status)
 	}
 }
 
