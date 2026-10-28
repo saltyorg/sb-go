@@ -33,6 +33,11 @@ jobs:
         with:
           go-version-file: 'go.mod'
 
+      - name: Run tests
+        # Some tests need root, as sb does. Build as the runner user so the Go
+        # caches stay writable and run only the test binaries with sudo.
+        run: go test -exec sudo ./...
+
       - name: Get Git Commit SHA
         id: get_git_commit
         run: echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
