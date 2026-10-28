@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	charm.land/bubbles/v2 v2.2.1
-	charm.land/bubbletea/v2 v2.1.0
+	charm.land/bubbletea/v2 v2.1.1
 	charm.land/fang/v2 v2.0.1
 	charm.land/glamour/v2 v2.0.1
 	charm.land/lipgloss/v2 v2.0.6 // requires ultraviolet eb96d541d798 or later for github.com/charmbracelet/ultraviolet/issues/155
@@ -14,7 +14,7 @@ require (
 	github.com/autobrr/go-qbittorrent v1.19.0
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.9
-	github.com/charmbracelet/x/exp/charmtone v0.1.0
+	github.com/charmbracelet/x/exp/charmtone v0.1.1
 	github.com/cloudflare/cloudflare-go/v7 v7.13.1
 	github.com/creack/pty v1.1.24
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
@@ -28,7 +28,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
