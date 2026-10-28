@@ -116,7 +116,7 @@ func newCompletionShellFixture(t *testing.T, shell string) completionShellFixtur
 		"XDG_DATA_HOME=" + filepath.Join(dir, "data"),
 		"XDG_CACHE_HOME=" + filepath.Join(dir, "cache"),
 		"XDG_DATA_DIRS=" + filepath.Join(dir, "share"),
-		"BASH_COMPLETION_COMPAT_DIR=" + filepath.Join(dir, "empty-compat"),
+		"BASH_COMPLETION_COMPAT_DIR=" + isolatedBashCompatDir(t),
 		"PATH=" + bin + ":/usr/bin:/bin",
 		"TERM=xterm-256color", "LC_ALL=C.UTF-8", completionShellHelperEnv + "=1",
 	}}
@@ -485,4 +485,22 @@ func (shell *completionShellPTY) finish() {
 	case <-time.After(10 * time.Second):
 		shell.t.Fatalf("%s PTY did not exit", shell.name)
 	}
+}
+
+// bashCompletionCompatFile holds the deprecated bash-completion functions, such
+// as _completion_loader and _get_comp_words_by_ref, that version 2.12 moved out
+// of the framework. Cobra's bash script still calls them.
+const bashCompletionCompatFile = "/etc/bash_completion.d/000_bash_completion_compat.bash"
+
+// isolatedBashCompatDir returns a compat directory holding only the framework's
+// own compat file, so other host completions stay out of the test.
+func isolatedBashCompatDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if _, err := os.Stat(bashCompletionCompatFile); err == nil {
+		if err := os.Symlink(bashCompletionCompatFile, filepath.Join(dir, filepath.Base(bashCompletionCompatFile))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
 }

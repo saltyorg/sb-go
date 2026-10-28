@@ -164,7 +164,7 @@ func assertNativeBashAliasLoading(t *testing.T, root, bin, first string, names [
 	process.Env = []string{
 		"PATH=" + bin + ":/usr/bin:/bin", "HOME=" + root, "LC_ALL=C",
 		"XDG_DATA_DIRS=" + filepath.Join(root, "share"),
-		"BASH_COMPLETION_COMPAT_DIR=" + filepath.Join(root, "empty"), "CALL_LOG=" + log,
+		"BASH_COMPLETION_COMPAT_DIR=" + isolatedBashCompatDir(t), "CALL_LOG=" + log,
 	}
 	output, err := process.CombinedOutput()
 	if err != nil {
@@ -225,4 +225,22 @@ func TestBashBundleGenerationFailureKeepsAllActiveOutputs(t *testing.T) {
 			}
 		})
 	}
+}
+
+// bashCompletionCompatFile holds the deprecated bash-completion functions, such
+// as _completion_loader and _get_comp_words_by_ref, that version 2.12 moved out
+// of the framework. Cobra's bash script still calls them.
+const bashCompletionCompatFile = "/etc/bash_completion.d/000_bash_completion_compat.bash"
+
+// isolatedBashCompatDir returns a compat directory holding only the framework's
+// own compat file, so other host completions stay out of the test.
+func isolatedBashCompatDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if _, err := os.Stat(bashCompletionCompatFile); err == nil {
+		if err := os.Symlink(bashCompletionCompatFile, filepath.Join(dir, filepath.Base(bashCompletionCompatFile))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
 }
