@@ -36,7 +36,7 @@ jobs:
 
       - name: Create scoped updater token
         id: saltbox-token
-        uses: actions/create-github-app-token@v3.3.0
+        uses: actions/create-github-app-token@v3.4.0
         with:
           client-id: ${{ vars.SALTBOX_AUTOMATION_APP_ID }}
           private-key: ${{ secrets.SALTBOX_AUTOMATION_PRIVATE_KEY }}
