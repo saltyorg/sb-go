@@ -28,16 +28,17 @@ func TestFileSHA256(t *testing.T) {
 func TestManifestRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	want := &Manifest{
-		SchemaVersion:    manifestSchemaVersion,
-		GenerationID:     "20260807T120000.000000000-0123456789ab",
-		PythonVersion:    "3.12.13",
-		PythonPath:       "/srv/python/releases/python-3-12-13/bin/python3.12",
-		PythonInstall:    "/srv/python/releases/python-3-12-13",
-		UVVersion:        "0.12.3",
-		LockSHA256:       strings.Repeat("a", 64),
-		SaltboxCommit:    strings.Repeat("b", 40),
-		CreatedAt:        "2026-08-07T12:00:00Z",
-		ExportedCommands: []string{"ansible", "ansible-playbook", "apprise", "certbot"},
+		SchemaVersion:        manifestSchemaVersion,
+		GenerationID:         "20260807T120000.000000000-0123456789ab",
+		PythonVersion:        "3.12.13",
+		PythonPath:           "/srv/python/releases/python-3-12-13/bin/python3.12",
+		PythonInstall:        "/srv/python/releases/python-3-12-13",
+		UVVersion:            "0.12.3",
+		LockSHA256:           strings.Repeat("a", 64),
+		SaltboxCommit:        strings.Repeat("b", 40),
+		CreatedAt:            "2026-08-07T12:00:00Z",
+		ExportedCommands:     []string{"ansible", "ansible-playbook", "apprise", "certbot"},
+		RequirementsUnhashed: true,
 	}
 	if err := writeManifest(dir, want); err != nil {
 		t.Fatal(err)
@@ -250,5 +251,92 @@ func TestForcedReconciliationBypassesCache(t *testing.T) {
 				t.Fatalf("noCache() = %t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func roundTripManifest(t *testing.T, manifest *Manifest) *Manifest {
+	t.Helper()
+	dir := t.TempDir()
+	if err := writeManifest(dir, manifest); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func TestPinChangesRebuildTheVenv(t *testing.T) {
+	lock := strings.Repeat("d", 64)
+	// The same Python and lock on both sides: the hashing mode alone decides.
+	pinless := Toolchain{Python: "3.12.41", Hashed: false}
+	pinned := Toolchain{Python: "3.12.41", Hashed: true}
+	var active *Manifest
+	for index, step := range []Toolchain{pinless, pinned, pinless} {
+		if active != nil && manifestMatches(active, step, lock) {
+			t.Fatalf("step %d: venv built for %#v was reused for %#v", index, active, step)
+		}
+		active = roundTripManifest(t, manifestFor(step, lock))
+		if !manifestMatches(active, step, lock) {
+			t.Fatalf("step %d: fresh manifest %#v does not match its own toolchain %#v", index, active, step)
+		}
+	}
+}
+
+func TestManifestMatchesRequiresSameInputs(t *testing.T) {
+	lock := strings.Repeat("d", 64)
+	toolchain := Toolchain{Python: "3.12.41", Hashed: true}
+	manifest := manifestFor(toolchain, lock)
+	if manifestMatches(manifest, Toolchain{Python: "3.12.42", Hashed: true}, lock) {
+		t.Fatal("a different Python reused the venv")
+	}
+	if manifestMatches(manifest, toolchain, strings.Repeat("e", 64)) {
+		t.Fatal("a different lock reused the venv")
+	}
+	old := *manifest
+	old.SchemaVersion = manifestSchemaVersion + 1
+	if manifestMatches(&old, toolchain, lock) {
+		t.Fatal("another manifest schema reused the venv")
+	}
+}
+
+func TestManifestWithoutHashingFieldIsHashed(t *testing.T) {
+	dir := t.TempDir()
+	lock := strings.Repeat("d", 64)
+	data := `{"schema_version": 1, "python_version": "3.12.41", "lock_sha256": "` + lock + `"}`
+	if err := os.WriteFile(filepath.Join(dir, manifestFileName), []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := readManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !manifestMatches(manifest, Toolchain{Python: "3.12.41", Hashed: true}, lock) {
+		t.Fatal("a manifest written before the hashing field forces a rebuild of a pinned venv")
+	}
+	if manifestMatches(manifest, Toolchain{Python: "3.12.41", Hashed: false}, lock) {
+		t.Fatal("a manifest written before the hashing field was reused for an unhashed install")
+	}
+}
+
+func TestRequirementsStepFollowsThePin(t *testing.T) {
+	options := Options{ForceVenv: true, Verbose: true}
+	label, settings := requirementsStep(Toolchain{Python: "3.12.41", Hashed: true}, options)
+	if label != "Syncing hashed Saltbox requirements" || settings.Unhashed || !settings.NoCache || !settings.Verbose {
+		t.Fatalf("pinned step = %q %#v", label, settings)
+	}
+	label, settings = requirementsStep(Toolchain{Python: "3.12.41"}, Options{})
+	if label != "Installing unhashed Saltbox requirements" || !settings.Unhashed || settings.NoCache || settings.Verbose {
+		t.Fatalf("pin-less step = %q %#v", label, settings)
+	}
+}
+
+func TestUnhashedInstallFailureNamesTheInstall(t *testing.T) {
+	uvPath := writeRuntimeExecutable(t, "printf 'invented resolver failure\\n' >&2\nexit 1\n")
+	runtime := newManagedRuntime(runtimeSettings{uvPath: uvPath, cacheDir: filepath.Join(t.TempDir(), "cache"), scratchParent: t.TempDir()})
+	err := syncRequirementsWithRuntime(t.Context(), runtime, "/venv/bin/python3", "/requirements.txt", SyncRequirementsOptions{Unhashed: true})
+	if err == nil || !strings.HasPrefix(err.Error(), "error installing unhashed requirements:") {
+		t.Fatalf("error = %v, want the unhashed install named", err)
 	}
 }

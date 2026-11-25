@@ -70,6 +70,27 @@ func TestManagedUVOperationsUseTheRuntimeBoundary(t *testing.T) {
 			},
 		},
 		{
+			name:     "unhashed requirements install",
+			wantArgs: []string{"--no-config", "pip", "install", "--no-progress", "--python", venvPythonPath, "--no-cache", "--requirement", requirementsPath},
+			run: func(runtime *managedRuntime) error {
+				return syncRequirementsWithRuntime(t.Context(), runtime, venvPythonPath, requirementsPath, SyncRequirementsOptions{
+					NoCache:  true,
+					Unhashed: true,
+				})
+			},
+		},
+		{
+			name:     "Python download list",
+			wantArgs: []string{"--no-config", "python", "list", "--only-downloads", "--all-versions", "--output-format", "json"},
+			run: func(runtime *managedRuntime) error {
+				got, err := listPythonDownloadsWithRuntime(t.Context(), runtime, "0.90.1")
+				if err == nil && !slices.Equal(got, []string{"3.12.41"}) {
+					t.Errorf("listed downloads = %q", got)
+				}
+				return err
+			},
+		},
+		{
 			name:     "package check",
 			wantArgs: []string{"--no-config", "pip", "check", "--python", venvPythonPath},
 			run: func(runtime *managedRuntime) error {
@@ -105,7 +126,12 @@ func TestManagedUVOperationsUseTheRuntimeBoundary(t *testing.T) {
 printf '%s\000' "$@" > "$SB_TEST_RECORD/args"
 case "$2 $3" in
   'python find') printf '%s\n' "$SB_TEST_FOUND_PYTHON" ;;
-  'python list') printf '%s\n' 'cpython-3.12.13-linux-x86_64-gnu' 'cpython-3.13.7-linux-x86_64-gnu' ;;
+  'python list')
+    if [ "$4" = "--only-downloads" ]; then
+      printf '%s\n' '[{"version": "3.12.41", "implementation": "cpython", "variant": "default"}]'
+    else
+      printf '%s\n' 'cpython-3.12.13-linux-x86_64-gnu' 'cpython-3.13.7-linux-x86_64-gnu'
+    fi ;;
 esac
 if [ "$2 $3" = "pip sync" ]; then
   printf 'sync stdout\n'

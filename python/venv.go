@@ -50,6 +50,9 @@ type Manifest struct {
 	SaltboxCommit    string   `json:"saltbox_commit"`
 	CreatedAt        string   `json:"created_at"`
 	ExportedCommands []string `json:"exported_commands"`
+	// RequirementsUnhashed records an install from a checkout without a
+	// pinned Python. Manifests written before the field existed were hashed.
+	RequirementsUnhashed bool `json:"requirements_unhashed,omitempty"`
 }
 
 type activeState struct {
@@ -79,16 +82,8 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 		return fmt.Errorf("load Saltbox Python toolchain: %w", err)
 	}
 	uvVersion := buildinfo.Current().UVVersion
-	compatible, err := AtLeast(uvVersion, config.MinimumUV)
-	if err != nil {
+	if err := checkMinimumUV(config, uvVersion); err != nil {
 		return err
-	}
-	if !compatible {
-		return fmt.Errorf(
-			"saltbox requires uv %s or newer, but this sb release provides %s; run sb self-update",
-			config.MinimumUV,
-			uvVersion,
-		)
 	}
 
 	lockDigest, err := fileSHA256(layout.AnsibleRequirementsPath)
@@ -104,6 +99,13 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 		return DownloadAndInstallUV(taskCtx, options.Verbose)
 	}); err != nil {
 		return fmt.Errorf("install pinned uv: %w", err)
+	}
+	toolchain, err := resolveToolchain(ctx, config, uvVersion)
+	if err != nil {
+		return err
+	}
+	if toolchain.Notice != "" {
+		task.Warning(toolchain.Notice)
 	}
 
 	libpqInstalled, err := host.IsPackageInstalled(ctx, "libpq-dev")
@@ -123,7 +125,7 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 		}
 	}
 
-	state, err := inspectActive(ctx, config.Python, lockDigest)
+	state, err := inspectActive(ctx, toolchain, lockDigest)
 	if err != nil {
 		return fmt.Errorf("inspect active Ansible environment: %w", err)
 	}
@@ -144,14 +146,14 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 
 	pythonPath := ""
 	pythonInstall := ""
-	if !options.ForcePython && state.Manifest != nil && state.Manifest.PythonVersion == config.Python {
-		if err := validatePython(ctx, state.Manifest.PythonPath, config.Python); err == nil {
+	if !options.ForcePython && state.Manifest != nil && state.Manifest.PythonVersion == toolchain.Python {
+		if err := validatePython(ctx, state.Manifest.PythonPath, toolchain.Python); err == nil {
 			pythonPath = state.Manifest.PythonPath
 			pythonInstall = state.Manifest.PythonInstall
 		}
 	}
 	if pythonPath == "" {
-		pythonInstall, pythonPath, err = createPythonRelease(ctx, task, config.Python, options)
+		pythonInstall, pythonPath, err = createPythonRelease(ctx, task, toolchain.Python, options)
 		if err != nil {
 			return err
 		}
@@ -180,13 +182,12 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 	}
 
 	venvPython := filepath.Join(venvPath, "bin", "python3")
-	if err := task.RunOutput(ctx, terminal.TaskSpec{Running: "Syncing hashed Saltbox requirements"}, func(taskCtx context.Context, stdout, stderr io.Writer) error {
-		return SyncRequirements(taskCtx, venvPython, layout.AnsibleRequirementsPath, SyncRequirementsOptions{
-			NoCache: options.noCache(),
-			Verbose: options.Verbose,
-			Stdout:  stdout,
-			Stderr:  stderr,
-		})
+	requirementsTask, requirementsSettings := requirementsStep(toolchain, options)
+	if err := task.RunOutput(ctx, terminal.TaskSpec{Running: requirementsTask}, func(taskCtx context.Context, stdout, stderr io.Writer) error {
+		settings := requirementsSettings
+		settings.Stdout = stdout
+		settings.Stderr = stderr
+		return SyncRequirements(taskCtx, venvPython, layout.AnsibleRequirementsPath, settings)
 	}); err != nil {
 		return err
 	}
@@ -195,22 +196,18 @@ func Reconcile(ctx context.Context, task *terminal.Task, options Options) error 
 	if err != nil {
 		return err
 	}
-	if err := validateEnvironment(ctx, venvPath, config.Python); err != nil {
+	if err := validateEnvironment(ctx, venvPath, toolchain.Python); err != nil {
 		return fmt.Errorf("validate staged Ansible environment: %w", err)
 	}
 
-	manifest := &Manifest{
-		SchemaVersion:    manifestSchemaVersion,
-		GenerationID:     generationID,
-		PythonVersion:    config.Python,
-		PythonPath:       pythonPath,
-		PythonInstall:    pythonInstall,
-		UVVersion:        buildinfo.Current().UVVersion,
-		LockSHA256:       lockDigest,
-		SaltboxCommit:    commit,
-		CreatedAt:        time.Now().UTC().Format(time.RFC3339Nano),
-		ExportedCommands: commands,
-	}
+	manifest := manifestFor(toolchain, lockDigest)
+	manifest.GenerationID = generationID
+	manifest.PythonPath = pythonPath
+	manifest.PythonInstall = pythonInstall
+	manifest.UVVersion = uvVersion
+	manifest.SaltboxCommit = commit
+	manifest.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	manifest.ExportedCommands = commands
 	if err := writeManifest(generationDir, manifest); err != nil {
 		return err
 	}
@@ -278,7 +275,43 @@ func createPythonRelease(ctx context.Context, task *terminal.Task, version strin
 	return installDir, pythonPath, nil
 }
 
-func inspectActive(ctx context.Context, pythonVersion, lockDigest string) (activeState, error) {
+// requirementsStep returns the task label and install settings for the
+// checkout's requirements: a hashed sync for a pinned checkout, an unhashed
+// install for one without a pinned Python.
+func requirementsStep(toolchain Toolchain, options Options) (string, SyncRequirementsOptions) {
+	settings := SyncRequirementsOptions{
+		NoCache:  options.noCache(),
+		Verbose:  options.Verbose,
+		Unhashed: !toolchain.Hashed,
+	}
+	if settings.Unhashed {
+		return "Installing unhashed Saltbox requirements", settings
+	}
+	return "Syncing hashed Saltbox requirements", settings
+}
+
+// manifestFor returns the manifest fields that decide whether a generation
+// can be reused for a toolchain and lock.
+func manifestFor(toolchain Toolchain, lockDigest string) *Manifest {
+	return &Manifest{
+		SchemaVersion:        manifestSchemaVersion,
+		PythonVersion:        toolchain.Python,
+		LockSHA256:           lockDigest,
+		RequirementsUnhashed: !toolchain.Hashed,
+	}
+}
+
+// manifestMatches reports whether a generation was built from the same
+// toolchain and lock, so a change between a pinned and a pin-less checkout
+// rebuilds the venv even when the Python and lock are unchanged.
+func manifestMatches(manifest *Manifest, toolchain Toolchain, lockDigest string) bool {
+	return manifest.SchemaVersion == manifestSchemaVersion &&
+		manifest.PythonVersion == toolchain.Python &&
+		manifest.LockSHA256 == lockDigest &&
+		manifest.RequirementsUnhashed == !toolchain.Hashed
+}
+
+func inspectActive(ctx context.Context, toolchain Toolchain, lockDigest string) (activeState, error) {
 	activePath := filepath.Join(layout.AnsibleVenvPath, "venv")
 	info, err := os.Lstat(activePath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -306,10 +339,10 @@ func inspectActive(ctx context.Context, pythonVersion, lockDigest string) (activ
 		return activeState{}, err
 	}
 	state := activeState{Manifest: manifest, GenerationDir: generationDir, VenvPath: target}
-	if manifest.SchemaVersion != manifestSchemaVersion || manifest.PythonVersion != pythonVersion || manifest.LockSHA256 != lockDigest {
+	if !manifestMatches(manifest, toolchain, lockDigest) {
 		return state, nil
 	}
-	if err := validateEnvironment(ctx, target, pythonVersion); err != nil {
+	if err := validateEnvironment(ctx, target, toolchain.Python); err != nil {
 		return state, nil
 	}
 	state.Healthy = true

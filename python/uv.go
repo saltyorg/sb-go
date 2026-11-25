@@ -357,8 +357,11 @@ func createVenvWithPythonRuntime(ctx context.Context, runtime *managedRuntime, v
 type SyncRequirementsOptions struct {
 	NoCache bool
 	Verbose bool
-	Stdout  io.Writer
-	Stderr  io.Writer
+	// Unhashed installs a requirements list without hashes, resolving its
+	// dependencies, for a checkout that has no pinned Python.
+	Unhashed bool
+	Stdout   io.Writer
+	Stderr   io.Writer
 }
 
 func SyncRequirements(ctx context.Context, pythonPath, requirementsPath string, settings SyncRequirementsOptions) error {
@@ -367,6 +370,9 @@ func SyncRequirements(ctx context.Context, pythonPath, requirementsPath string, 
 
 func syncRequirementsWithRuntime(ctx context.Context, runtime *managedRuntime, pythonPath, requirementsPath string, settings SyncRequirementsOptions) error {
 	args := syncRequirementsArgs(pythonPath, requirementsPath, settings.NoCache)
+	if settings.Unhashed {
+		args = installRequirementsArgs(pythonPath, requirementsPath, settings.NoCache)
+	}
 	command := managedCommand{
 		path: runtime.uvPath, args: args, kind: managedUV, pathArgs: []int{4, len(args) - 1},
 		stdout: settings.Stdout, stderr: settings.Stderr,
@@ -376,6 +382,9 @@ func syncRequirementsWithRuntime(ctx context.Context, runtime *managedRuntime, p
 		command.outputModeSet = true
 	}
 	if _, err := runtime.run(ctx, command); err != nil {
+		if settings.Unhashed {
+			return fmt.Errorf("error installing unhashed requirements: %w", err)
+		}
 		return fmt.Errorf("error syncing requirements: %w", err)
 	}
 	return nil
@@ -404,6 +413,58 @@ func syncRequirementsArgs(pythonPath, requirementsPath string, noCache bool) []s
 		args = append(args, "--no-cache")
 	}
 	return append(args, requirementsPath)
+}
+
+// installRequirementsArgs installs an unhashed requirements list with its
+// dependencies. A pin-less Saltbox branch lists only its direct requirements,
+// so pip sync, which installs exactly the listed packages, does not fit it.
+func installRequirementsArgs(pythonPath, requirementsPath string, noCache bool) []string {
+	args := []string{"pip", "install", "--no-progress", "--python", pythonPath}
+	if noCache {
+		args = append(args, "--no-cache")
+	}
+	return append(args, "--requirement", requirementsPath)
+}
+
+type pythonDownload struct {
+	Version        string `json:"version"`
+	Implementation string `json:"implementation"`
+	Variant        string `json:"variant"`
+}
+
+// listPythonDownloadsWithRuntime returns the exact CPython releases the
+// installed uv can install on this platform, from the download list built into
+// uv. See https://docs.astral.sh/uv/reference/cli/#uv-python-list
+func listPythonDownloadsWithRuntime(ctx context.Context, runtime *managedRuntime, uvVersion string) ([]string, error) {
+	result, err := runtime.run(ctx, managedCommand{
+		path:          runtime.uvPath,
+		args:          []string{"python", "list", "--only-downloads", "--all-versions", "--output-format", "json"},
+		kind:          managedUV,
+		outputMode:    executor.OutputModeCapture,
+		outputModeSet: true,
+	})
+	if err != nil {
+		message := ""
+		if result != nil {
+			message = strings.TrimSpace(string(result.Stderr))
+		}
+		if message == "" {
+			return nil, fmt.Errorf("list the Pythons uv %s can install: %w", uvVersion, err)
+		}
+		return nil, fmt.Errorf("list the Pythons uv %s can install: %w: %s", uvVersion, err, message)
+	}
+	var downloads []pythonDownload
+	if err := json.Unmarshal(result.Stdout, &downloads); err != nil {
+		return nil, fmt.Errorf("parse the Pythons uv %s can install: %w", uvVersion, err)
+	}
+	versions := make([]string, 0, len(downloads))
+	for _, download := range downloads {
+		if download.Implementation != "cpython" || download.Variant != "default" || !exactVersionPattern.MatchString(download.Version) {
+			continue
+		}
+		versions = append(versions, download.Version)
+	}
+	return versions, nil
 }
 
 func CheckPackages(ctx context.Context, pythonPath string) error {
