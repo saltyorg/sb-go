@@ -6,13 +6,13 @@ Generated: 2026-09-04
 - **Language**: Go 1.27.1 (module `github.com/saltyorg/sb-go`)
 - **Framework**: Cobra CLI with Fang; Bubble Tea/Bubbles/Lip Gloss terminal UI; no database layer
 - **Build**: GNU Make over the Go toolchain; `make build` is the authoritative local gate
-- **Test**: `make test` using Go `testing`, plus the action download shell test
+- **Test**: `make test` using Go `testing`
 - **Lint**: golangci-lint v2 via `go run ...@latest` (CI gate: yes, through `make build`)
 - **Format**: agents run `make fmt` explicitly; `make fmt-check` checks formatting during builds without changing files
 
 ## Secondary Languages
-- Shell (installer, container/policy tests, embedded benchmark, composite action)
-- YAML (GitHub Actions workflows and composite action metadata)
+- Shell (installer, container/policy tests, embedded benchmark)
+- YAML (GitHub Actions workflows)
 - JSON (Renovate configuration)
 
 ## Conventions
