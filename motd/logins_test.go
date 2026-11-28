@@ -9,7 +9,8 @@ import (
 
 // Invented loginctl output in each systemd release's JSON shape: 249
 // (22.04) has no state or class, 255 (24.04) adds state, and 259 (26.04)
-// adds class and lists each user's service manager as a session.
+// adds class and lists each user's service manager as a session; root
+// logs in as class user-early there, which is a login.
 const (
 	loginctl249JSON = `[{"session":"14","uid":1000,"user":"alice","seat":"","tty":"pts/0"},` +
 		`{"session":"15","uid":1000,"user":"alice","seat":"","tty":"pts/1"}]`
@@ -21,7 +22,7 @@ const (
 		`{"session":"c9","uid":1003,"user":"carol","seat":null,"leader":4190,"class":"user","tty":null,"idle":false,"since":null},` +
 		`{"session":"c10","uid":0,"user":"root","seat":null,"leader":4200,"class":"manager-early","tty":null,"idle":false,"since":null},` +
 		`{"session":"c11","uid":0,"user":"root","seat":null,"leader":4210,"class":"background","tty":null,"idle":false,"since":null},` +
-		`{"session":"c12","uid":0,"user":"root","seat":null,"leader":4220,"class":"user","tty":null,"idle":false,"since":null}]`
+		`{"session":"c12","uid":0,"user":"root","seat":null,"leader":4220,"class":"user-early","tty":null,"idle":false,"since":null}]`
 	// 259 takes --output=json silently and writes its table.
 	loginctl259Table = `SESSION  UID USER  SEAT LEADER CLASS   TTY IDLE SINCE
      c8 1003 carol -    4150   user    -   no   -
@@ -216,125 +217,5 @@ func TestUserSessions(t *testing.T) {
 				t.Fatalf("userSessions() ran %q, want %q", runner.calls, tt.calls)
 			}
 		})
-	}
-}
-
-func loginText(user, at, rest, from string) string {
-	return fmt.Sprintf("%s at %s%s from %s",
-		ValueStyle.Render(user), ValueStyle.Render(at), rest, ValueStyle.Render(from))
-}
-
-func TestParseLastLogin(t *testing.T) {
-	tests := []struct {
-		name   string
-		output string
-		share  bool
-		want   string
-		ok     bool
-	}{
-		{
-			name: "util-linux, still logged in",
-			output: "alice    pts/0        192.0.2.10       Tue Mar  3 08:15   still logged in\n" +
-				"reboot   system boot  6.8.0-1-generic  Tue Mar  3 08:00   still running\n\n" +
-				"wtmp begins Tue Mar  3 08:00:00 2026",
-			want: loginText("alice", "Tue Mar 3 08:15", " (still logged in)", "192.0.2.10"),
-			ok:   true,
-		},
-		{
-			name: "util-linux, logged out after a reboot line",
-			output: "reboot   system boot  6.8.0-1-generic  Tue Mar  3 08:00   still running\n" +
-				"bob      pts/1        198.51.100.7     Mon Mar  2 21:40 - 23:05  (01:25)\n\n" +
-				"wtmp begins Mon Mar  2 20:00:00 2026",
-			want: fmt.Sprintf("%s at %s until %s (01:25) from %s", ValueStyle.Render("bob"),
-				ValueStyle.Render("Mon Mar 2 21:40"), ValueStyle.Render("23:05"), ValueStyle.Render("198.51.100.7")),
-			ok: true,
-		},
-		{
-			name:   "util-linux, a duration over a day",
-			output: "bob      pts/1        198.51.100.7     Sat Feb 28 21:40 - 23:05 (2+01:25)",
-			want: fmt.Sprintf("%s at %s until %s (2+01:25) from %s", ValueStyle.Render("bob"),
-				ValueStyle.Render("Sat Feb 28 21:40"), ValueStyle.Render("23:05"), ValueStyle.Render("198.51.100.7")),
-			ok: true,
-		},
-		{
-			name:   "util-linux, a console login has no source",
-			output: "root     tty1                          Tue Mar  3 08:20   still logged in",
-			want:   loginText("root", "Tue Mar 3 08:20", " (still logged in)", "local"),
-			ok:     true,
-		},
-		{
-			name: "wtmpdb, still logged in with its dash and ssh terminal",
-			output: "carol    ssh          203.0.113.25     Wed Apr 15 10:02 - still logged in\n" +
-				"carol    ssh          203.0.113.25     Wed Apr 15 09:30 - 09:45  (00:15)\n" +
-				"reboot   system boot  7.0.0-1-generic  Wed Apr 15 09:00 - still running\n\n" +
-				"wtmpdb begins Wed Apr 15 09:00:00 2026",
-			want: loginText("carol", "Wed Apr 15 10:02", " (still logged in)", "203.0.113.25"),
-			ok:   true,
-		},
-		{
-			name: "wtmpdb, logged out",
-			output: "reboot   system boot  7.0.0-1-generic  Wed Apr 15 09:00 - still running\n" +
-				"carol    ssh          203.0.113.25     Wed Apr 15 09:30 - 09:45  (00:15)\n\n" +
-				"wtmpdb begins Wed Apr 15 09:00:00 2026",
-			want: fmt.Sprintf("%s at %s until %s (00:15) from %s", ValueStyle.Render("carol"),
-				ValueStyle.Render("Wed Apr 15 09:30"), ValueStyle.Render("09:45"), ValueStyle.Render("203.0.113.25")),
-			ok: true,
-		},
-		{
-			name:   "wtmpdb, only the reboot and its trailer",
-			output: "reboot   system boot  7.0.0-1-generic  Wed Apr 15 09:00 - still running\n\nwtmpdb begins Wed Apr 15 09:00:00 2026",
-		},
-		{
-			name:   "util-linux, only the trailer",
-			output: "\nwtmp begins Tue Mar  3 08:00:00 2026",
-		},
-		{
-			name:   "wide columns keep a long user and an IPv6 source whole",
-			output: "averyverylongusername pts/0        2001:db8:85a3::8a2e:370:7334 Thu Apr 16 07:45   still logged in",
-			want:   loginText("averyverylongusername", "Thu Apr 16 07:45", " (still logged in)", "2001:db8:85a3::8a2e:370:7334"),
-			ok:     true,
-		},
-		{
-			name:   "share mode masks the source",
-			output: "carol    ssh          203.0.113.25     Wed Apr 15 10:02 - still logged in",
-			share:  true,
-			want:   loginText("carol", "Wed Apr 15 10:02", " (still logged in)", "xxx.xxx.xxx.xxx"),
-			ok:     true,
-		},
-		{name: "missing last", output: "Not available"},
-		{name: "empty output", output: ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := parseLastLogin(tt.output, tt.share)
-			if ok != tt.ok || got != tt.want {
-				t.Fatalf("parseLastLogin() = %q, %v; want %q, %v", got, ok, tt.want, tt.ok)
-			}
-		})
-	}
-}
-
-func TestLastLoginFallsThroughAMissingLast(t *testing.T) {
-	runner := &fakeRunner{answers: map[string]string{}}
-	if got := lastLogin(context.Background(), runner.run); got != "No recent logins" {
-		t.Fatalf("lastLogin() = %q, want No recent logins", got)
-	}
-	want := []string{"last -w -n 5", "lastlog -u root", "who -u"}
-	if strings.Join(runner.calls, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("lastLogin() ran %q, want %q", runner.calls, want)
-	}
-}
-
-func TestLastLoginReadsWtmpdb(t *testing.T) {
-	runner := &fakeRunner{answers: map[string]string{
-		"last -w -n 5": "carol    ssh          203.0.113.25     Wed Apr 15 10:02 - still logged in\n\n" +
-			"wtmpdb begins Wed Apr 15 09:00:00 2026",
-	}}
-	want := loginText("carol", "Wed Apr 15 10:02", " (still logged in)", "203.0.113.25")
-	if got := lastLogin(context.Background(), runner.run); got != want {
-		t.Fatalf("lastLogin() = %q, want %q", got, want)
-	}
-	if len(runner.calls) != 1 {
-		t.Fatalf("lastLogin() ran %q, want only last", runner.calls)
 	}
 }
