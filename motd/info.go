@@ -14,6 +14,8 @@ import (
 
 	"charm.land/bubbles/v2/progress"
 	"charm.land/lipgloss/v2"
+
+	"github.com/saltyorg/sb-go/host"
 )
 
 type shareModeContextKey struct{}
@@ -70,15 +72,18 @@ func obscureIPsInText(text string) string {
 	})
 }
 
+// isSkippableLastLine reports a line of last that is no login: a reboot,
+// shutdown or runlevel entry, or the trailer, util-linux's "wtmp begins"
+// or wtmpdb's "wtmpdb begins".
 func isSkippableLastLine(line string, fields []string) bool {
 	if len(fields) == 0 {
 		return true
 	}
 	switch fields[0] {
-	case "reboot", "shutdown", "runlevel", "wtmp":
+	case "reboot", "shutdown", "runlevel", "wtmp", "wtmpdb":
 		return true
 	}
-	return strings.Contains(line, "wtmp begins")
+	return strings.Contains(line, "wtmp begins") || strings.Contains(line, "wtmpdb begins")
 }
 
 // GetDistribution returns the Ubuntu distribution version with a codename
@@ -147,113 +152,28 @@ func GetCpuAverages(ctx context.Context, verbose bool) string {
 	return DefaultStyle.Render("Not available")
 }
 
+// commandRunner runs a command as ExecCommand does: its trimmed stdout, or
+// "Not available" when it fails.
+type commandRunner func(ctx context.Context, name string, args ...string) string
+
 // GetLastLogin returns the last login information
 func GetLastLogin(ctx context.Context, verbose bool) string {
-	// Try the last command to get the most recent login
-	lastOutput := ExecCommand(ctx, "last", "-n", "5")
-	if lastOutput != "Not available" && lastOutput != "" {
-		lines := strings.SplitSeq(lastOutput, "\n")
-		for line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
+	return lastLogin(ctx, ExecCommand)
+}
 
-			fields := strings.Fields(trimmed)
-			if isSkippableLastLine(trimmed, fields) || len(fields) < 5 {
-				continue
-			}
-
-			// First check if "still logged in" is present
-			stillLoggedIn := strings.Contains(trimmed, "still logged in")
-
-			user := fields[0]
-			// Color the username
-			coloredUser := ValueStyle.Render(user)
-
-			// Extract from IP
-			fromIP := fields[2]
-
-			// Initialize variables for the time components
-			var day, month, date, time, logoutTime, duration string
-
-			// Find the start of the date/time information
-			timeIndex := 3 // Default position for date/time components
-
-			// Check if the IP address actually contains an IP (sometimes it might not)
-			if !strings.Contains(fromIP, ".") && !strings.Contains(fromIP, ":") {
-				timeIndex = 2
-				fromIP = "local"
-			}
-
-			// Obscure IP if share mode is enabled
-			if shareModeEnabled(ctx) {
-				fromIP = obscureIP(fromIP)
-			}
-
-			// Color the IP address
-			coloredIP := ValueStyle.Render(fromIP)
-
-			// Extract date and time if we have enough fields
-			if len(fields) >= timeIndex+4 {
-				day = fields[timeIndex]
-				month = fields[timeIndex+1]
-				date = fields[timeIndex+2]
-				time = fields[timeIndex+3]
-
-				// Color the date/time components
-				dateTimeStr := fmt.Sprintf("%s %s %s %s", day, month, date, time)
-				coloredDateTime := ValueStyle.Render(dateTimeStr)
-
-				// For entries that are still logged in
-				if stillLoggedIn {
-					return fmt.Sprintf("%s at %s (still logged in) from %s",
-						coloredUser, coloredDateTime, coloredIP)
-				}
-
-				// For entries that have logged out, find the logout time and duration
-				dashIndex := -1
-				for i, field := range fields {
-					if field == "-" {
-						dashIndex = i
-						break
-					}
-				}
-
-				if dashIndex != -1 && dashIndex+1 < len(fields) {
-					logoutTime = fields[dashIndex+1]
-					// Color the logout time
-					coloredLogoutTime := ValueStyle.Render(logoutTime)
-
-					// Find the duration which is in parentheses
-					for i, field := range fields {
-						if after, ok := strings.CutPrefix(field, "("); ok {
-							// Start building duration from this field
-							duration = after
-
-							// May need to join with the next field if it's a multipart duration
-							if !strings.HasSuffix(duration, ")") && i+1 < len(fields) {
-								duration += " " + strings.TrimSuffix(fields[i+1], ")")
-							} else {
-								duration = strings.TrimSuffix(duration, ")")
-							}
-							break
-						}
-					}
-
-					return fmt.Sprintf("%s at %s until %s (%s) from %s",
-						coloredUser, coloredDateTime, coloredLogoutTime, duration, coloredIP)
-				}
-
-				// If we couldn't parse the logout info but have login info
-				return fmt.Sprintf("%s at %s from %s",
-					coloredUser, coloredDateTime, coloredIP)
-			}
-		}
+// lastLogin tries last, then lastlog, then who -u. A command that is
+// missing or fails falls through to the next.
+func lastLogin(ctx context.Context, run commandRunner) string {
+	// Try the last command to get the most recent login. util-linux's last
+	// (22.04, 24.04) and wtmpdb's (26.04) write the same columns; -w keeps
+	// a long user or an IPv6 source whole instead of cutting them at 8 and
+	// 16 columns, and the fields below are split on whitespace either way.
+	if login, ok := parseLastLogin(run(ctx, "last", "-w", "-n", "5"), shareModeEnabled(ctx)); ok {
+		return login
 	}
 
 	// Fallback methods similar to before...
-	lastlogOutput := ExecCommand(ctx, "lastlog", "-u", "root")
+	lastlogOutput := run(ctx, "lastlog", "-u", "root")
 	if lastlogOutput != "Not available" && lastlogOutput != "" {
 		lines := strings.Split(lastlogOutput, "\n")
 		if len(lines) >= 2 {
@@ -279,7 +199,7 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 	}
 
 	// Additional fallback with the who command
-	whoOutput := ExecCommand(ctx, "who", "-u")
+	whoOutput := run(ctx, "who", "-u")
 	if whoOutput != "Not available" && whoOutput != "" {
 		lines := strings.Split(whoOutput, "\n")
 		if len(lines) > 0 {
@@ -304,20 +224,165 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 	return "No recent logins"
 }
 
+// parseLastLogin reads the first login in last's output, util-linux's or
+// wtmpdb's; false when there is none (a failed or missing last included).
+func parseLastLogin(lastOutput string, share bool) (string, bool) {
+	if lastOutput == "Not available" || lastOutput == "" {
+		return "", false
+	}
+	for line := range strings.SplitSeq(lastOutput, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		fields := strings.Fields(trimmed)
+		if isSkippableLastLine(trimmed, fields) || len(fields) < 5 {
+			continue
+		}
+
+		// First check if "still logged in" is present; wtmpdb writes
+		// "- still logged in", util-linux "still logged in".
+		stillLoggedIn := strings.Contains(trimmed, "still logged in")
+
+		user := fields[0]
+		// Color the username
+		coloredUser := ValueStyle.Render(user)
+
+		// Extract from IP
+		fromIP := fields[2]
+
+		// Initialize variables for the time components
+		var day, month, date, time, logoutTime, duration string
+
+		// Find the start of the date/time information
+		timeIndex := 3 // Default position for date/time components
+
+		// Check if the IP address actually contains an IP (sometimes it might not)
+		if !strings.Contains(fromIP, ".") && !strings.Contains(fromIP, ":") {
+			timeIndex = 2
+			fromIP = "local"
+		}
+
+		// Obscure IP if share mode is enabled
+		if share {
+			fromIP = obscureIP(fromIP)
+		}
+
+		// Color the IP address
+		coloredIP := ValueStyle.Render(fromIP)
+
+		// Extract date and time if we have enough fields
+		if len(fields) >= timeIndex+4 {
+			day = fields[timeIndex]
+			month = fields[timeIndex+1]
+			date = fields[timeIndex+2]
+			time = fields[timeIndex+3]
+
+			// Color the date/time components
+			dateTimeStr := fmt.Sprintf("%s %s %s %s", day, month, date, time)
+			coloredDateTime := ValueStyle.Render(dateTimeStr)
+
+			// For entries that are still logged in
+			if stillLoggedIn {
+				return fmt.Sprintf("%s at %s (still logged in) from %s",
+					coloredUser, coloredDateTime, coloredIP), true
+			}
+
+			// For entries that have logged out, find the logout time and duration
+			dashIndex := -1
+			for i, field := range fields {
+				if field == "-" {
+					dashIndex = i
+					break
+				}
+			}
+
+			if dashIndex != -1 && dashIndex+1 < len(fields) {
+				logoutTime = fields[dashIndex+1]
+				// Color the logout time
+				coloredLogoutTime := ValueStyle.Render(logoutTime)
+
+				// Find the duration which is in parentheses
+				for i, field := range fields {
+					if after, ok := strings.CutPrefix(field, "("); ok {
+						// Start building duration from this field
+						duration = after
+
+						// May need to join with the next field if it's a multipart duration
+						if !strings.HasSuffix(duration, ")") && i+1 < len(fields) {
+							duration += " " + strings.TrimSuffix(fields[i+1], ")")
+						} else {
+							duration = strings.TrimSuffix(duration, ")")
+						}
+						break
+					}
+				}
+
+				return fmt.Sprintf("%s at %s until %s (%s) from %s",
+					coloredUser, coloredDateTime, coloredLogoutTime, duration, coloredIP), true
+			}
+
+			// If we couldn't parse the logout info but have login info
+			return fmt.Sprintf("%s at %s from %s",
+				coloredUser, coloredDateTime, coloredIP), true
+		}
+	}
+	return "", false
+}
+
 // GetUserSessions returns the number of active user sessions
 func GetUserSessions(ctx context.Context, verbose bool) string {
-	// Use the 'who' command to get user sessions
-	whoOutput := ExecCommand(ctx, "who")
-	if whoOutput == "Not available" || whoOutput == "" {
+	versionID := ""
+	if osRelease, err := host.ParseOSRelease("/etc/os-release"); err == nil {
+		versionID = osRelease["VERSION_ID"]
+	}
+	return userSessions(ctx, ExecCommand, versionID)
+}
+
+// notLoginClasses are the logind session classes that are no login: the
+// user's service manager and background sessions (systemd 256 and later
+// report a session's class; 26.04 lists the service manager beside each
+// login).
+var notLoginClasses = map[string]bool{
+	"manager":       true,
+	"manager-early": true,
+	"background":    true,
+}
+
+// userSessions counts logind's login sessions. who read utmp, which 26.04
+// no longer writes; logind lists the sessions on every release. A session
+// in "closing" state (its user logged out and left a process running) is
+// not counted: only some releases put the state in the list, so one
+// `loginctl show-session -p Id -p State <ids>` reads it. If that fails (a
+// session gone since the list stops it), the listed sessions count.
+// https://www.freedesktop.org/software/systemd/man/latest/loginctl.html
+func userSessions(ctx context.Context, run commandRunner, versionID string) string {
+	ids, ok := loginSessionIDs(run(ctx, "loginctl", "list-sessions", loginctlJSONOption(versionID)))
+	if !ok {
 		return "No active sessions"
 	}
 
-	lines := strings.Split(whoOutput, "\n")
+	var asked []string
+	for _, id := range ids {
+		if id != "" {
+			asked = append(asked, id)
+		}
+	}
+	closing := map[string]bool{}
+	if len(asked) > 0 {
+		args := append([]string{"show-session", "-p", "Id", "-p", "State"}, asked...)
+		closing = closingSessionIDs(run(ctx, "loginctl", args...))
+	}
+
 	count := 0
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
+	for _, id := range ids {
+		if !closing[id] {
 			count++
 		}
+	}
+	if count == 0 {
+		return "No active sessions"
 	}
 
 	// Color the session count
@@ -325,9 +390,64 @@ func GetUserSessions(ctx context.Context, verbose bool) string {
 
 	if count == 1 {
 		return fmt.Sprintf("%s active session", coloredCount)
-	} else {
-		return fmt.Sprintf("%s active sessions", coloredCount)
 	}
+	return fmt.Sprintf("%s active sessions", coloredCount)
+}
+
+// loginctlJSONOption is loginctl's JSON option on the release with
+// os-release's VERSION_ID: systemd 249 and 255 (22.04, 24.04) write JSON
+// with --output=json and refuse --json=; systemd 259 (26.04) takes
+// --output=json silently and writes its table, and writes JSON with
+// --json=short. An unknown release gets the newer option.
+func loginctlJSONOption(versionID string) string {
+	major, _, _ := strings.Cut(versionID, ".")
+	if n, err := strconv.Atoi(major); err == nil && n <= 24 {
+		return "--output=json"
+	}
+	return "--json=short"
+}
+
+// loginSessionIDs returns the IDs of the login sessions in loginctl's
+// JSON list (the classes that are no login left out; an ID may be empty),
+// and false when the output isn't a JSON list.
+func loginSessionIDs(output string) ([]string, bool) {
+	var sessions []struct {
+		Session string `json:"session"`
+		Class   string `json:"class"`
+	}
+	if err := json.Unmarshal([]byte(output), &sessions); err != nil || sessions == nil {
+		return nil, false
+	}
+	ids := []string{}
+	for _, session := range sessions {
+		if !notLoginClasses[session.Class] {
+			ids = append(ids, session.Session)
+		}
+	}
+	return ids, true
+}
+
+// closingSessionIDs returns the sessions that `loginctl show-session -p Id
+// -p State` reports as closing: one Id= and State= block per session,
+// blocks apart by an empty line.
+func closingSessionIDs(output string) map[string]bool {
+	closing := map[string]bool{}
+	for block := range strings.SplitSeq(output, "\n\n") {
+		var id, state string
+		for line := range strings.SplitSeq(block, "\n") {
+			key, value, _ := strings.Cut(strings.TrimSpace(line), "=")
+			switch key {
+			case "Id":
+				id = value
+			case "State":
+				state = value
+			}
+		}
+		if id != "" && state == "closing" {
+			closing[id] = true
+		}
+	}
+	return closing
 }
 
 // GetProcessCount returns the number of running processes
