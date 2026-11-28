@@ -324,6 +324,11 @@ func TestPhantom(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dev, "pts", "7"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// A loginuid that can't be read for a reason other than being missing
+	// (here a directory: EISDIR) is gone, even with the user's terminal.
+	if err := os.MkdirAll(filepath.Join(proc, "4500", "loginuid"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	me := uint32(os.Getuid())
 	uids := map[string]uint32{"alice": 1000, "bob": 1001, "me": me}
 	src := loginSource{
@@ -346,6 +351,7 @@ func TestPhantom(t *testing.T) {
 		{name: "an unknown user", rec: wtmpRecord{pid: 4100, line: "pts/0", user: "nobody-here", sec: at(3, 8, 15).Unix()}, want: true},
 		{name: "no process, its terminal is the user's", rec: wtmpRecord{pid: 4999, line: "pts/7", user: "me", sec: at(3, 8, 15).Unix()}, want: false},
 		{name: "no process, its terminal is another user's", rec: wtmpRecord{pid: 4999, line: "pts/7", user: "alice", sec: at(3, 8, 15).Unix()}, want: me != 1000},
+		{name: "an unreadable loginuid", rec: wtmpRecord{pid: 4500, line: "pts/7", user: "me", sec: at(3, 8, 15).Unix()}, want: true},
 		{name: "no process and no terminal", rec: wtmpRecord{pid: 4999, line: "ssh", user: "alice", sec: at(3, 8, 15).Unix()}, want: true},
 	}
 	for _, tt := range tests {

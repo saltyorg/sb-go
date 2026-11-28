@@ -147,13 +147,20 @@ func GetLastLogin(ctx context.Context, verbose bool) string {
 	return lastLogin(ctx, ExecCommand, systemLoginSource())
 }
 
-// lastLogin reads the newest login from wtmp (wtmp.go). Only when wtmp
-// can't be read do lastlog, then who -u, answer; a command that is
-// missing or fails falls through to the next.
+// lastLogin reads the newest login from wtmp (wtmp.go); a gone login
+// without a logout takes its end from logind's journal entries
+// (journal.go), and keeps its text without one. Only when wtmp can't be
+// read do lastlog, then who -u, answer; a command that is missing or
+// fails falls through to the next.
 func lastLogin(ctx context.Context, run commandRunner, src loginSource) string {
 	login, found, err := src.readNewestLogin()
 	if err == nil {
 		if found {
+			if login.status == loginGone && src.journal {
+				if end, ok := sessionEnd(ctx, run, login.record.pid, login.record.sec); ok {
+					login.status, login.end = loginLoggedOut, end
+				}
+			}
 			return formatLogin(login, shareModeEnabled(ctx), src.loc)
 		}
 		return "No recent logins"

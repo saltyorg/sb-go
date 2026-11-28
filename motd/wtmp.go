@@ -3,8 +3,11 @@ package motd
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"math"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -235,6 +238,8 @@ type loginSource struct {
 	devDir    string
 	lookupUID func(user string) (uint32, bool)
 	loc       *time.Location
+	// journal: a gone login's end is looked up in the journal (journal.go).
+	journal bool
 }
 
 func systemLoginSource() loginSource {
@@ -248,6 +253,7 @@ func systemLoginSource() loginSource {
 		devDir:    "/dev",
 		lookupUID: lookupUID,
 		loc:       time.Local,
+		journal:   true,
 	}
 }
 
@@ -289,9 +295,12 @@ func (src loginSource) readNewestLogin() (wtmpLogin, bool, error) {
 	if !src.layoutOK {
 		return wtmpLogin{}, false, fmt.Errorf("no struct utmp layout for %s", runtime.GOARCH)
 	}
-	// No symlink is followed, and opening a FIFO or device doesn't block:
-	// only a regular file is read.
-	f, err := os.OpenFile(src.wtmpPath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	// No symlink is followed, opening a FIFO or device neither blocks nor
+	// takes a terminal, and only a regular file with one link is read:
+	// /var/log is root:syslog 0775 on Ubuntu, so a link or a FIFO there
+	// must neither redirect nor hold the read. Its owner isn't checked, as
+	// last checks none.
+	f, err := os.OpenFile(src.wtmpPath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_NOCTTY|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return wtmpLogin{}, false, err
 	}
@@ -302,6 +311,9 @@ func (src loginSource) readNewestLogin() (wtmpLogin, bool, error) {
 	}
 	if !info.Mode().IsRegular() {
 		return wtmpLogin{}, false, fmt.Errorf("%s is not a regular file", src.wtmpPath)
+	}
+	if st, ok := info.Sys().(*syscall.Stat_t); !ok || st.Nlink != 1 {
+		return wtmpLogin{}, false, fmt.Errorf("%s has other links", src.wtmpPath)
 	}
 	return newestLogin(f, info.Size(), src.layout, src.phantom)
 }
@@ -318,9 +330,18 @@ func (src loginSource) phantom(rec wtmpRecord) bool {
 	if !ok {
 		return true
 	}
-	if data, err := os.ReadFile(filepath.Join(src.procDir, strconv.Itoa(int(rec.pid)), "loginuid")); err == nil {
+	data, err := os.ReadFile(filepath.Join(src.procDir, strconv.Itoa(int(rec.pid)), "loginuid"))
+	if err == nil {
 		loginUID, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 32)
 		return err != nil || uint32(loginUID) != uid
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return true
+	}
+	// last joins ut_line to /dev/ as text, where it could name any file;
+	// a line that isn't a relative path of plain parts is gone unseen.
+	if !plainRelativePath(rec.line) {
+		return true
 	}
 	info, err := os.Stat(filepath.Join(src.devDir, rec.line))
 	if err != nil {
@@ -328,6 +349,22 @@ func (src loginSource) phantom(rec wtmpRecord) bool {
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
 	return !ok || st.Uid != uid
+}
+
+// plainRelativePath reports a path whose every part is a name: not
+// empty, not absolute, no "..", and no leading "." (Rust's
+// Path::components, which sb-rust checks the line with, drops an empty
+// part or an inner ".").
+func plainRelativePath(path string) bool {
+	if path == "" || strings.HasPrefix(path, "/") {
+		return false
+	}
+	for i, part := range strings.Split(path, "/") {
+		if part == ".." || (i == 0 && part == ".") {
+			return false
+		}
+	}
+	return true
 }
 
 // formatLogin writes the login in sb-go's texts for last's columns:
@@ -366,7 +403,7 @@ func formatLogin(login wtmpLogin, share bool, loc *time.Location) string {
 		until = "down"
 	}
 	return fmt.Sprintf("%s at %s until %s (%s) from %s",
-		user, coloredAt, ValueStyle.Render(until), lastDuration(login.end-rec.sec), coloredFrom)
+		user, coloredAt, ValueStyle.Render(until), lastDuration(saturatingSub(login.end, rec.sec)), coloredFrom)
 }
 
 // lastDuration is last.c's list() duration without its parentheses:
@@ -385,6 +422,18 @@ func lastDuration(secs int64) string {
 	default:
 		return fmt.Sprintf("-00:%02d", abs(mins))
 	}
+}
+
+// saturatingSub is a - b, held at the int64 range for a corrupt time.
+func saturatingSub(a, b int64) int64 {
+	d := a - b
+	switch {
+	case b < 0 && d < a:
+		return math.MaxInt64
+	case b > 0 && d > a:
+		return math.MinInt64
+	}
+	return d
 }
 
 func abs(n int64) int64 {
